@@ -1,0 +1,24 @@
+{
+  "name": "churn-saver-infra",
+  "version": "1.0.0",
+  "description": "Infrastructure scripts and migrations for Churn Saver",
+  "scripts": {
+    "migrate": "node scripts/migrate.js",
+    "migrate:up": "node scripts/migrate.js up",
+    "migrate:down": "node scripts/migrate.js down",
+    "migrate:status": "node scripts/migrate.js status",
+    "migrate:validate": "node scripts/migrate.js validate",
+    "validate": "node scripts/validate-migrations.js",
+    "validate:deps": "node scripts/validate-migrations.js --check-deps",
+    "validate:safety": "node scripts/validate-migrations.js --check-safety",
+    "test:rollback": "node scripts/test-rollback.js",
+    "test:rollback:dry-run": "node scripts/test-rollback.js --dry-run",
+    "test:rollback:all": "node scripts/test-rollback.js --all"
+  },
+  "dependencies": {
+    "pg": "^8.11.0"
+  },
+  "devDependencies": {
+    "dotenv": "^16.0.0"
+  }
+}

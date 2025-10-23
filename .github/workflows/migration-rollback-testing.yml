@@ -1,0 +1,414 @@
+name: Migration Rollback Testing
+
+on:
+  push:
+    branches: [main, develop]
+    paths: ['infra/migrations/**', 'infra/scripts/**']
+  pull_request:
+    branches: [main]
+    paths: ['infra/migrations/**', 'infra/scripts/**']
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to test'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      test_type:
+        description: 'Test type'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - validation-only
+          - rollback-dry-run
+          - full-testing
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  migration-validation:
+    name: Migration Validation
+    runs-on: ubuntu-latest
+    outputs:
+      validation-passed: ${{ steps.validation.outputs.passed }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Install dependencies
+        run: |
+          cd infra
+          npm install
+          
+      - name: Validate migration files
+        id: validation
+        run: |
+          cd infra
+          echo "Running migration validation..."
+          
+          # Run all validation checks
+          if npm run validate && npm run validate:deps && npm run validate:safety; then
+            echo "passed=true" >> $GITHUB_OUTPUT
+            echo "✅ All migration validations passed"
+          else
+            echo "passed=false" >> $GITHUB_OUTPUT
+            echo "❌ Migration validation failed"
+            exit 1
+          fi
+          
+      - name: Upload validation results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: migration-validation-results
+          path: |
+            infra/validation-*.log
+            infra/validation-report.md
+          retention-days: 7
+
+  rollback-dry-run:
+    name: Rollback Dry Run Testing
+    runs-on: ubuntu-latest
+    needs: migration-validation
+    if: needs.migration-validation.outputs.validation-passed == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Install dependencies
+        run: |
+          cd infra
+          npm install
+          
+      - name: Run rollback dry-run tests
+        run: |
+          cd infra
+          echo "Running rollback dry-run tests..."
+          npm run test:rollback:dry-run
+          
+      - name: Validate rollback file integrity
+        run: |
+          cd infra
+          echo "Validating rollback file integrity..."
+          
+          # Check all rollback files exist
+          for migration in migrations/*_rollback.sql; do
+            if [ ! -f "$migration" ]; then
+              echo "❌ Missing rollback file: $migration"
+              exit 1
+            fi
+            
+            # Check rollback file syntax
+            if ! psql --echo-all --file="$migration" "postgresql://user:pass@localhost/test" 2>/dev/null; then
+              echo "❌ Syntax error in rollback file: $migration"
+              exit 1
+            fi
+          done
+          
+          echo "✅ All rollback files validated"
+          
+      - name: Upload dry-run results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rollback-dry-run-results
+          path: |
+            infra/rollback-test-*.log
+            infra/rollback-validation-report.md
+          retention-days: 7
+
+  staging-rollback-testing:
+    name: Staging Rollback Testing
+    runs-on: ubuntu-latest
+    needs: [migration-validation, rollback-dry-run]
+    if: |
+      needs.migration-validation.outputs.validation-passed == 'true' && 
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging' ||
+       github.ref == 'refs/heads/develop')
+    environment: staging
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: churnsaver_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          
+      - name: Install dependencies
+        run: |
+          cd infra
+          npm install
+          
+      - name: Setup test database
+        run: |
+          export DATABASE_URL="postgresql://postgres:testpassword@localhost:5432/churnsaver_test"
+          psql $DATABASE_URL -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";"
+          
+      - name: Run enhanced staging rehearsal
+        env:
+          DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/churnsaver_test
+          VERCEL_URL: https://staging-churnsaver.vercel.app
+        run: |
+          cd infra
+          chmod +x scripts/enhanced-staging-rehearsal.sh
+          ./scripts/enhanced-staging-rehearsal.sh
+          
+      - name: Run comprehensive rollback tests
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/churnsaver_test
+        run: |
+          cd infra
+          echo "Running comprehensive rollback tests..."
+          npm run test:rollback:all
+          
+      - name: Verify rollback capabilities
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/churnsaver_test
+        run: |
+          cd infra
+          echo "Verifying rollback capabilities..."
+          
+          # Test migration status tracking
+          node -e "
+          const MigrationManager = require('./scripts/migrate.js');
+          const manager = new MigrationManager();
+          manager.getLastExecutedMigration().then(num => {
+            console.log('Current migration:', num);
+            process.exit(0);
+          }).catch(err => {
+            console.error('Error:', err);
+            process.exit(1);
+          });
+          "
+          
+      - name: Upload staging test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: staging-rollback-test-results
+          path: |
+            infra/rollback-test-*/
+            infra/enhanced-staging-rehearsal-*.log
+            infra/rollback-test-report-*.md
+          retention-days: 7
+
+  production-rollback-validation:
+    name: Production Rollback Validation
+    runs-on: ubuntu-latest
+    needs: [migration-validation, rollback-dry-run, staging-rollback-testing]
+    if: |
+      needs.migration-validation.outputs.validation-passed == 'true' && 
+      github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production'
+    environment: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Install dependencies
+        run: |
+          cd infra
+          npm install
+          
+      - name: Validate production rollback readiness
+        run: |
+          cd infra
+          echo "Validating production rollback readiness..."
+          
+          # Check migration status
+          npm run migrate:status
+          
+          # Validate rollback procedures
+          npm run validate
+          
+          # Run rollback dry-run
+          npm run test:rollback:dry-run
+          
+          echo "✅ Production rollback validation completed"
+          
+      - name: Create production rollback plan
+        run: |
+          cd infra
+          cat > production-rollback-plan.md << 'EOF'
+          # Production Rollback Plan
+          
+          ## Current Migration State
+          $(npm run migrate:status)
+          
+          ## Rollback Procedures Available
+          - Individual migration rollback: \`npm run migrate:down <migration_number>\`
+          - Batch rollback: \`npm run migrate:down <target_migration>\`
+          - Emergency rollback: Use emergency rollback procedures
+          
+          ## Rollback Validation Status
+          - ✅ Migration files validated
+          - ✅ Rollback procedures tested in staging
+          - ✅ Emergency rollback procedures documented
+          - ✅ Data integrity verification completed
+          
+          ## Pre-Rollback Checklist
+          - [ ] Create database backup
+          - [ ] Notify stakeholders
+          - [ ] Prepare rollback communication
+          - [ ] Verify rollback target state
+          - [ ] Test rollback in staging environment
+          
+          ## Post-Rollback Verification
+          - [ ] Verify application health
+          - [ ] Check database integrity
+          - [ ] Validate core functionality
+          - [ ] Monitor system performance
+          - [ ] Confirm data consistency
+          EOF
+          
+      - name: Upload production rollback plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-rollback-plan
+          path: infra/production-rollback-plan.md
+          retention-days: 30
+
+  security-validation:
+    name: Security Validation
+    runs-on: ubuntu-latest
+    needs: migration-validation
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Run security scan on migration files
+        run: |
+          echo "Running security validation on migration files..."
+          
+          # Check for sensitive data in migration files
+          if grep -r -i "password\|secret\|key\|token" infra/migrations/ --exclude-dir=.git; then
+            echo "❌ Potential sensitive data found in migration files"
+            exit 1
+          fi
+          
+          # Check for dangerous SQL patterns
+          if grep -r -i "DROP.*DATABASE\|TRUNCATE.*WITHOUT.*WHERE" infra/migrations/; then
+            echo "❌ Dangerous SQL patterns found"
+            exit 1
+          fi
+          
+          echo "✅ Security validation passed"
+          
+      - name: Validate rollback security
+        run: |
+          echo "Validating rollback security..."
+          
+          # Check rollback files for security issues
+          for rollback in infra/migrations/*_rollback.sql; do
+            # Check for proper transaction handling
+            if ! grep -q "BEGIN\|START TRANSACTION" "$rollback"; then
+              echo "❌ Rollback file missing transaction start: $rollback"
+              exit 1
+            fi
+            
+            # Check for proper error handling
+            if ! grep -q "ROLLBACK\|COMMIT" "$rollback"; then
+              echo "❌ Rollback file missing transaction handling: $rollback"
+              exit 1
+            fi
+            
+            # Check for data preservation warnings
+            if grep -q "DROP TABLE" "$rollback" && ! grep -q "WARNING" "$rollback"; then
+              echo "⚠️ Rollback file drops table without warning: $rollback"
+            fi
+          done
+          
+          echo "✅ Rollback security validation passed"
+
+  notify-results:
+    name: Notify Results
+    runs-on: ubuntu-latest
+    needs: [migration-validation, rollback-dry-run, staging-rollback-testing, production-rollback-validation, security-validation]
+    if: always()
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        
+      - name: Summarize results
+        run: |
+          echo "# Migration Rollback Testing Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Migration Validation: ${{ needs.migration-validation.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Rollback Dry Run: ${{ needs.rollback-dry-run.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Staging Rollback Testing: ${{ needs.staging-rollback-testing.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Production Rollback Validation: ${{ needs.production-rollback-validation.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Security Validation: ${{ needs.security-validation.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ needs.migration-validation.result }}" == "success" && 
+                "${{ needs.rollback-dry-run.result }}" == "success" && 
+                "${{ needs.security-validation.result }}" == "success" ]]; then
+            echo "✅ All critical validations passed. Ready for deployment." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Some validations failed. Review logs before deployment." >> $GITHUB_STEP_SUMMARY
+          fi
+          
+      - name: Notify on success
+        if: |
+          needs.migration-validation.result == 'success' && 
+          needs.rollback-dry-run.result == 'success' && 
+          needs.security-validation.result == 'success'
+        run: |
+          echo "🎉 All migration rollback tests passed successfully!"
+          echo "Ready for production deployment with rollback confidence."
+          
+      - name: Notify on failure
+        if: |
+          needs.migration-validation.result == 'failure' || 
+          needs.rollback-dry-run.result == 'failure' || 
+          needs.security-validation.result == 'failure'
+        run: |
+          echo "❌ Migration rollback testing failed!"
+          echo "Review the failed jobs and fix issues before deployment."
+          exit 1

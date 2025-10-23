@@ -1,0 +1,1 @@
+{"type":"payment_failed","data":{"membership":{"id":"mem_test_123","user_id":"usr_test_123","product_id":"prod_test_123"},"payment":{"id":"pay_test_123","amount":999,"currency":"usd","status":"failed","failure_reason":"card_declined"}},"whop_event_id":"evt_test_123"}

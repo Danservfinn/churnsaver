@@ -1,0 +1,317 @@
+# Churn Saver - Migration Deployment Workflow
+# This workflow applies database migrations during deployment
+
+name: Deploy Migration
+
+on:
+  # Triggered by successful deployment (can be called by other workflows)
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      database_url:
+        required: true
+        type: string
+    secrets:
+      database_url:
+        required: true
+
+jobs:
+  deploy-migration:
+    runs-on: ubuntu-latest
+
+    environment: ${{ inputs.environment }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: |
+        cd apps/web
+        npm ci
+
+    - name: Pre-flight sanity check
+      run: |
+        cd apps/web
+
+        # Validate environment variables
+        if [ -z "${{ secrets.database_url }}" ]; then
+          echo "❌ DATABASE_URL secret not set for ${{ inputs.environment }}"
+          exit 1
+        fi
+
+        # Validate migration file exists
+        if [ ! -f "infra/migrations/001_init.sql" ]; then
+          echo "❌ Migration file not found: infra/migrations/001_init.sql"
+          exit 1
+        fi
+
+        echo "✅ Pre-flight checks passed"
+
+    - name: Test database connectivity
+      run: |
+        cd apps/web
+        node -e "
+        const { Client } = require('pg');
+
+        async function testConnection() {
+          const client = new Client({
+            connectionString: '${{ secrets.database_url }}',
+            connectionTimeoutMillis: 5000
+          });
+
+          try {
+            await client.connect();
+            console.log('✅ Database connection successful');
+
+            const result = await client.query('SELECT version()');
+            console.log('✅ Database ready for migrations');
+
+            return true;
+          } catch (error) {
+            console.error('❌ Database connection failed:', error.message);
+            console.error('   This may indicate network/firewall issues');
+            console.error('   Or invalid DATABASE_URL configuration');
+            throw error;
+          } finally {
+            await client.end();
+          }
+        }
+
+        testConnection().catch(() => process.exit(1));
+        "
+
+    - name: Check if migration already applied
+      id: check-migration
+      run: |
+        cd apps/web
+
+        # Check if our key tables exist (simple migration check)
+        MIGRATION_STATE=$(node -e "
+        const { Client } = require('pg');
+
+        async function checkMigrationState() {
+          const client = new Client({
+            connectionString: '${{ secrets.database_url }}'
+          });
+
+          try {
+            await client.connect();
+
+            // Check for our key tables
+            const result = await client.query(\`
+              SELECT COUNT(*) as table_count
+              FROM information_schema.tables
+              WHERE table_schema = 'public'
+              AND table_name IN ('events', 'recovery_cases', 'creator_settings', 'recovery_actions')
+            \`);
+
+            const tableCount = result.rows[0].table_count;
+            console.log(\`Found \${tableCount}/4 core tables\`);
+
+            if (tableCount >= 4) {
+              console.log('✅ Migration appears to be already applied');
+              return 'applied';
+            } else {
+              console.log('🔄 Migration needs to be applied');
+              return 'needed';
+            }
+          } catch (error) {
+            console.error('❌ Error checking migration state:', error.message);
+            return 'error';
+          } finally {
+            await client.end();
+          }
+        }
+
+        checkMigrationState().then(state => {
+          console.log('::set-output name=state::' + state);
+        }).catch(() => {
+          console.log('::set-output name=state::error');
+        });
+        " 2>/dev/null || echo "::set-output name=state::error")
+
+        # GitHub deprecated set-output, but this maintains compatibility
+        echo "MIGRATION_STATE=$MIGRATION_STATE"
+        echo "::set-output name=state::$MIGRATION_STATE"
+
+    - name: Apply migration (if needed)
+      if: steps.check-migration.outputs.state == 'needed'
+      run: |
+        cd apps/web
+
+        echo "🚀 Applying database migrations to ${{ inputs.environment }}..."
+
+        # Set migration timeout to prevent hanging
+        timeout 300 node -e "
+        const { readFileSync } = require('fs');
+        const { join } = require('path');
+        const { Client } = require('pg');
+
+        async function applyMigration() {
+          const client = new Client({
+            connectionString: '${{ secrets.database_url }}'
+          });
+
+          try {
+            await client.connect();
+            console.log('Connected to ${{ inputs.environment }} database');
+
+            // Read migration file
+            const migrationPath = join(process.cwd(), '../../../infra/migrations/001_init.sql');
+            const migrationSQL = readFileSync(migrationPath, 'utf-8');
+            console.log(\`Read \${migrationSQL.length} characters of migration SQL\`);
+
+            // Split into statements and execute (skip empty lines)
+            const statements = migrationSQL.split(';').filter(stmt => stmt.trim().length > 0);
+
+            console.log(\`Executing \${statements.length} SQL statements...\`);
+
+            for (let i = 0; i < statements.length; i++) {
+              const stmt = statements[i].trim();
+              if (stmt) {
+                try {
+                  await client.query(stmt);
+                  console.log(\`✅ Statement \${i + 1}/${statements.length} executed\`);
+                } catch (stmtError) {
+                  // Check if it's a harmless duplicate error
+                  if (stmtError.code === '42P07' && stmt.includes('IF NOT EXISTS')) {
+                    console.log(\`⚠️  Statement \${i + 1} failed but may be safe to ignore (table exists)\`);
+                    console.log('   Error:', stmtError.message.split('\\n')[0]);
+                  } else {
+                    throw stmtError;
+                  }
+                }
+              }
+            }
+
+            console.log('✅ Migration application completed');
+            return true;
+
+          } catch (error) {
+            console.error('❌ Migration failed:', error.message);
+            console.error('   This likely indicates a schema conflict or database issue');
+            throw error;
+          } finally {
+            await client.end();
+          }
+        }
+
+        applyMigration().catch(() => process.exit(1));
+        "
+
+    - name: Run post-migration verification
+      run: |
+        cd apps/web
+        node -e "
+        const { Client } = require('pg');
+
+        async function verifyPostMigration() {
+          const client = new Client({
+            connectionString: '${{ secrets.database_url }}'
+          });
+
+          try {
+            await client.connect();
+            console.log('🔍 Running post-migration verification...');
+
+            // Verify tables exist
+            const tablesResult = await client.query(\`
+              SELECT tablename
+              FROM pg_tables
+              WHERE schemaname = 'public'
+              AND tablename IN ('events', 'recovery_cases', 'creator_settings', 'recovery_actions')
+              ORDER BY tablename
+            \`);
+
+            const tables = tablesResult.rows.map(r => r.tablename);
+            const expectedTables = ['creator_settings', 'events', 'recovery_actions', 'recovery_cases'];
+
+            if (JSON.stringify(tables.sort()) !== JSON.stringify(expectedTables.sort())) {
+              throw new Error(\`Missing tables. Found: \${tables.join(', ')}, Expected: \${expectedTables.join(', ')}\`);
+            }
+
+            console.log('✅ All required tables verified');
+
+            // Verify we can perform basic operations
+            const testResults = await Promise.all([
+              client.query('SELECT COUNT(*) FROM events'),
+              client.query('SELECT COUNT(*) FROM recovery_cases'),
+              client.query('SELECT COUNT(*) FROM creator_settings'),
+              client.query('SELECT COUNT(*) FROM recovery_actions')
+            ]);
+
+            testResults.forEach((result, i) => {
+              console.log(\`✅ \${expectedTables[i]}: Ready (\${result.rows[0].count} rows)\`);
+            });
+
+            // Check if recent migration activity shows
+            const activityResult = await client.query(\`
+              SELECT schemaname, tablename
+              FROM pg_tables
+              WHERE schemaname = 'public'
+              AND tablename IN ('events', 'recovery_cases', 'creator_settings', 'recovery_actions')
+              ORDER BY tablename
+            \`);
+
+            if (activityResult.rows.length >= 4) {
+              console.log(\`✅ Migration artifacts confirmed (\${activityResult.rows.length} tables)\`);
+            }
+
+            console.log('✅ Post-migration verification successful');
+            return true;
+
+          } catch (error) {
+            console.error('❌ Post-migration verification failed:', error.message);
+            console.error('   Migration may have been partially applied');
+            throw error;
+          } finally {
+            await client.end();
+          }
+        }
+
+        verifyPostMigration().catch(() => process.exit(1));
+        "
+
+    - name: Generate deployment report
+      run: |
+        echo "# Migration Deployment Report" > migration-deploy-report.md
+        echo "- **Status**: ✅ Applied and verified successfully" >> migration-deploy-report.md
+        echo "- **Environment**: ${{ inputs.environment }}" >> migration-deploy-report.md
+        echo "- **Timestamp**: $(date)" >> migration-deploy-report.md
+        echo "- **Migration file**: infra/migrations/001_init.sql" >> migration-deploy-report.md
+        echo "- **Tables verified**: events, recovery_cases, creator_settings, recovery_actions" >> migration-deploy-report.md
+        echo "- **Result**: Ready for application deployment" >> migration-deploy-report.md
+        echo "" >> migration-deploy-report.md
+
+        cat migration-deploy-report.md
+
+    - name: Upload deployment report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: migration-deployment-report-${{ inputs.environment }}
+        path: migration-deploy-report.md
+
+    - name: Alert on failure
+      if: failure()
+      run: |
+        echo "❌ Migration deployment failed!"
+        echo ""
+        echo "IMMEDIATE ACTION REQUIRED:"
+        echo "1. Check the deployment logs above for details"
+        echo "2. Verify database connectivity and permissions"
+        echo "3. Review any schema conflicts or migration errors"
+        echo "4. Consider manual rollback if partially applied"
+        echo "5. Notify team immediately for coordination"
+        echo ""
+        echo "⚠️  Do NOT proceed with application deployment until resolved"
+        exit 1

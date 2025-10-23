@@ -1,0 +1,44 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/next"
+    }
+  ],
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "maxDuration": 30
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/scheduler/reminders",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cleanup/events",
+      "schedule": "0 2 * * *"
+    }
+  ],
+  "healthcheck": [
+    {
+      "path": "/api/health?type=db",
+      "interval": 30,
+      "timeout": 10,
+      "initialDelay": 10,
+      "maxRetries": 3
+    }
+  ]
+}

@@ -1,0 +1,566 @@
+#!/usr/bin/env node
+
+// Test suite for webhook security hardening
+// Covers timing-safe comparison, replay protection, header parsing, and occurred_at handling
+
+const crypto = require('crypto');
+
+// Copy the functions to test them in isolation
+function timingSafeEqual(a, b) {
+  try {
+    // Ensure both are hex strings of equal length
+    const aHex = a.replace(/^0x/, '').toLowerCase();
+    const bHex = b.replace(/^0x/, '').toLowerCase();
+
+    if (aHex.length !== bHex.length || !/^[0-9a-f]+$/.test(aHex) || !/^[0-9a-f]+$/.test(bHex)) {
+      return false;
+    }
+
+    return crypto.timingSafeEqual(Buffer.from(aHex, 'hex'), Buffer.from(bHex, 'hex'));
+  } catch {
+    return false;
+  }
+}
+
+function parseSignatureHeader(signatureHeader) {
+  const s = signatureHeader.trim();
+
+  // Support sha256=<hex> format
+  if (s.startsWith('sha256=')) {
+    const hexPart = s.substring(7); // Remove 'sha256=' prefix
+    if (/^[0-9a-f]+$/i.test(hexPart)) {
+      return hexPart;
+    }
+    throw new Error('Invalid hex in sha256= format');
+  }
+  
+  // Support v1,<hex> format
+  const parts = s.split(',');
+  if (parts.length === 2 && parts[0].toLowerCase() === 'v1') {
+    const hexPart = parts[1];
+    if (/^[0-9a-f]+$/i.test(hexPart)) {
+      return hexPart;
+    }
+    throw new Error(`Unsupported signature format: ${s}`);
+  }
+
+  // Support bare <hex> format
+  if (/^[0-9a-f]+$/i.test(s)) {
+    return s;
+  }
+
+  // Reject any other format
+  throw new Error(`Unsupported signature format: ${s}`);
+}
+
+function verifyWebhookSignature(body, signatureHeader, secret, timestampHeader) {
+  try {
+    // Require X-Whop-Timestamp in production
+    if (process.env.NODE_ENV === 'production' && !timestampHeader) {
+      return false;
+    }
+
+    const expectedSignature = crypto.createHmac('sha256', secret)
+      .update(body, 'utf8')
+      .digest('hex');
+
+    const provided = parseSignatureHeader(signatureHeader);
+
+    // Enforce replay protection if timestamp present
+    if (timestampHeader) {
+      const ts = Number(timestampHeader);
+      if (!Number.isFinite(ts) || ts < 0) {
+        return false;
+      }
+      const nowSec = Math.floor(Date.now() / 1000);
+      const skewSec = Math.abs(nowSec - ts);
+      if (skewSec > 300) { // Default 5 minutes
+        return false;
+      }
+    }
+
+    return timingSafeEqual(expectedSignature, provided);
+  } catch (error) {
+    return false;
+  }
+}
+
+function runWebhookSecurityTests() {
+  console.log('🔒 Starting Webhook Security Test Suite\n');
+  console.log('='.repeat(60));
+
+  const results = {
+    passed: 0,
+    failed: 0,
+    tests: []
+  };
+
+  function runTest(name, fn) {
+    try {
+      console.log(`\n🧪 ${name}`);
+      fn();
+      console.log(`✅ ${name} - PASSED`);
+      results.passed++;
+      results.tests.push({ name, status: 'PASSED' });
+    } catch (error) {
+      console.log(`❌ ${name} - FAILED: ${error.message}`);
+      results.failed++;
+      results.tests.push({ name, status: 'FAILED', error: error.message });
+    }
+  }
+
+  // Test timingSafeEqual
+  runTest('timingSafeEqual returns true for equal hex strings', () => {
+    const a = 'abcdef123456';
+    const b = 'abcdef123456';
+    if (!timingSafeEqual(a, b)) {
+      throw new Error('Expected true for equal strings');
+    }
+  });
+
+  runTest('timingSafeEqual returns false for different hex strings', () => {
+    const a = 'abcdef123456';
+    const b = 'abcdef123457';
+    if (timingSafeEqual(a, b)) {
+      throw new Error('Expected false for different strings');
+    }
+  });
+
+  runTest('timingSafeEqual returns false for different lengths', () => {
+    const a = 'abcdef123456';
+    const b = 'abcdef1234567';
+    if (timingSafeEqual(a, b)) {
+      throw new Error('Expected false for different lengths');
+    }
+  });
+
+  runTest('timingSafeEqual returns false for non-hex strings', () => {
+    const a = 'abcdef123456';
+    const b = 'gggggggggggg';
+    if (timingSafeEqual(a, b)) {
+      throw new Error('Expected false for non-hex strings');
+    }
+  });
+
+  runTest('timingSafeEqual handles 0x prefix', () => {
+    const a = '0xabcdef123456';
+    const b = 'abcdef123456';
+    if (!timingSafeEqual(a, b)) {
+      throw new Error('Expected true for 0x prefixed equal strings');
+    }
+  });
+
+  // Test parseSignatureHeader
+  runTest('parseSignatureHeader parses v1,<hex> format', () => {
+    const header = 'v1,abcdef123456';
+    const result = parseSignatureHeader(header);
+    if (result !== 'abcdef123456') {
+      throw new Error(`Expected 'abcdef123456', got '${result}'`);
+    }
+  });
+
+  runTest('parseSignatureHeader parses bare <hex> format', () => {
+    const header = 'abcdef123456';
+    const result = parseSignatureHeader(header);
+    if (result !== 'abcdef123456') {
+      throw new Error(`Expected 'abcdef123456', got '${result}'`);
+    }
+  });
+
+  runTest('parseSignatureHeader parses sha256=<hex> format', () => {
+    const header = 'sha256=abcdef123456';
+    const result = parseSignatureHeader(header);
+    if (result !== 'abcdef123456') {
+      throw new Error(`Expected 'abcdef123456', got '${result}'`);
+    }
+  });
+
+  runTest('parseSignatureHeader rejects sha256= with invalid hex', () => {
+    const header = 'sha256=gggggggggggg';
+    try {
+      parseSignatureHeader(header);
+      throw new Error('Expected to throw');
+    } catch (error) {
+      if (!error.message.includes('Invalid hex in sha256= format')) {
+        throw new Error(`Unexpected error: ${error.message}`);
+      }
+    }
+  });
+
+  runTest('parseSignatureHeader rejects unknown formats', () => {
+    const header = 'unknown=abcdef123456';
+    try {
+      parseSignatureHeader(header);
+      throw new Error('Expected to throw');
+    } catch (error) {
+      if (!error.message.includes('Unsupported signature format')) {
+        throw new Error(`Unexpected error: ${error.message}`);
+      }
+    }
+  });
+
+  runTest('parseSignatureHeader rejects non-hex in bare format', () => {
+    const header = 'gggggggggggg';
+    try {
+      parseSignatureHeader(header);
+      throw new Error('Expected to throw');
+    } catch (error) {
+      if (!error.message.includes('Unsupported signature format')) {
+        throw new Error(`Unexpected error: ${error.message}`);
+      }
+    }
+  });
+
+  // Additional unsupported format tests for production readiness
+  runTest('parseSignatureHeader rejects hmac-sha256= format', () => {
+    const header = 'hmac-sha256=abcdef123456';
+    try {
+      parseSignatureHeader(header);
+      throw new Error('Expected to throw');
+    } catch (error) {
+      if (!error.message.includes('Unsupported signature format')) {
+        throw new Error(`Unexpected error: ${error.message}`);
+      }
+    }
+  });
+
+  runTest('parseSignatureHeader rejects sha512= format', () => {
+    const header = 'sha512=abcdef123456';
+    try {
+      parseSignatureHeader(header);
+      throw new Error('Expected to throw');
+    } catch (error) {
+      if (!error.message.includes('Unsupported signature format')) {
+        throw new Error(`Unexpected error: ${error.message}`);
+      }
+    }
+  });
+
+  runTest('parseSignatureHeader rejects rsa-sha256= format', () => {
+    const header = 'rsa-sha256=abcdef123456';
+    try {
+      parseSignatureHeader(header);
+      throw new Error('Expected to throw');
+    } catch (error) {
+      if (!error.message.includes('Unsupported signature format')) {
+        throw new Error(`Unexpected error: ${error.message}`);
+      }
+    }
+  });
+
+  runTest('parseSignatureHeader rejects v2, format', () => {
+    const header = 'v2,abcdef123456';
+    try {
+      parseSignatureHeader(header);
+      throw new Error('Expected to throw');
+    } catch (error) {
+      if (!error.message.includes('Unsupported signature format')) {
+        throw new Error(`Unexpected error: ${error.message}`);
+      }
+    }
+  });
+
+  runTest('parseSignatureHeader rejects multiple comma format', () => {
+    const header = 'v1,abc,def';
+    try {
+      parseSignatureHeader(header);
+      throw new Error('Expected to throw');
+    } catch (error) {
+      if (!error.message.includes('Unsupported signature format')) {
+        throw new Error(`Unexpected error: ${error.message}`);
+      }
+    }
+  });
+
+  runTest('parseSignatureHeader rejects empty v1 format', () => {
+    const header = 'v1,';
+    try {
+      parseSignatureHeader(header);
+      throw new Error('Expected to throw');
+    } catch (error) {
+      if (!error.message.includes('Unsupported signature format')) {
+        throw new Error(`Unexpected error: ${error.message}`);
+      }
+    }
+  });
+
+  runTest('parseSignatureHeader rejects v1 with non-hex', () => {
+    const header = 'v1,gggggggggggg';
+    try {
+      parseSignatureHeader(header);
+      throw new Error('Expected to throw');
+    } catch (error) {
+      if (!error.message.includes('Unsupported signature format')) {
+        throw new Error(`Unexpected error: ${error.message}`);
+      }
+    }
+  });
+
+  runTest('parseSignatureHeader handles whitespace trimming', () => {
+    const header = '  v1,abcdef123456  ';
+    const result = parseSignatureHeader(header);
+    if (result !== 'abcdef123456') {
+      throw new Error(`Expected 'abcdef123456', got '${result}'`);
+    }
+  });
+
+  runTest('parseSignatureHeader handles case insensitive v1', () => {
+    const header = 'V1,abcdef123456';
+    const result = parseSignatureHeader(header);
+    if (result !== 'abcdef123456') {
+      throw new Error(`Expected 'abcdef123456', got '${result}'`);
+    }
+  });
+
+  // Test verifyWebhookSignature
+  const secret = 'test-secret';
+  const body = '{"test": "data"}';
+  const validSignature = crypto.createHmac('sha256', secret).update(body, 'utf8').digest('hex');
+  const now = Math.floor(Date.now() / 1000);
+
+  runTest('verifyWebhookSignature accepts valid signature without timestamp', () => {
+    const result = verifyWebhookSignature(body, validSignature, secret);
+    if (!result) {
+      throw new Error('Expected true for valid signature');
+    }
+  });
+
+  runTest('verifyWebhookSignature accepts valid v1 signature format', () => {
+    const v1Signature = `v1,${validSignature}`;
+    const result = verifyWebhookSignature(body, v1Signature, secret);
+    if (!result) {
+      throw new Error('Expected true for valid v1 signature');
+    }
+  });
+
+  runTest('verifyWebhookSignature accepts valid sha256= signature format', () => {
+    const sha256Signature = `sha256=${validSignature}`;
+    const result = verifyWebhookSignature(body, sha256Signature, secret);
+    if (!result) {
+      throw new Error('Expected true for valid sha256= signature');
+    }
+  });
+
+  runTest('verifyWebhookSignature rejects invalid signature', () => {
+    const invalidSignature = 'invalid';
+    const result = verifyWebhookSignature(body, invalidSignature, secret);
+    if (result) {
+      throw new Error('Expected false for invalid signature');
+    }
+  });
+
+  runTest('verifyWebhookSignature rejects missing timestamp in production', () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const result = verifyWebhookSignature(body, validSignature, secret);
+      if (result) {
+        throw new Error('Expected false for missing timestamp in production');
+      }
+    } finally {
+      process.env.NODE_ENV = originalEnv;
+    }
+  });
+
+  runTest('verifyWebhookSignature accepts missing timestamp in non-production', () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    try {
+      const result = verifyWebhookSignature(body, validSignature, secret);
+      if (!result) {
+        throw new Error('Expected true for missing timestamp in development');
+      }
+    } finally {
+      process.env.NODE_ENV = originalEnv;
+    }
+  });
+
+  runTest('verifyWebhookSignature accepts timestamp within window', () => {
+    const timestamp = (now - 100).toString();
+    const result = verifyWebhookSignature(body, validSignature, secret, timestamp);
+    if (!result) {
+      throw new Error('Expected true for timestamp within window');
+    }
+  });
+
+  runTest('verifyWebhookSignature rejects timestamp outside window', () => {
+    const timestamp = (now - 400).toString(); // Beyond 300s default
+    const result = verifyWebhookSignature(body, validSignature, secret, timestamp);
+    if (result) {
+      throw new Error('Expected false for timestamp outside window');
+    }
+  });
+
+  runTest('verifyWebhookSignature rejects malformed timestamp', () => {
+    const timestamp = 'invalid';
+    const result = verifyWebhookSignature(body, validSignature, secret, timestamp);
+    if (result) {
+      throw new Error('Expected false for malformed timestamp');
+    }
+  });
+
+  runTest('verifyWebhookSignature rejects negative timestamp', () => {
+    const timestamp = '-123';
+    const result = verifyWebhookSignature(body, validSignature, secret, timestamp);
+    if (result) {
+      throw new Error('Expected false for negative timestamp');
+    }
+  });
+
+  runTest('verifyWebhookSignature rejects unsupported signature format', () => {
+    const rsaSha256Signature = `rsa-sha256=${validSignature}`;
+    const result = verifyWebhookSignature(body, rsaSha256Signature, secret);
+    if (result) {
+      throw new Error('Expected false for unsupported signature format');
+    }
+  });
+
+  // Summary
+  console.log('\n' + '='.repeat(60));
+  console.log('📊 TEST RESULTS SUMMARY');
+  console.log('='.repeat(60));
+  console.log(`✅ Passed: ${results.passed}`);
+  console.log(`❌ Failed: ${results.failed}`);
+  console.log(`📈 Success Rate: ${((results.passed / (results.passed + results.failed)) * 100).toFixed(1)}%`);
+
+  if (results.failed > 0) {
+    console.log('\n❌ FAILED TESTS:');
+    results.tests.filter(t => t.status === 'FAILED').forEach(test => {
+      console.log(`   - ${test.name}: ${test.error}`);
+    });
+  }
+
+  return results.failed === 0;
+}
+
+// Run tests if called directly
+if (require.main === module) {
+  const command = process.argv[2];
+
+  if (command === 'privacy') {
+    const success = runPrivacyTests();
+    process.exit(success ? 0 : 1);
+  } else {
+    const success = runWebhookSecurityTests();
+    process.exit(success ? 0 : 1);
+  }
+}
+
+function runPrivacyTests() {
+  console.log('🔒 Starting Webhook Privacy Test Suite\n');
+  console.log('='.repeat(60));
+
+  const results = {
+    passed: 0,
+    failed: 0,
+    tests: []
+  };
+
+  function runTest(name, fn) {
+    try {
+      console.log(`\n🧪 ${name}`);
+      fn();
+      console.log(`✅ ${name} - PASSED`);
+      results.passed++;
+      results.tests.push({ name, status: 'PASSED' });
+    } catch (error) {
+      console.log(`❌ ${name} - FAILED: ${error.message}`);
+      results.failed++;
+      results.tests.push({ name, status: 'FAILED', error: error.message });
+    }
+  }
+
+  // Mock encryption utilities for testing
+  function deriveMinimalPayload(payload) {
+    const data = payload.data || {};
+    const membershipId =
+      (typeof data.membership_id === 'string' && data.membership_id) ||
+      (typeof data.membership?.id === 'string' && data.membership.id) ||
+      (payload.type && typeof payload.type === 'string' && payload.type.includes('membership') && typeof data.id === 'string' ? data.id : undefined) ||
+      'unknown';
+
+    const minimal = {
+      whop_event_id: payload.id || payload.whop_event_id,
+      type: payload.type,
+      membership_id: membershipId
+    };
+
+    if (typeof data.failure_reason === 'string') {
+      minimal.failure_reason = data.failure_reason;
+    }
+    if (payload.data?.user_id) {
+      minimal.user_id = payload.data.user_id;
+    }
+
+    return minimal;
+  }
+
+  // Test minimal payload derivation
+  runTest('deriveMinimalPayload extracts essential fields', () => {
+    const payload = {
+      id: 'evt_123',
+      type: 'payment.succeeded',
+      data: {
+        membership_id: 'mem_456',
+        user_id: 'user_789',
+        failure_reason: 'card_declined',
+        payment: { amount: 1000 }
+      }
+    };
+
+    const minimal = deriveMinimalPayload(payload);
+    if (minimal.whop_event_id !== 'evt_123') throw new Error('Expected whop_event_id to be evt_123');
+    if (minimal.type !== 'payment.succeeded') throw new Error('Expected type to be payment.succeeded');
+    if (minimal.membership_id !== 'mem_456') throw new Error('Expected membership_id to be mem_456');
+    if (minimal.user_id !== 'user_789') throw new Error('Expected user_id to be user_789');
+    if (minimal.failure_reason !== 'card_declined') throw new Error('Expected failure_reason to be card_declined');
+    if (minimal.payment) throw new Error('Expected payment data to be excluded');
+  });
+
+  runTest('deriveMinimalPayload handles missing fields', () => {
+    const payload = {
+      whop_event_id: 'evt_123',
+      type: 'membership.created',
+      data: {}
+    };
+
+    const minimal = deriveMinimalPayload(payload);
+    if (minimal.whop_event_id !== 'evt_123') throw new Error('Expected whop_event_id to be evt_123');
+    if (minimal.membership_id !== 'unknown') throw new Error('Expected membership_id to be unknown');
+    if (minimal.user_id) throw new Error('Expected no user_id');
+  });
+
+  runTest('deriveMinimalPayload handles membership events', () => {
+    const payload = {
+      id: 'evt_123',
+      type: 'membership.updated',
+      data: {
+        id: 'mem_456',
+        user_id: 'user_789'
+      }
+    };
+
+    const minimal = deriveMinimalPayload(payload);
+    if (minimal.membership_id !== 'mem_456') throw new Error('Expected membership_id to be mem_456');
+    if (minimal.user_id !== 'user_789') throw new Error('Expected user_id to be user_789');
+  });
+
+  // Summary
+  console.log('\n' + '='.repeat(60));
+  console.log('📊 PRIVACY TEST RESULTS SUMMARY');
+  console.log('='.repeat(60));
+  console.log(`✅ Passed: ${results.passed}`);
+  console.log(`❌ Failed: ${results.failed}`);
+  console.log(`📈 Success Rate: ${((results.passed / (results.passed + results.failed)) * 100).toFixed(1)}%`);
+
+  if (results.failed > 0) {
+    console.log('\n❌ FAILED TESTS:');
+    results.tests.filter(t => t.status === 'FAILED').forEach(test => {
+      console.log(`   - ${test.name}: ${test.error}`);
+    });
+  }
+
+  return results.failed === 0;
+}
+
+module.exports = { runWebhookSecurityTests, runPrivacyTests }

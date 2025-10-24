@@ -246,3 +246,6 @@ class ServerlessScheduler {
 
 // Export singleton instance
 export const scheduler = new ServerlessScheduler();
+
+// Export processPendingReminders for use by jobQueue
+export { processPendingReminders };

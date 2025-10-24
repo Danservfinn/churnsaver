@@ -265,8 +265,10 @@ function performSecurityValidation(): void {
   const isProduction = process.env.NODE_ENV === 'production';
   
   try {
-    // Validate secrets
-    validateSecret('WHOP_APP_SECRET', process.env.WHOP_APP_SECRET!);
+    // Validate secrets only if they are set (optional in development)
+    if (process.env.WHOP_APP_SECRET) {
+      validateSecret('WHOP_APP_SECRET', process.env.WHOP_APP_SECRET);
+    }
     if (process.env.WHOP_WEBHOOK_SECRET) {
       validateSecret('WHOP_WEBHOOK_SECRET', process.env.WHOP_WEBHOOK_SECRET);
     }

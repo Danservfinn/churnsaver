@@ -1,11 +1,10 @@
+import { withWhopAppConfig } from "@whop/react/next.config";
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  api: {
-    bodyParser: {
-      sizeLimit: '1mb',
-    },
+  images: {
+    remotePatterns: [{ hostname: "**" }],
   },
 };
 
-export default nextConfig;
+export default withWhopAppConfig(nextConfig);

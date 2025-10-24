@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql, initDb } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { getRequestContextSDK } from '@/lib/auth/whop-sdk';
+import { getRequestContext } from '@/lib/auth/whop';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { SettingsUpdateSchema, validateAndTransform } from '@/lib/validation';
 import { errors } from '@/lib/apiResponse';
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     await initDb();
 
     // Get company context from request
-    const context = await getRequestContextSDK(request);
+    const context = await getRequestContext(request);
     const companyId = context.companyId;
 
     // Enforce authentication in production for creator-facing endpoints
@@ -106,7 +106,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     await initDb();
 
     // Get company context from request
-    const context = await getRequestContextSDK(request);
+    const context = await getRequestContext(request);
     const companyId = context.companyId;
 
     // Apply rate limiting for creator-facing settings updates (30/min per company)

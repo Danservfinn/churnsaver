@@ -3,9 +3,10 @@
 
 import { whopApiRequest } from '@/server/services/memberships';
 import { logger } from '@/lib/logger';
+import { env } from '@/lib/env';
 
 export interface PushNotificationPayload {
-  userId: string;
+  userId?: string; // Optional - will use default agent if not provided
   title: string;
   body: string;
   data?: Record<string, any>; // Additional data for deep linking
@@ -19,7 +20,7 @@ export interface PushResult {
 }
 
 export interface DirectMessagePayload {
-  userId: string;
+  userId?: string; // Optional - will use default agent if not provided
   message: string;
   membershipId?: string; // For tracking/analytics
 }
@@ -40,10 +41,19 @@ export async function sendWhopPushNotification(
 ): Promise<PushResult> {
   let lastError: string | undefined;
 
+  // Use default agent user ID if no userId provided
+  const targetUserId = payload.userId || env.NEXT_PUBLIC_WHOP_AGENT_USER_ID;
+  
+  if (!targetUserId) {
+    const error = 'No userId provided and no NEXT_PUBLIC_WHOP_AGENT_USER_ID configured';
+    logger.error('Cannot send push notification', { error });
+    return { success: false, error };
+  }
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const apiPayload = {
-        user_id: payload.userId,
+        user_id: targetUserId,
         title: payload.title,
         body: payload.body,
         data: {
@@ -64,7 +74,7 @@ export async function sendWhopPushNotification(
       // Whop returns message_id on success
       if (response?.message_id) {
         logger.info('Whop push notification sent successfully', {
-          userId: payload.userId,
+          userId: targetUserId,
           messageId: response.message_id,
           membershipId: payload.membershipId,
           attempt,
@@ -81,7 +91,7 @@ export async function sendWhopPushNotification(
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
       logger.warn('Whop push notification attempt failed', {
-        userId: payload.userId,
+        userId: targetUserId,
         membershipId: payload.membershipId,
         attempt,
         maxRetries,
@@ -97,7 +107,7 @@ export async function sendWhopPushNotification(
   }
 
   logger.error('Whop push notification failed after all retries', {
-    userId: payload.userId,
+    userId: targetUserId,
     membershipId: payload.membershipId,
     maxRetries,
     finalError: lastError,
@@ -119,10 +129,19 @@ export async function sendWhopDirectMessage(
 ): Promise<DMResult> {
   let lastError: string | undefined;
 
+  // Use default agent user ID if no userId provided
+  const targetUserId = payload.userId || env.NEXT_PUBLIC_WHOP_AGENT_USER_ID;
+  
+  if (!targetUserId) {
+    const error = 'No userId provided and no NEXT_PUBLIC_WHOP_AGENT_USER_ID configured';
+    logger.error('Cannot send direct message', { error });
+    return { success: false, error };
+  }
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const apiPayload = {
-        user_id: payload.userId,
+        user_id: targetUserId,
         message: payload.message,
         metadata: {
           membershipId: payload.membershipId,
@@ -141,7 +160,7 @@ export async function sendWhopDirectMessage(
       // Whop returns message_id on success
       if (response?.message_id) {
         logger.info('Whop direct message sent successfully', {
-          userId: payload.userId,
+          userId: targetUserId,
           messageId: response.message_id,
           membershipId: payload.membershipId,
           messageLength: payload.message.length,
@@ -159,7 +178,7 @@ export async function sendWhopDirectMessage(
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
       logger.warn('Whop direct message attempt failed', {
-        userId: payload.userId,
+        userId: targetUserId,
         membershipId: payload.membershipId,
         attempt,
         maxRetries,
@@ -175,7 +194,7 @@ export async function sendWhopDirectMessage(
   }
 
   logger.error('Whop direct message failed after all retries', {
-    userId: payload.userId,
+    userId: targetUserId,
     membershipId: payload.membershipId,
     maxRetries,
     finalError: lastError,

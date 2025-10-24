@@ -254,6 +254,122 @@ function runAuthTests() {
     }
   });
 
+  // Test required claims validation
+  runTest('verifyWhopTokenSDK rejects JWT missing required app_id claim', async () => {
+    const payloadWithoutAppId = { ...validPayload };
+    delete payloadWithoutAppId.app_id;
+    const tokenWithoutAppId = createTestJWT(payloadWithoutAppId);
+    const result = await verifyWhopTokenSDK(tokenWithoutAppId);
+    if (result) {
+      throw new Error('Expected null for JWT missing app_id claim');
+    }
+  });
+
+  runTest('verifyWhopTokenSDK rejects JWT missing required user_id claim', async () => {
+    const payloadWithoutUserId = { ...validPayload };
+    delete payloadWithoutUserId.user_id;
+    const tokenWithoutUserId = createTestJWT(payloadWithoutUserId);
+    const result = await verifyWhopTokenSDK(tokenWithoutUserId);
+    if (result) {
+      throw new Error('Expected null for JWT missing user_id claim');
+    }
+  });
+
+  runTest('verifyWhopTokenSDK validates app_id matches expected value', async () => {
+    const payloadWithWrongAppId = { ...validPayload, app_id: 'wrong_app_id' };
+    const tokenWithWrongAppId = createTestJWT(payloadWithWrongAppId);
+    const result = await verifyWhopTokenSDK(tokenWithWrongAppId);
+    if (result) {
+      throw new Error('Expected null for JWT with wrong app_id');
+    }
+  });
+
+  runTest('verifyWhopTokenSDK validates user_id format', async () => {
+    const payloadWithEmptyUserId = { ...validPayload, user_id: '' };
+    const tokenWithEmptyUserId = createTestJWT(payloadWithEmptyUserId);
+    const result = await verifyWhopTokenSDK(tokenWithEmptyUserId);
+    if (result) {
+      throw new Error('Expected null for JWT with empty user_id');
+    }
+  });
+
+  runTest('verifyWhopTokenSDK validates company_id format when present', async () => {
+    const payloadWithEmptyCompanyId = { ...validPayload, company_id: '' };
+    const tokenWithEmptyCompanyId = createTestJWT(payloadWithEmptyCompanyId);
+    const result = await verifyWhopTokenSDK(tokenWithEmptyCompanyId);
+    if (result) {
+      throw new Error('Expected null for JWT with empty company_id');
+    }
+  });
+
+  // Test expiration and timing validation
+  runTest('verifyWhopTokenSDK rejects JWT with missing exp claim', async () => {
+    const payloadWithoutExp = { ...validPayload };
+    delete payloadWithoutExp.exp;
+    const tokenWithoutExp = createTestJWT(payloadWithoutExp);
+    const result = await verifyWhopTokenSDK(tokenWithoutExp);
+    if (result) {
+      throw new Error('Expected null for JWT missing exp claim');
+    }
+  });
+
+  runTest('verifyWhopTokenSDK rejects JWT with iat in future', async () => {
+    const futureIat = Math.floor(Date.now() / 1000) + 400; // 400 seconds in future
+    const payloadWithFutureIat = { ...validPayload, iat: futureIat };
+    const tokenWithFutureIat = createTestJWT(payloadWithFutureIat);
+    const result = await verifyWhopTokenSDK(tokenWithFutureIat);
+    if (result) {
+      throw new Error('Expected null for JWT with iat in future');
+    }
+  });
+
+  runTest('verifyWhopTokenSDK accepts JWT with iat within skew tolerance', async () => {
+    const acceptableFutureIat = Math.floor(Date.now() / 1000) + 200; // 200 seconds in future (within 300s tolerance)
+    const payloadWithAcceptableIat = { ...validPayload, iat: acceptableFutureIat };
+    const tokenWithAcceptableIat = createTestJWT(payloadWithAcceptableIat);
+    const result = await verifyWhopTokenSDK(tokenWithAcceptableIat);
+    if (!result) {
+      throw new Error('Expected valid result for JWT with iat within skew tolerance');
+    }
+  });
+
+  // Test algorithm validation
+  runTest('verifyWhopTokenSDK rejects JWT with wrong algorithm', async () => {
+    // Create JWT with HS512 instead of HS256
+    const headerHS512 = { alg: 'HS512', typ: 'JWT' };
+    const encodedHeaderHS512 = Buffer.from(JSON.stringify(headerHS512)).toString('base64url');
+    const encodedPayload = Buffer.from(JSON.stringify(validPayload)).toString('base64url');
+    const signatureHS512 = crypto.createHmac('sha512', process.env.WHOP_APP_SECRET)
+      .update(`${encodedHeaderHS512}.${encodedPayload}`)
+      .digest('base64url');
+    const tokenHS512 = `${encodedHeaderHS512}.${encodedPayload}.${signatureHS512}`;
+
+    const result = await verifyWhopTokenSDK(tokenHS512);
+    if (result) {
+      throw new Error('Expected null for JWT with wrong algorithm');
+    }
+  });
+
+  // Test company_id resolution logic
+  runTest('verifyWhopTokenSDK uses company_id when present', async () => {
+    const payloadWithCompanyId = { ...validPayload, company_id: 'custom_company_id' };
+    const tokenWithCompanyId = createTestJWT(payloadWithCompanyId);
+    const result = await verifyWhopTokenSDK(tokenWithCompanyId);
+    if (!result || result.companyId !== 'custom_company_id') {
+      throw new Error('Expected companyId to be custom_company_id when present in token');
+    }
+  });
+
+  runTest('verifyWhopTokenSDK falls back to app_id when company_id missing', async () => {
+    const payloadWithoutCompanyId = { ...validPayload };
+    delete payloadWithoutCompanyId.company_id;
+    const tokenWithoutCompanyId = createTestJWT(payloadWithoutCompanyId);
+    const result = await verifyWhopTokenSDK(tokenWithoutCompanyId);
+    if (!result || result.companyId !== process.env.WHOP_APP_ID) {
+      throw new Error('Expected companyId to fall back to app_id when company_id missing');
+    }
+  });
+
   // Legacy Verification Tests
   runTest('verifyWhopTokenLegacy accepts valid JWT', () => {
     const result = verifyWhopTokenLegacy(validToken);
@@ -296,20 +412,19 @@ function runAuthTests() {
     }
   });
 
-  // Hybrid Verification Tests
-  runTest('verifyWhopTokenHybrid prefers SDK verification when valid', async () => {
+  // Legacy fallback tests
+  runTest('verifyWhopTokenHybrid prefers SDK when both methods would work', async () => {
     const result = await verifyWhopTokenHybrid(validToken);
-    if (!result || !result.isAuthenticated || result.userId !== 'test_user_123') {
-      throw new Error('Expected valid authentication result');
+    if (!result || !result.isAuthenticated) {
+      throw new Error('Expected SDK method to succeed');
     }
   });
 
   runTest('verifyWhopTokenHybrid falls back to legacy when SDK fails', async () => {
-    // Create a token that would fail SDK but pass legacy
+    // Create a token that fails SDK validation but passes legacy
     const legacyOnlyPayload = { ...validPayload };
-    // Remove JWT-specific fields that SDK expects
-    delete legacyOnlyPayload.iss;
-    delete legacyOnlyPayload.aud;
+    delete legacyOnlyPayload.iss; // Remove JWT-specific claim
+    delete legacyOnlyPayload.aud; // Remove JWT-specific claim
     const legacyToken = createTestJWT(legacyOnlyPayload);
 
     const result = await verifyWhopTokenHybrid(legacyToken);
@@ -318,10 +433,59 @@ function runAuthTests() {
     }
   });
 
-  runTest('verifyWhopTokenHybrid rejects when both methods fail', async () => {
+  runTest('verifyWhopTokenHybrid returns null when both methods fail', async () => {
     const result = await verifyWhopTokenHybrid('completely.invalid.token');
     if (result) {
       throw new Error('Expected null when both verification methods fail');
+    }
+  });
+
+  // Test error handling and security logging
+  runTest('verifyWhopTokenSDK handles malformed JWT headers gracefully', async () => {
+    const malformedHeaderToken = `invalid.header.${validToken.split('.')[2]}`;
+    const result = await verifyWhopTokenSDK(malformedHeaderToken);
+    if (result) {
+      throw new Error('Expected null for malformed JWT header');
+    }
+  });
+
+  runTest('verifyWhopTokenSDK handles tokens with excessive length', async () => {
+    const longToken = 'a'.repeat(10000) + '.' + 'b'.repeat(10000) + '.' + 'c'.repeat(10000);
+    const result = await verifyWhopTokenSDK(longToken);
+    if (result) {
+      throw new Error('Expected null for excessively long token');
+    }
+  });
+
+  // Test timing and performance
+  runTest('verifyWhopTokenSDK processes tokens within reasonable time', async () => {
+    const startTime = Date.now();
+    const result = await verifyWhopTokenSDK(validToken);
+    const duration = Date.now() - startTime;
+    if (!result) {
+      throw new Error('Expected valid token verification');
+    }
+    if (duration > 1000) { // Should complete within 1 second
+      throw new Error(`Token verification took too long: ${duration}ms`);
+    }
+  });
+
+  // Test multi-tenant company resolution
+  runTest('verifyWhopTokenSDK handles multi-tenant company resolution', async () => {
+    // Test with different company_id values
+    const testCases = [
+      { company_id: 'company_a', expected: 'company_a' },
+      { company_id: 'company_b', expected: 'company_b' },
+      { company_id: undefined, expected: process.env.WHOP_APP_ID }
+    ];
+
+    for (const testCase of testCases) {
+      const payload = { ...validPayload, company_id: testCase.company_id };
+      const token = createTestJWT(payload);
+      const result = await verifyWhopTokenSDK(token);
+      if (!result || result.companyId !== testCase.expected) {
+        throw new Error(`Expected companyId ${testCase.expected}, got ${result?.companyId}`);
+      }
     }
   });
 

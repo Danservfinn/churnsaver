@@ -36,8 +36,15 @@ export async function whopApiRequest(
   const baseURL = 'https://api.whop.com/api/v5/app';
   const url = `${baseURL}${endpoint}`;
 
+  // Fail fast at call time if API key is not configured (do not throw at module load)
+  const apiKey = env.WHOP_API_KEY;
+  if (!apiKey) {
+    logger.error('Whop API key not configured', { endpoint });
+    throw new Error('Whop API key not configured');
+  }
+
   const headers = {
-    'Authorization': `Bearer ${env.WHOP_APP_SECRET}`,
+    'Authorization': `Bearer ${apiKey}`,
     'Content-Type': 'application/json',
     ...options.headers,
   };

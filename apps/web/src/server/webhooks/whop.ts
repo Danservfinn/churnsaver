@@ -167,6 +167,38 @@ function validateTimestamp(timestampHeader?: string | null): { valid: boolean; e
 }
 
 /**
+ * Validate HMAC-SHA256 webhook signature with support for multiple formats
+ * Returns true if signature is valid, false otherwise
+ */
+export function validateWebhookSignature(
+  body: string,
+  signatureHeader: string,
+  secret: string
+): boolean {
+  try {
+    // Parse signature header supporting all supported formats
+    const provided = parseSignatureHeader(signatureHeader);
+    if (!provided) {
+      logger.warn('Unsupported webhook signature format', { signatureHeader });
+      return false;
+    }
+
+    // Compute expected signature
+    const expectedSignature = createHmac('sha256', secret)
+      .update(body, 'utf8')
+      .digest('hex');
+
+    // Perform timing-safe comparison
+    return timingSafeEqual(expectedSignature, provided);
+  } catch (error) {
+    logger.error('Webhook signature validation failed with exception', {
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return false;
+  }
+}
+
+/**
  * Upsert webhook event to database with privacy-focused payload storage
  * Sets occurred_at from payload.created_at or current time, immutable on conflict.
  * Stores minimal payload in payload_min, encrypts full payload if ENCRYPTION_KEY set.
@@ -264,10 +296,13 @@ export async function handleWhopWebhook(request: NextRequest): Promise<NextRespo
       return NextResponse.json({ error: 'Missing signature' }, { status: 401 });
     }
 
-    if (!verifyWebhookSignature(body, signature, env.WHOP_WEBHOOK_SECRET, timestamp)) {
+    // Skip validation if WHOP_WEBHOOK_SECRET is not set (development mode)
+    if (!env.WHOP_WEBHOOK_SECRET) {
+      logger.warn('Webhook signature validation skipped - WHOP_WEBHOOK_SECRET not configured');
+    } else if (!validateWebhookSignature(body, signature, env.WHOP_WEBHOOK_SECRET)) {
       const clientIP = request.headers.get('x-forwarded-for') ||
-                       request.headers.get('x-real-ip') ||
-                       'unknown';
+                        request.headers.get('x-real-ip') ||
+                        'unknown';
       const userAgent = request.headers.get('user-agent')?.substring(0, 200) || 'unknown';
 
       logger.webhook('failed', {

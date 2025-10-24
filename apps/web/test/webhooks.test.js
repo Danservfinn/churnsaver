@@ -89,6 +89,12 @@ function runWebhookSecurityTests() {
   console.log('🔒 Starting Webhook Security Test Suite\n');
   console.log('='.repeat(60));
 
+  // Initialize test data at the top
+  const secret = 'test-secret';
+  const body = '{"test": "data"}';
+  const validSignature = crypto.createHmac('sha256', secret).update(body, 'utf8').digest('hex');
+  const now = Math.floor(Date.now() / 1000);
+
   const results = {
     passed: 0,
     failed: 0,
@@ -312,12 +318,181 @@ function runWebhookSecurityTests() {
     }
   });
 
-  // Test verifyWebhookSignature
-  const secret = 'test-secret';
-  const body = '{"test": "data"}';
-  const validSignature = crypto.createHmac('sha256', secret).update(body, 'utf8').digest('hex');
-  const now = Math.floor(Date.now() / 1000);
+  // Test development mode (skip validation when secret not set)
+  runTest('verifyWebhookSignature skips validation when WHOP_WEBHOOK_SECRET not set', () => {
+    const originalSecret = process.env.WHOP_WEBHOOK_SECRET;
+    delete process.env.WHOP_WEBHOOK_SECRET;
+    try {
+      const result = verifyWebhookSignature(body, 'invalid-signature', '');
+      if (!result) {
+        throw new Error('Expected true when secret not configured (development mode)');
+      }
+    } finally {
+      process.env.WHOP_WEBHOOK_SECRET = originalSecret;
+    }
+  });
 
+  // Test timing-safe comparison edge cases
+  runTest('timingSafeEqual handles empty strings', () => {
+    const result = timingSafeEqual('', '');
+    if (!result) {
+      throw new Error('Expected true for empty string comparison');
+    }
+  });
+
+  runTest('timingSafeEqual handles very long hex strings', () => {
+    const longHex = 'a'.repeat(1000);
+    const result = timingSafeEqual(longHex, longHex);
+    if (!result) {
+      throw new Error('Expected true for long hex string comparison');
+    }
+  });
+
+  runTest('timingSafeEqual handles mixed case hex', () => {
+    const result = timingSafeEqual('ABCDEF123456', 'abcdef123456');
+    if (!result) {
+      throw new Error('Expected true for mixed case hex comparison');
+    }
+  });
+
+  // Test parseSignatureHeader with edge cases
+  runTest('parseSignatureHeader handles malformed sha256= format', () => {
+    const header = 'sha256=gggggggggggg';
+    const result = parseSignatureHeader(header);
+    if (result !== null) {
+      throw new Error('Expected null for invalid hex in sha256= format');
+    }
+  });
+
+  runTest('parseSignatureHeader handles malformed v1 format', () => {
+    const header = 'v1,gggggggggggg';
+    const result = parseSignatureHeader(header);
+    if (result !== null) {
+      throw new Error('Expected null for invalid hex in v1 format');
+    }
+  });
+
+  runTest('parseSignatureHeader handles empty parts', () => {
+    const header = 'v1,';
+    const result = parseSignatureHeader(header);
+    if (result !== null) {
+      throw new Error('Expected null for empty hex part');
+    }
+  });
+
+  // Test verifyWebhookSignature with timestamp validation
+  runTest('verifyWebhookSignature rejects timestamp too far in future', () => {
+    const futureTimestamp = (Math.floor(Date.now() / 1000) + 400).toString(); // Beyond 300s window
+    const result = verifyWebhookSignature(body, validSignature, secret, futureTimestamp);
+    if (result) {
+      throw new Error('Expected false for timestamp too far in future');
+    }
+  });
+
+  runTest('verifyWebhookSignature accepts timestamp exactly at window boundary', () => {
+    const boundaryTimestamp = (Math.floor(Date.now() / 1000) - 300).toString(); // Exactly 300s ago
+    const result = verifyWebhookSignature(body, validSignature, secret, boundaryTimestamp);
+    if (!result) {
+      throw new Error('Expected true for timestamp at window boundary');
+    }
+  });
+
+  // Test replay protection with different timestamp scenarios
+  runTest('verifyWebhookSignature handles timestamp parsing errors gracefully', () => {
+    const invalidTimestamps = ['not-a-number', '', 'NaN', 'Infinity', '-Infinity'];
+    for (const timestamp of invalidTimestamps) {
+      const result = verifyWebhookSignature(body, validSignature, secret, timestamp);
+      if (result) {
+        throw new Error(`Expected false for invalid timestamp: ${timestamp}`);
+      }
+    }
+  });
+
+  // Test signature format validation with various edge cases
+  runTest('verifyWebhookSignature rejects signature with wrong algorithm', () => {
+    const wrongAlgoSignature = `rsa-sha256=${validSignature}`;
+    const result = verifyWebhookSignature(body, wrongAlgoSignature, secret);
+    if (result) {
+      throw new Error('Expected false for unsupported signature algorithm');
+    }
+  });
+
+  runTest('verifyWebhookSignature handles very long signature headers', () => {
+    const longSignature = 'a'.repeat(10000);
+    const result = verifyWebhookSignature(body, longSignature, secret);
+    if (result) {
+      throw new Error('Expected false for very long invalid signature');
+    }
+  });
+
+  // Test development vs production behavior
+  runTest('verifyWebhookSignature enforces timestamp in production mode', () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const result = verifyWebhookSignature(body, validSignature, secret);
+      if (result) {
+        throw new Error('Expected false for missing timestamp in production');
+      }
+    } finally {
+      process.env.NODE_ENV = originalEnv;
+    }
+  });
+
+  runTest('verifyWebhookSignature allows missing timestamp in development mode', () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    try {
+      const result = verifyWebhookSignature(body, validSignature, secret);
+      if (!result) {
+        throw new Error('Expected true for missing timestamp in development');
+      }
+    } finally {
+      process.env.NODE_ENV = originalEnv;
+    }
+  });
+
+  // Test error handling and exception safety
+  runTest('verifyWebhookSignature handles null/undefined inputs gracefully', () => {
+    const nullInputs = [null, undefined, ''];
+    for (const input of nullInputs) {
+      const result = verifyWebhookSignature(input, validSignature, secret);
+      if (result) {
+        throw new Error(`Expected false for null/undefined input: ${input}`);
+      }
+    }
+  });
+
+  runTest('parseSignatureHeader handles null/undefined inputs', () => {
+    const nullInputs = [null, undefined];
+    for (const input of nullInputs) {
+      try {
+        parseSignatureHeader(input);
+        throw new Error('Expected to throw for null/undefined input');
+      } catch (error) {
+        if (!error.message.includes('Cannot read properties of null')) {
+          throw new Error(`Unexpected error for null input: ${error.message}`);
+        }
+      }
+    }
+  });
+
+  // Test timingSafeEqual with various inputs
+  runTest('timingSafeEqual handles non-hex characters', () => {
+    const result = timingSafeEqual('abcdef123456', 'zzzzzz123456');
+    if (result) {
+      throw new Error('Expected false for non-hex characters');
+    }
+  });
+
+  runTest('timingSafeEqual handles different lengths after normalization', () => {
+    const result = timingSafeEqual('0xabcdef', 'abcdef12');
+    if (result) {
+      throw new Error('Expected false for different lengths after normalization');
+    }
+  });
+
+  // Test verifyWebhookSignature
   runTest('verifyWebhookSignature accepts valid signature without timestamp', () => {
     const result = verifyWebhookSignature(body, validSignature, secret);
     if (!result) {

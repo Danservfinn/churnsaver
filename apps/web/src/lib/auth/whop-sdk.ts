@@ -1,7 +1,8 @@
 // Whop SDK authentication helpers using jose library for proper JWT verification
 // Implements hardened x-whop-user-token verification with official patterns
 
-import { jwtVerify, createLocalJWKSet } from 'jose';
+import { jwtVerify } from 'jose';
+import { createHmac } from 'crypto';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 
@@ -93,6 +94,27 @@ export async function verifyWhopTokenSDK(token: string): Promise<RequestContext 
       return null;
     }
 
+    // Validate required app_id claim
+    if (!payload.app_id) {
+      logger.security('Whop token missing required app_id claim', {
+        category: 'authentication',
+        severity: 'high',
+        claims: Object.keys(payload)
+      });
+      return null;
+    }
+
+    // Validate app_id matches expected value
+    if (payload.app_id !== env.WHOP_APP_ID) {
+      logger.security('Whop token app_id does not match expected value', {
+        category: 'authentication',
+        severity: 'high',
+        tokenAppId: payload.app_id,
+        expectedAppId: env.WHOP_APP_ID
+      });
+      return null;
+    }
+
     // Validate user_id format
     if (typeof payload.user_id !== 'string' || payload.user_id.length < 1) {
       logger.security('Invalid user_id format in token', {
@@ -134,7 +156,7 @@ export async function verifyWhopTokenSDK(token: string): Promise<RequestContext 
     }
 
     // For multi-tenant: use company_id if present, otherwise fall back to app_id
-    const companyId = payload.company_id || payload.app_id || env.WHOP_APP_ID;
+    const companyId = payload.company_id || payload.app_id || env.NEXT_PUBLIC_WHOP_COMPANY_ID || env.WHOP_APP_ID;
 
     // Check if token is near expiry for proactive refresh
     const isNearExpiry = (payload.exp - now) < 300; // 5 minutes
@@ -275,8 +297,28 @@ export function verifyWhopTokenLegacy(token: string): RequestContext | null {
       return null;
     }
 
+    // Validate required app_id claim for legacy tokens
+    if (!tokenData.app_id || typeof tokenData.app_id !== 'string') {
+      logger.security('Whop token missing or invalid app_id claim (legacy)', {
+        category: 'authentication',
+        severity: 'high'
+      });
+      return null;
+    }
+
+    // Validate app_id matches expected value for legacy tokens
+    if (tokenData.app_id !== env.WHOP_APP_ID) {
+      logger.security('Whop token app_id does not match expected value (legacy)', {
+        category: 'authentication',
+        severity: 'high',
+        tokenAppId: tokenData.app_id,
+        expectedAppId: env.WHOP_APP_ID
+      });
+      return null;
+    }
+
     // For multi-tenant: use company_id if present, otherwise fall back to app_id
-    const companyId = tokenData.company_id || tokenData.app_id || env.WHOP_APP_ID;
+    const companyId = tokenData.company_id || tokenData.app_id || env.NEXT_PUBLIC_WHOP_COMPANY_ID || env.WHOP_APP_ID;
 
     logger.security('Whop token verified successfully (legacy)', {
       category: 'authentication',
@@ -318,7 +360,12 @@ export async function verifyWhopTokenHybrid(token: string): Promise<RequestConte
   logger.info('SDK verification failed, trying legacy method');
   const legacyResult = verifyWhopTokenLegacy(token);
   if (legacyResult) {
-    logger.info('Token verified using legacy method');
+    logger.warn('Token verified using deprecated legacy method - consider upgrading to JWT tokens', {
+      category: 'authentication',
+      severity: 'medium',
+      userId: legacyResult.userId,
+      companyId: legacyResult.companyId
+    });
     return legacyResult;
   }
 
@@ -344,7 +391,7 @@ export async function getRequestContextSDK(request: { headers: { get: (key: stri
     });
     
     return {
-      companyId: env.WHOP_APP_ID, // Fallback to app ID for single-tenant
+      companyId: env.NEXT_PUBLIC_WHOP_COMPANY_ID || env.WHOP_APP_ID, // Prefer public company ID then app ID
       userId: 'anonymous',
       isAuthenticated: false
     };
@@ -361,7 +408,7 @@ export async function getRequestContextSDK(request: { headers: { get: (key: stri
     });
     
     return {
-      companyId: env.WHOP_APP_ID,
+      companyId: env.NEXT_PUBLIC_WHOP_COMPANY_ID || env.WHOP_APP_ID,
       userId: 'anonymous',
       isAuthenticated: false
     };
@@ -392,7 +439,7 @@ export async function getRequestContextSDK(request: { headers: { get: (key: stri
   });
   
   return {
-    companyId: env.WHOP_APP_ID,
+    companyId: env.NEXT_PUBLIC_WHOP_COMPANY_ID || env.WHOP_APP_ID,
     userId: 'anonymous',
     isAuthenticated: false
   };
@@ -410,7 +457,7 @@ export function getWebhookCompanyContext(webhookHeaders: Record<string, string>)
   // Check for custom company ID header first
   const companyId = webhookHeaders['x-company-id'] ||
                    webhookHeaders['X-Company-Id'] ||
-                   env.WHOP_APP_ID;
+                   env.NEXT_PUBLIC_WHOP_COMPANY_ID || env.WHOP_APP_ID;
   
   return companyId;
 }

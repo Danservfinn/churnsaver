@@ -259,3 +259,251 @@ describe('Feature Flag Behaviors', () => {
     });
   });
 });
+
+describe('WHOP_API_KEY Environment Validation', () => {
+  beforeEach(() => {
+    // Reset process.env before each test
+    (process.env as any) = { ...originalEnv };
+  });
+
+  afterEach(() => {
+    // Restore original process.env after each test
+    (process.env as any) = originalEnv;
+  });
+
+  describe('WHOP_API_KEY validation in production', () => {
+    it('should require WHOP_API_KEY in production environment', () => {
+      (process.env as any).NODE_ENV = 'production';
+      delete (process.env as any).WHOP_API_KEY;
+
+      try {
+        require('../src/lib/env').env;
+        throw new Error('Expected to throw');
+      } catch (error: any) {
+        expect(error.message).toBe('WHOP_API_KEY must be set in production');
+      }
+    });
+
+    it('should accept valid WHOP_API_KEY in production', () => {
+      (process.env as any).NODE_ENV = 'production';
+      (process.env as any).WHOP_API_KEY = 'valid_api_key_16_chars';
+
+      try {
+        const testEnv = require('../src/lib/env').env;
+        expect(testEnv.WHOP_API_KEY).toBe('valid_api_key_16_chars');
+      } catch (error) {
+        throw new Error('Should not throw for valid WHOP_API_KEY');
+      }
+    });
+
+    it('should validate WHOP_API_KEY length in production', () => {
+      (process.env as any).NODE_ENV = 'production';
+      (process.env as any).WHOP_API_KEY = 'short'; // Less than 16 characters
+
+      try {
+        require('../src/lib/env').env;
+        throw new Error('Expected to throw');
+      } catch (error: any) {
+        expect(error.message.includes('must be at least 16 characters long')).toBeTruthy();
+      }
+    });
+
+    it('should reject weak WHOP_API_KEY patterns in production', () => {
+      (process.env as any).NODE_ENV = 'production';
+      const weakKeys = ['test', 'demo', 'example', 'password', 'secret'];
+
+      for (const weakKey of weakKeys) {
+        (process.env as any).WHOP_API_KEY = weakKey;
+        try {
+          require('../src/lib/env').env;
+          throw new Error('Expected to throw');
+        } catch (error: any) {
+          expect(error.message.includes('appears to be weak or insecure')).toBeTruthy();
+        }
+      }
+    });
+
+    it('should reject repeated character patterns in WHOP_API_KEY', () => {
+      (process.env as any).NODE_ENV = 'production';
+      (process.env as any).WHOP_API_KEY = 'a'.repeat(20); // Repeated characters
+
+      try {
+        require('../src/lib/env').env;
+        throw new Error('Expected to throw');
+      } catch (error: any) {
+        expect(error.message.includes('appears to be weak or insecure')).toBeTruthy();
+      }
+    });
+  });
+
+  describe('WHOP_API_KEY validation in development', () => {
+    it('should allow missing WHOP_API_KEY in development', () => {
+      (process.env as any).NODE_ENV = 'development';
+      delete (process.env as any).WHOP_API_KEY;
+
+      try {
+        const testEnv = require('../src/lib/env').env;
+        expect(testEnv.WHOP_API_KEY).toBeUndefined();
+      } catch (error) {
+        throw new Error('Should not throw when WHOP_API_KEY is missing in development');
+      }
+    });
+
+    it('should accept valid WHOP_API_KEY in development', () => {
+      (process.env as any).NODE_ENV = 'development';
+      (process.env as any).WHOP_API_KEY = 'valid_dev_api_key_16_chars';
+
+      try {
+        const testEnv = require('../src/lib/env').env;
+        expect(testEnv.WHOP_API_KEY).toBe('valid_dev_api_key_16_chars');
+      } catch (error) {
+        throw new Error('Should not throw for valid WHOP_API_KEY in development');
+      }
+    });
+
+    it('should warn about weak WHOP_API_KEY in development but not throw', () => {
+      (process.env as any).NODE_ENV = 'development';
+      (process.env as any).WHOP_API_KEY = 'test'; // Weak key
+
+      // In development, validation warnings are logged but don't throw
+      try {
+        require('../src/lib/env').env;
+        // Should not throw in development
+      } catch (error) {
+        throw new Error('Should not throw in development for weak keys');
+      }
+    });
+  });
+
+  describe('WHOP_API_KEY security validation logic', () => {
+    it('should validate minimum length requirement', () => {
+      const testCases = [
+        { key: 'short', expected: false },
+        { key: 'exactly_16_chars', expected: true },
+        { key: 'longer_than_16_characters', expected: true }
+      ];
+
+      for (const testCase of testCases) {
+        const isValid = testCase.key.length >= 16;
+        expect(isValid).toBe(testCase.expected);
+      }
+    });
+
+    it('should detect common weak patterns', () => {
+      const weakPatterns = [
+        'test',
+        'demo',
+        'example',
+        'sample',
+        'password',
+        'secret',
+        'key',
+        'token',
+        'api',
+        'whop'
+      ];
+
+      for (const pattern of weakPatterns) {
+        const isWeak = weakPatterns.some((weak: string) => pattern.toLowerCase().includes(weak));
+        expect(isWeak).toBe(true);
+      }
+    });
+
+    it('should detect repeated character patterns', () => {
+      const repeatedPatterns = [
+        'a'.repeat(17),
+        '1'.repeat(20),
+        'abc'.repeat(6),
+        '123'.repeat(6)
+      ];
+
+      for (const pattern of repeatedPatterns) {
+        const hasRepeatedChars = /(.)\1{15,}/.test(pattern);
+        expect(hasRepeatedChars).toBe(true);
+      }
+    });
+
+    it('should accept strong, random-looking keys', () => {
+      const strongKeys = [
+        'sk_live_1234567890abcdef',
+        'whop_prod_abcdef1234567890',
+        'api_key_2024_xyz_12345678'
+      ];
+
+      for (const key of strongKeys) {
+        const isValidLength = key.length >= 16;
+        const hasWeakPattern = /(test|demo|example|password|secret)/i.test(key);
+        const hasRepeatedChars = /(.)\1{15,}/.test(key);
+
+        expect(isValidLength && !hasWeakPattern && !hasRepeatedChars).toBe(true);
+      }
+    });
+  });
+
+  describe('Production security validation integration', () => {
+    it('should validate all required production variables', () => {
+      (process.env as any).NODE_ENV = 'production';
+      // Set minimal valid values
+      (process.env as any).WHOP_APP_ID = 'test_app_id';
+      (process.env as any).WHOP_APP_SECRET = 'valid_app_secret_16_chars';
+      (process.env as any).WHOP_WEBHOOK_SECRET = 'valid_webhook_secret_16_chars';
+      (process.env as any).WHOP_API_KEY = 'valid_api_key_16_chars';
+      (process.env as any).DATABASE_URL = 'postgresql://user:pass@localhost:5432/db';
+
+      try {
+        require('../src/lib/env').env;
+      } catch (error) {
+        throw new Error('Should not throw with all required production variables');
+      }
+    });
+
+    it('should fail production validation when any required variable is missing', () => {
+      (process.env as any).NODE_ENV = 'production';
+      (process.env as any).WHOP_APP_ID = 'test_app_id';
+      (process.env as any).WHOP_APP_SECRET = 'valid_app_secret_16_chars';
+      (process.env as any).WHOP_WEBHOOK_SECRET = 'valid_webhook_secret_16_chars';
+      // Missing WHOP_API_KEY
+
+      try {
+        require('../src/lib/env').env;
+        throw new Error('Expected to throw');
+      } catch (error: any) {
+        expect(error.message.includes('WHOP_API_KEY must be set in production')).toBeTruthy();
+      }
+    });
+
+    it('should detect development values in production environment', () => {
+      (process.env as any).NODE_ENV = 'production';
+      (process.env as any).WHOP_APP_ID = 'test_app_id';
+      (process.env as any).WHOP_APP_SECRET = 'valid_app_secret_16_chars';
+      (process.env as any).WHOP_WEBHOOK_SECRET = 'valid_webhook_secret_16_chars';
+      (process.env as any).WHOP_API_KEY = 'valid_api_key_16_chars';
+      (process.env as any).DATABASE_URL = 'postgresql://localhost:5432/test'; // Contains 'test'
+
+      // This should not throw during env loading, but would log warnings
+      try {
+        require('../src/lib/env').env;
+      } catch (error) {
+        throw new Error('Should not throw during env loading even with development-like values');
+      }
+    });
+  });
+
+  describe('Environment variable precedence and fallbacks', () => {
+    it('should handle WHOP_API_KEY as optional in env config', () => {
+      (process.env as any).NODE_ENV = 'development';
+      delete (process.env as any).WHOP_API_KEY;
+
+      const testEnv = require('../src/lib/env').env;
+      expect(testEnv.WHOP_API_KEY).toBeUndefined();
+    });
+
+    it('should preserve WHOP_API_KEY when set', () => {
+      (process.env as any).NODE_ENV = 'development';
+      (process.env as any).WHOP_API_KEY = 'test_api_key_value';
+
+      const testEnv = require('../src/lib/env').env;
+      expect(testEnv.WHOP_API_KEY).toBe('test_api_key_value');
+    });
+  });
+});

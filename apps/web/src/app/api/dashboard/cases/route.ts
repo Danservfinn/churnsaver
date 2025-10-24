@@ -1,12 +1,8 @@
-// Dashboard Cases API
-// GET /api/dashboard/cases?page=1&limit=50&status=open&startDate=2024-01-01&endDate=2024-12-31
-
 import { NextRequest, NextResponse } from 'next/server';
 import { sql, initDb } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { getRequestContextSDK } from '@/lib/auth/whop-sdk';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
-import { errors } from '@/lib/apiResponse';
+import { errorResponses, apiSuccess } from '@/lib/apiResponse';
 
 export interface RecoveryCaseSummary {
   id: string;
@@ -43,14 +39,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // Initialize database connection
     await initDb();
 
-    // Get company context from request
-    const context = await getRequestContextSDK(request);
-    const companyId = context.companyId;
+    // Get company context from middleware headers (set by authentication middleware)
+    const companyId = request.headers.get('x-company-id');
+    const userId = request.headers.get('x-user-id');
+    const isAuthenticated = request.headers.get('x-authenticated') === 'true';
+
+    // Validate required context
+    if (!companyId) {
+      logger.error('Missing company context in dashboard cases request');
+      return errorResponses.unauthorizedResponse('Company context required');
+    }
 
     // Enforce authentication in production for creator-facing endpoints
-    if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
+    if (process.env.NODE_ENV === 'production' && !isAuthenticated) {
       logger.warn('Unauthorized request to dashboard cases - missing valid auth token');
-      return errors.unauthorized('Authentication required');
+      return errorResponses.unauthorizedResponse('Authentication required');
     }
 
     // Apply rate limiting for creator-facing case actions (30/min per company)
@@ -60,7 +63,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
 
     if (!rateLimitResult.allowed) {
-      return errors.unprocessableEntity('Rate limit exceeded', {
+      return errorResponses.unprocessableEntityResponse('Rate limit exceeded', {
         retryAfter: rateLimitResult.retryAfter,
         resetAt: rateLimitResult.resetAt.toISOString(),
       });
@@ -109,6 +112,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     logger.info('Fetching dashboard cases', {
+      companyId,
+      userId,
+      isAuthenticated,
       page,
       limit,
       offset,
@@ -154,6 +160,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     };
 
     logger.info('Dashboard cases fetched', {
+      companyId,
       total,
       returned: casesResult.length,
       page,
@@ -161,7 +168,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       processingTimeMs: Date.now() - startTime
     });
 
-    return NextResponse.json(response);
+    return apiSuccess(response);
 
   } catch (error) {
     logger.error('Failed to fetch dashboard cases', {
@@ -169,6 +176,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       processingTimeMs: Date.now() - startTime
     });
 
-    return errors.internalServerError('Failed to fetch cases');
+    return errorResponses.internalServerErrorResponse('Failed to fetch cases');
   }
 }

@@ -1,9 +1,16 @@
 // Environment variable validation and configuration with security hardening
 
 interface EnvConfig {
-  WHOP_APP_ID: string;
-  WHOP_APP_SECRET: string;
-  WHOP_WEBHOOK_SECRET: string;
+  // Supabase configuration
+  SUPABASE_URL?: string; // Supabase project URL
+  SUPABASE_ANON_KEY?: string; // Supabase anonymous key
+  SUPABASE_SERVICE_ROLE_KEY?: string; // Supabase service role key (server-only)
+  NEXT_PUBLIC_SUPABASE_URL?: string; // Public Supabase URL
+  NEXT_PUBLIC_SUPABASE_ANON_KEY?: string; // Public Supabase anonymous key
+
+  WHOP_APP_ID: string; // Will alias to NEXT_PUBLIC_WHOP_APP_ID
+  WHOP_APP_SECRET?: string; // Optional for legacy mode only
+  WHOP_WEBHOOK_SECRET?: string;
   DATABASE_URL: string;
   ENCRYPTION_KEY?: string; // Optional: for webhook payload encryption
   DATA_RETENTION_DAYS: number; // Days to retain webhook payloads before purging
@@ -25,6 +32,11 @@ interface EnvConfig {
   MAX_LOGIN_ATTEMPTS: number;
   LOCKOUT_DURATION_MINUTES: number;
   AUDIT_LOG_RETENTION_DAYS: number;
+  // Whop integration - server-only and public vars
+  WHOP_API_KEY?: string; // Server-only API key (required in production)
+  NEXT_PUBLIC_WHOP_APP_ID?: string; // Public app ID (required in production)
+  NEXT_PUBLIC_WHOP_AGENT_USER_ID?: string; // Default agent user for notifications
+  NEXT_PUBLIC_WHOP_COMPANY_ID?: string; // Default company context
 }
 
 function getEnvVar(name: string, defaultValue?: string): string {
@@ -211,11 +223,15 @@ function validateProductionSecurity(): void {
   
   // Required security variables for production
   const requiredProductionVars = [
-    'WHOP_APP_ID',
-    'WHOP_APP_SECRET',
-    'WHOP_WEBHOOK_SECRET',
+    'NEXT_PUBLIC_WHOP_APP_ID', // Use public app ID as primary
+    'WHOP_API_KEY',
     'DATABASE_URL'
   ];
+  
+  // WHOP_WEBHOOK_SECRET is required in production for security
+  if (!process.env.WHOP_WEBHOOK_SECRET) {
+    throw new Error('Security requirement: WHOP_WEBHOOK_SECRET must be set in production');
+  }
   
   for (const varName of requiredProductionVars) {
     if (!process.env[varName]) {
@@ -251,7 +267,12 @@ function performSecurityValidation(): void {
   try {
     // Validate secrets
     validateSecret('WHOP_APP_SECRET', process.env.WHOP_APP_SECRET!);
-    validateSecret('WHOP_WEBHOOK_SECRET', process.env.WHOP_WEBHOOK_SECRET!);
+    if (process.env.WHOP_WEBHOOK_SECRET) {
+      validateSecret('WHOP_WEBHOOK_SECRET', process.env.WHOP_WEBHOOK_SECRET);
+    }
+    if (process.env.WHOP_API_KEY) {
+      validateSecret('WHOP_API_KEY', process.env.WHOP_API_KEY);
+    }
     
     // Validate database URL
     validateDatabaseUrl(process.env.DATABASE_URL!);
@@ -285,9 +306,9 @@ export function validateSecurityConfig(): void {
 }
 
 export const env: EnvConfig = {
-  WHOP_APP_ID: getEnvVar('WHOP_APP_ID'),
-  WHOP_APP_SECRET: getEnvVar('WHOP_APP_SECRET'),
-  WHOP_WEBHOOK_SECRET: getEnvVar('WHOP_WEBHOOK_SECRET'),
+  WHOP_APP_ID: getEnvVar('WHOP_APP_ID', process.env.NEXT_PUBLIC_WHOP_APP_ID), // Alias to public app ID
+  WHOP_APP_SECRET: process.env.WHOP_APP_SECRET, // Optional for legacy mode
+  WHOP_WEBHOOK_SECRET: process.env.WHOP_WEBHOOK_SECRET,
   DATABASE_URL: getEnvVar('DATABASE_URL'),
   ENCRYPTION_KEY: process.env.ENCRYPTION_KEY, // Optional: for webhook payload encryption
   DATA_RETENTION_DAYS: getEnvInt('DATA_RETENTION_DAYS', 30), // Default 30 days retention
@@ -309,6 +330,17 @@ export const env: EnvConfig = {
   MAX_LOGIN_ATTEMPTS: getEnvInt('MAX_LOGIN_ATTEMPTS', 5),
   LOCKOUT_DURATION_MINUTES: getEnvInt('LOCKOUT_DURATION_MINUTES', 15),
   AUDIT_LOG_RETENTION_DAYS: getEnvInt('AUDIT_LOG_RETENTION_DAYS', 365), // 1 year default
+  // Supabase configuration
+  SUPABASE_URL: process.env.SUPABASE_URL,
+  SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
+  SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  // Whop integration
+  WHOP_API_KEY: process.env.WHOP_API_KEY,
+  NEXT_PUBLIC_WHOP_APP_ID: process.env.NEXT_PUBLIC_WHOP_APP_ID,
+  NEXT_PUBLIC_WHOP_AGENT_USER_ID: process.env.NEXT_PUBLIC_WHOP_AGENT_USER_ID,
+  NEXT_PUBLIC_WHOP_COMPANY_ID: process.env.NEXT_PUBLIC_WHOP_COMPANY_ID,
 };
 
 // Perform security validation on module load

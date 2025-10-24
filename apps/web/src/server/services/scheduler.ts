@@ -114,9 +114,10 @@ class ServerlessScheduler {
 
       await initDb();
 
-      // Get all companies that have settings configured
+      // Get all companies from companies catalog (RLS allows SELECT on companies)
+      // Note: companies table has permissive SELECT policy; no companyContext required
       const companyRows = await sql.select<{ company_id: string }>(
-        'SELECT DISTINCT company_id FROM creator_settings'
+        'SELECT id as company_id FROM companies ORDER BY id'
       );
 
       if (companyRows.length === 0) {

@@ -223,8 +223,12 @@ class Logger {
   private redactSecrets(data: Record<string, unknown>): Record<string, unknown> {
     const redacted = { ...data };
 
-    // Redact common secret patterns
-    const secretKeys = ['password', 'secret', 'token', 'key', 'signature', 'webhook_secret', 'whop_webhook_secret'];
+    // Redact common secret patterns including Whop-specific keys
+    const secretKeys = [
+      'password', 'secret', 'token', 'key', 'signature', 
+      'webhook_secret', 'whop_webhook_secret', 'whop_api_key',
+      'api_key', 'whop_app_secret'
+    ];
     for (const key of Object.keys(redacted)) {
       if (secretKeys.some(secretKey => key.toLowerCase().includes(secretKey))) {
         redacted[key] = '[REDACTED]';

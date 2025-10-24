@@ -28,11 +28,17 @@ export async function initDb(): Promise<void> {
     throw new Error('DATABASE_URL environment variable is required');
   }
 
+  // Enable SSL for Supabase or when sslmode=require is present
+  const isSupabase = env.DATABASE_URL.includes('supabase.com');
+  const sslEnabled = isSupabase || env.DATABASE_URL.includes('sslmode=require');
+  logger.info('Database SSL configuration', { sslEnabled });
+
   const pool = new Pool({
     connectionString: env.DATABASE_URL,
     max: 10, // Maximum number of clients in pool
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 2000,
+    ssl: sslEnabled ? { rejectUnauthorized: false } : undefined,
   });
 
   // Test the connection

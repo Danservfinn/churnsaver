@@ -40,11 +40,8 @@ interface DatabaseHealthMetrics {
 
 const REQUIRED_TABLES = [
   'events',
-  'recovery_cases', 
-  'creator_settings',
-  'job_queue',
-  'companies',
-  'memberships'
+  'recovery_cases',
+  'creator_settings'
 ];
 
 const SLOW_QUERY_THRESHOLD_MS = 2000;
@@ -321,7 +318,7 @@ function determineDatabaseHealth(metrics: {
   }
   
   // Check for degraded performance
-  if (connectionTime > 2000 || // 2 second connection time
+  if (connectionTime > 2000 ||
       performanceMetrics.connection_utilization_percent > CONNECTION_UTILIZATION_WARNING ||
       performanceMetrics.slow_queries_count > 10 ||
       storageInfo.utilization_percent > STORAGE_UTILIZATION_WARNING) {

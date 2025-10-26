@@ -9,16 +9,19 @@ import { errors } from '@/lib/apiResponse';
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ membershipId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     // Get company context from request
-    const context = getRequestContext(request);
+    const context = await getRequestContext(request);
     const companyId = context.companyId;
 
     // Enforce authentication in production for creator-facing endpoints
     if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
       logger.warn('Unauthorized request to membership manage URL - missing valid auth token');
-      return errors.unauthorized('Authentication required');
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
     }
 
     const { membershipId } = await params;
@@ -26,13 +29,23 @@ export async function GET(
     const manageUrl = await getMembershipManageUrl(membershipId);
 
     if (!manageUrl) {
-      return errors.notFound('Manage URL not available for this membership');
+      return NextResponse.json(
+        { error: 'Manage URL not available for this membership' },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json({ manageUrl });
   } catch (error) {
     console.error('Manage URL API error:', error);
-    return errors.internalServerError('Internal server error');
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
+
+
+
+
 

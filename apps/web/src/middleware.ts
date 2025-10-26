@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { getRequestContextSDK } from '@/lib/auth/whop-sdk';
+import { getRequestContextSDK } from '@/lib/whop-sdk';
 import { logger } from '@/lib/logger';
+import { setRequestContext, clearRequestContext } from '@/lib/db-rls';
 
 export function middleware(request: NextRequest) {
   // Only apply security headers to API routes
@@ -12,18 +13,25 @@ export function middleware(request: NextRequest) {
   const response = NextResponse.next();
   const isProduction = process.env.NODE_ENV === 'production';
 
+  // Generate or extract correlation ID
+  const requestId = request.headers.get('x-request-id') || crypto.randomUUID();
+  response.headers.set('x-request-id', requestId);
+
   // Enhanced CORS headers with production hardening
-  const allowedOrigins = isProduction
-    ? [process.env.ALLOWED_ORIGIN || 'https://app.example.com']
-    : ['http://localhost:3000', 'https://app.example.com'];
+  const allowedOrigins = process.env.ALLOWED_ORIGIN
+    ? [process.env.ALLOWED_ORIGIN]
+    : isProduction
+      ? ['https://app.example.com']
+      : ['http://localhost:3000', 'https://app.example.com'];
   
   const origin = request.headers.get('origin');
   if (allowedOrigins.includes(origin || '')) {
     response.headers.set('Access-Control-Allow-Origin', origin || allowedOrigins[0]);
+    response.headers.set('Vary', 'Origin');
   }
 
   response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Whop-User-Token');
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Whop-User-Token, X-Request-ID');
   response.headers.set('Access-Control-Allow-Credentials', 'true');
   response.headers.set('Access-Control-Max-Age', '86400'); // 24 hours
 
@@ -34,14 +42,14 @@ export function middleware(request: NextRequest) {
 
   // Skip authentication for health check endpoints
   if (request.nextUrl.pathname.startsWith('/api/health')) {
-    return applySecurityHeaders(response, isProduction);
+    return applySecurityHeaders(response, isProduction, requestId);
   }
 
   // Authenticate Whop token for all other API routes
-  return authenticateWhopToken(request, response, isProduction);
+  return authenticateWhopToken(request, response, isProduction, requestId);
 }
 
-async function authenticateWhopToken(request: NextRequest, response: NextResponse, isProduction: boolean): Promise<NextResponse> {
+async function authenticateWhopToken(request: NextRequest, response: NextResponse, isProduction: boolean, requestId: string): Promise<NextResponse> {
   try {
     // Get request context from Whop token
     const context = await getRequestContextSDK({
@@ -64,14 +72,23 @@ async function authenticateWhopToken(request: NextRequest, response: NextRespons
       }
     });
 
+    // Set RLS context for database operations
+    setRequestContext({
+      companyId: context.companyId,
+      userId: context.userId,
+      isAuthenticated: context.isAuthenticated
+    });
+
     // Set context headers for downstream handlers
     response.headers.set('x-company-id', context.companyId);
     response.headers.set('x-user-id', context.userId);
     response.headers.set('x-authenticated', context.isAuthenticated.toString());
+    response.headers.set('x-rls-context-set', 'true');
 
-    // Log authentication result
+    // Log authentication result with correlation ID
     if (context.isAuthenticated) {
-      logger.info('API request authenticated', {
+      logger.info('API request authenticated with RLS context', {
+        request_id: requestId,
         companyId: context.companyId,
         userId: context.userId,
         path: request.nextUrl.pathname,
@@ -79,6 +96,7 @@ async function authenticateWhopToken(request: NextRequest, response: NextRespons
       });
     } else {
       logger.warn('API request with anonymous access', {
+        request_id: requestId,
         companyId: context.companyId,
         path: request.nextUrl.pathname,
         method: request.method,
@@ -86,38 +104,43 @@ async function authenticateWhopToken(request: NextRequest, response: NextRespons
       });
     }
 
-    return applySecurityHeaders(response, isProduction);
+    return applySecurityHeaders(response, isProduction, requestId);
 
   } catch (error) {
     logger.error('Authentication middleware error', {
+      request_id: requestId,
       error: error instanceof Error ? error.message : String(error),
       path: request.nextUrl.pathname,
       method: request.method
     });
+
+    // Set error headers for RLS context failure
+    response.headers.set('x-rls-context-set', 'false');
+    response.headers.set('x-rls-error', 'auth_failed');
 
     // Return 401 for authentication failures
     const errorResponse = NextResponse.json(
       { error: 'Authentication failed' },
       { status: 401 }
     );
-    return applySecurityHeaders(errorResponse, isProduction);
+    return applySecurityHeaders(errorResponse, isProduction, requestId);
   }
 }
 
-function applySecurityHeaders(response: NextResponse, isProduction: boolean): NextResponse {
+function applySecurityHeaders(response: NextResponse, isProduction: boolean, requestId: string): NextResponse {
   // Comprehensive security headers for production
   if (isProduction) {
-    // Strict Content Security Policy
+    // Strict Content Security Policy with Whop iframe support
     response.headers.set(
       'Content-Security-Policy',
       [
-        "default-src 'none'",
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // Only if absolutely necessary
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline'", // Needed for Next.js
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' data: https:",
         "font-src 'self' data:",
-        "connect-src 'self' https://api.whop.com https://*.vercel.app",
-        "frame-ancestors 'none'",
+        "connect-src 'self' https://api.whop.com https://api.whop.dev",
+        "frame-ancestors 'self' https://whop.com",
         "form-action 'self'",
         "base-uri 'self'",
         "manifest-src 'self'",
@@ -127,6 +150,10 @@ function applySecurityHeaders(response: NextResponse, isProduction: boolean): Ne
         "child-src 'none'"
       ].join('; ')
     );
+
+    // Cross-Origin-Embedder-Policy for additional security
+    response.headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
+    response.headers.set('Cross-Origin-Resource-Policy', 'same-origin');
 
     // HTTP Strict Transport Security (HSTS)
     response.headers.set(
@@ -158,10 +185,10 @@ function applySecurityHeaders(response: NextResponse, isProduction: boolean): Ne
     }
 
   } else {
-    // Development CSP - more relaxed for debugging
+    // Development CSP - more relaxed for debugging with Whop iframe support
     response.headers.set(
       'Content-Security-Policy',
-      "default-src 'self'; connect-src 'self' https://api.whop.com ws: wss:; img-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-ancestors 'none'"
+      "default-src 'self'; connect-src 'self' https://api.whop.com https://api.whop.dev ws: wss:; img-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-ancestors 'self' https://whop.com'"
     );
     
     response.headers.set('Strict-Transport-Security', 'max-age=3600'); // 1 hour for dev
@@ -170,7 +197,7 @@ function applySecurityHeaders(response: NextResponse, isProduction: boolean): Ne
   }
 
   // Security monitoring headers
-  response.headers.set('X-Request-ID', crypto.randomUUID());
+  response.headers.set('X-Request-ID', requestId);
   response.headers.set('X-Response-Time', Date.now().toString());
 
   return response;
@@ -181,3 +208,9 @@ export const config = {
 };
 
 export const runtime = 'experimental-edge';
+
+// Clear RLS context at the end of request lifecycle
+// Note: In Edge Runtime, we need to ensure cleanup happens
+process.on('beforeExit', () => {
+  clearRequestContext();
+});

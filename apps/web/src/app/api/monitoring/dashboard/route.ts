@@ -165,7 +165,7 @@ async function getOverviewData() {
     uptime: Math.floor(uptime),
     version: process.env.npm_package_version || '1.0.0',
     environment: process.env.NODE_ENV || 'development',
-    activeAlertsCount: alerting.getActiveAlerts().length,
+    activeAlertsCount: alerting.getNotifications().filter(n => n.status === 'sent' && !n.error).length,
     totalRequests,
     avgResponseTime: Math.round(avgResponseTime)
   };

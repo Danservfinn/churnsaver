@@ -4,7 +4,7 @@ import { logger } from '../../../../lib/logger';
 import { spawn } from 'child_process';
 import path from 'path';
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     // Initialize database connection
     await initDb();
@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     // Execute the cleanup script
     const scriptPath = path.join(process.cwd(), 'scripts', 'cleanup-events.ts');
 
-    return new Promise((resolve) => {
+    return new Promise<NextResponse>((resolve) => {
       const cleanupProcess = spawn('npx', ['tsx', scriptPath], {
         cwd: process.cwd(),
         stdio: ['pipe', 'pipe', 'pipe'],

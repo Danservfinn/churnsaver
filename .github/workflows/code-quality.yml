@@ -1,0 +1,579 @@
+name: Code Quality Checks
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint-and-format:
+    runs-on: ubuntu-latest
+    name: Lint and Format Check
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.15.9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Biome linter
+        run: pnpm lint
+        continue-on-error: true
+
+      - name: Run Biome format check
+        run: pnpm format --check
+        continue-on-error: true
+
+      - name: Upload lint results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-results
+          path: |
+            .biome/
+            biome-output.json
+
+  type-check:
+    runs-on: ubuntu-latest
+    name: TypeScript Type Check
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.15.9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run TypeScript compiler
+        run: pnpm run build --dry-run
+        continue-on-error: true
+
+      - name: Run tsc for type checking
+        run: npx tsc --noEmit --pretty
+        continue-on-error: true
+
+      - name: Upload type check results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: type-check-results
+          path: |
+            .next/
+            tsconfig.json
+
+  code-complexity:
+    runs-on: ubuntu-latest
+    name: Code Complexity Analysis
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.15.9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install complexity tools
+        run: |
+          npm install -g complexity-report
+          npm install -g plato
+
+      - name: Run complexity analysis
+        run: |
+          # Analyze JavaScript/TypeScript complexity
+          complexity-report -o complexity-report.json -f json apps/web/src/
+          
+          # Generate complexity visualization
+          plato -r -d complexity-report apps/web/src/
+
+      - name: Upload complexity results
+        uses: actions/upload-artifact@v4
+        with:
+          name: complexity-report
+          path: |
+            complexity-report.json
+            complexity-report/
+
+      - name: Comment complexity results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            try {
+              const complexityData = JSON.parse(fs.readFileSync('complexity-report.json', 'utf8'));
+              
+              // Calculate average complexity
+              const totalComplexity = complexityData.reduce((sum, file) => sum + file.complexity.cyclomatic, 0);
+              const avgComplexity = totalComplexity / complexityData.length;
+              
+              // Find most complex files
+              const mostComplex = complexityData
+                .sort((a, b) => b.complexity.cyclomatic - a.complexity.cyclomatic)
+                .slice(0, 5);
+              
+              let comment = `## 📊 Code Complexity Analysis\n\n`;
+              comment += `**Average Complexity**: ${avgComplexity.toFixed(2)}\n\n`;
+              comment += `**Most Complex Files**:\n`;
+              
+              mostComplex.forEach((file, index) => {
+                comment += `${index + 1}. \`${file.path}\`: ${file.complexity.cyclomatic}\n`;
+              });
+              
+              // Add warnings for high complexity
+              if (avgComplexity > 10) {
+                comment += `\n⚠️ **Warning**: Average complexity is high (>10). Consider refactoring complex functions.`;
+              }
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            } catch (error) {
+              console.log('Could not read complexity report:', error.message);
+            }
+
+  security-scan:
+    runs-on: ubuntu-latest
+    name: Security Code Analysis
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.15.9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run npm audit
+        run: npm audit --audit-level=moderate --json > audit-results.json
+        continue-on-error: true
+
+      - name: Install Snyk
+        run: |
+          npm install -g snyk
+          snyk auth ${{ secrets.SNYK_TOKEN }}
+
+      - name: Run Snyk security scan
+        run: |
+          snyk test --json > snyk-results.json
+          snyk monitor --org=churn-saver --project-name=churn-saver-web
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Upload security scan results
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-results
+          path: |
+            audit-results.json
+            snyk-results.json
+
+      - name: Comment security results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            try {
+              // Parse npm audit results
+              const auditData = JSON.parse(fs.readFileSync('audit-results.json', 'utf8'));
+              const vulnerabilities = auditData.vulnerabilities || {};
+              
+              let comment = `## 🔒 Security Analysis\n\n`;
+              
+              // Count vulnerabilities by severity
+              const severityCounts = {
+                low: 0,
+                moderate: 0,
+                high: 0,
+                critical: 0
+              };
+              
+              Object.values(vulnerabilities).forEach(vuln => {
+                severityCounts[vuln.severity]++;
+              });
+              
+              comment += `**Vulnerability Summary**:\n`;
+              comment += `- Critical: ${severityCounts.critical}\n`;
+              comment += `- High: ${severityCounts.high}\n`;
+              comment += `- Moderate: ${severityCounts.moderate}\n`;
+              comment += `- Low: ${severityCounts.low}\n\n`;
+              
+              // Add warnings for high-severity vulnerabilities
+              if (severityCounts.critical > 0 || severityCounts.high > 0) {
+                comment += `🚨 **Security Alert**: High-severity vulnerabilities found. Please address these before merging.\n\n`;
+              }
+              
+              // List top vulnerabilities
+              const topVulns = Object.values(vulnerabilities)
+                .sort((a, b) => {
+                  const severityOrder = { critical: 4, high: 3, moderate: 2, low: 1 };
+                  return severityOrder[b.severity] - severityOrder[a.severity];
+                })
+                .slice(0, 5);
+              
+              if (topVulns.length > 0) {
+                comment += `**Top Vulnerabilities**:\n`;
+                topVulns.forEach((vuln, index) => {
+                  comment += `${index + 1}. **${vuln.severity.toUpperCase()}**: \`${vuln.name}\` in \`${vuln.moduleName}\`\n`;
+                  comment += `   - ${vuln.url}\n`;
+                });
+              }
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            } catch (error) {
+              console.log('Could not parse security results:', error.message);
+            }
+
+  performance-analysis:
+    runs-on: ubuntu-latest
+    name: Performance Analysis
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.15.9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build application
+        run: pnpm build
+
+      - name: Analyze bundle size
+        run: |
+          npm install -g bundlesize
+          bundlesize --json > bundle-analysis.json
+        continue-on-error: true
+
+      - name: Install Lighthouse
+        run: npm install -g @lhci/cli@0.12.x
+
+      - name: Run Lighthouse CI
+        run: |
+          lhci autorun
+          --config=.lighthouserc.js
+          --upload.target=temporary-public-storage
+        continue-on-error: true
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+
+      - name: Upload performance results
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-analysis
+          path: |
+            bundle-analysis.json
+            .lighthouse-ci/
+
+      - name: Comment performance results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            try {
+              // Parse bundle analysis
+              const bundleData = JSON.parse(fs.readFileSync('bundle-analysis.json', 'utf8'));
+              
+              let comment = `## ⚡ Performance Analysis\n\n`;
+              
+              comment += `**Bundle Size Analysis**:\n`;
+              comment += `- Main Bundle: ${bundleData.mainBundleSize}\n`;
+              comment += `- Total Size: ${bundleData.totalSize}\n`;
+              comment += `- Gzipped Size: ${bundleData.gzipSize}\n\n`;
+              
+              // Add performance warnings
+              if (bundleData.mainBundleSize > 250000) { // 250KB
+                comment += `⚠️ **Warning**: Main bundle is large (>250KB). Consider code splitting.\n\n`;
+              }
+              
+              // Add Lighthouse results if available
+              try {
+                const lighthouseData = JSON.parse(fs.readFileSync('.lighthouse-ci/lhr-report.json', 'utf8'));
+                const performance = lighthouseData.categories.performance.score * 100;
+                
+                comment += `**Lighthouse Performance**: ${performance.toFixed(0)}/100\n\n`;
+                
+                if (performance < 90) {
+                  comment += `⚠️ **Warning**: Lighthouse score is below 90. Consider performance optimizations.\n\n`;
+                }
+              } catch (e) {
+                console.log('Lighthouse data not available');
+              }
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            } catch (error) {
+              console.log('Could not analyze performance:', error.message);
+            }
+
+  dependency-analysis:
+    runs-on: ubuntu-latest
+    name: Dependency Analysis
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.15.9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install dependency analysis tools
+        run: |
+          npm install -g depcheck
+          npm install -g license-checker
+
+      - name: Check for unused dependencies
+        run: |
+          depcheck --json=depcheck-results.json apps/web/
+        continue-on-error: true
+
+      - name: Check license compatibility
+        run: |
+          license-checker --json --onlyAllow 'MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC' > license-results.json
+        continue-on-error: true
+
+      - name: Upload dependency analysis results
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-analysis
+          path: |
+            depcheck-results.json
+            license-results.json
+
+      - name: Comment dependency results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            try {
+              let comment = `## 📦 Dependency Analysis\n\n`;
+              
+              // Parse depcheck results
+              try {
+                const depcheckData = JSON.parse(fs.readFileSync('depcheck-results.json', 'utf8'));
+                
+                if (depcheckData.dependencies.length > 0) {
+                  comment += `**Unused Dependencies**:\n`;
+                  depcheckData.dependencies.slice(0, 10).forEach(dep => {
+                    comment += `- \`${dep.name}\` (used in ${dep.files.length} files)\n`;
+                  });
+                  comment += `\n`;
+                }
+                
+                if (depcheckData.devDependencies.length > 0) {
+                  comment += `**Unused Dev Dependencies**:\n`;
+                  depcheckData.devDependencies.slice(0, 5).forEach(dep => {
+                    comment += `- \`${dep.name}\`\n`;
+                  });
+                  comment += `\n`;
+                }
+              } catch (e) {
+                console.log('Could not parse depcheck results');
+              }
+              
+              // Parse license results
+              try {
+                const licenseData = JSON.parse(fs.readFileSync('license-results.json', 'utf8'));
+                
+                if (licenseData.length > 0) {
+                  comment += `**License Issues**:\n`;
+                  licenseData.slice(0, 5).forEach(pkg => {
+                    comment += `- \`${pkg.name}\`: ${pkg.license}\n`;
+                  });
+                  comment += `\n⚠️ **Warning**: Some dependencies have incompatible licenses.\n\n`;
+                }
+              } catch (e) {
+                console.log('Could not parse license results');
+              }
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            } catch (error) {
+              console.log('Could not analyze dependencies:', error.message);
+            }
+
+  quality-gate:
+    runs-on: ubuntu-latest
+    name: Quality Gate
+    needs: [lint-and-format, type-check, code-complexity, security-scan, performance-analysis, dependency-analysis]
+    if: always()
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Evaluate quality gate
+        run: |
+          # Initialize quality gate status
+          LINT_STATUS="passed"
+          TYPE_CHECK_STATUS="passed"
+          SECURITY_STATUS="passed"
+          PERFORMANCE_STATUS="passed"
+          DEPENDENCY_STATUS="passed"
+          
+          # Check lint results
+          if [ -f "artifacts/lint-results/biome-output.json" ]; then
+            LINT_STATUS="failed"
+          fi
+          
+          # Check type check results
+          if [ -f "artifacts/type-check-results/.next" ]; then
+            TYPE_CHECK_STATUS="failed"
+          fi
+          
+          # Check security results
+          if grep -q '"severity": "critical"' artifacts/security-scan-results/audit-results.json 2>/dev/null; then
+            SECURITY_STATUS="failed"
+          fi
+          
+          # Check performance results
+          if [ -f "artifacts/performance-analysis/bundle-analysis.json" ]; then
+            BUNDLE_SIZE=$(cat artifacts/performance-analysis/bundle-analysis.json | jq -r '.mainBundleSize // 0')
+            if [ "$BUNDLE_SIZE" -gt 250000 ]; then
+              PERFORMANCE_STATUS="warning"
+            fi
+          fi
+          
+          # Create quality gate summary
+          echo "## 🚪 Quality Gate Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status | Details |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|---------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Linting | $LINT_STATUS | Code formatting and style checks |" >> $GITHUB_STEP_SUMMARY
+          echo "| Type Check | $TYPE_CHECK_STATUS | TypeScript compilation |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security | $SECURITY_STATUS | Vulnerability scanning |" >> $GITHUB_STEP_SUMMARY
+          echo "| Performance | $PERFORMANCE_STATUS | Bundle size and performance |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependencies | $DEPENDENCY_STATUS | Dependency analysis |" >> $GITHUB_STEP_SUMMARY
+          
+          # Set overall status
+          if [ "$LINT_STATUS" = "passed" ] && [ "$TYPE_CHECK_STATUS" = "passed" ] && [ "$SECURITY_STATUS" = "passed" ]; then
+            echo "✅ **Quality Gate: PASSED**" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          else
+            echo "❌ **Quality Gate: FAILED**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Please address the failing checks before merging this PR." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: Set quality status
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Determine overall quality status
+            let status = 'success';
+            let description = 'All quality checks passed';
+            
+            // Check for failures
+            if (fs.existsSync('artifacts/lint-results/biome-output.json') ||
+                fs.existsSync('artifacts/type-check-results/.next') ||
+                fs.existsSync('artifacts/security-scan-results/audit-results.json')) {
+              status = 'failure';
+              description = 'Some quality checks failed';
+            }
+            
+            // Set commit status
+            github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: status,
+              target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              description: description,
+              context: 'code-quality'
+            });

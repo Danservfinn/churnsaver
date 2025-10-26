@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { initDb } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { scheduler } from '@/server/services/scheduler';
-import { getRequestContextSDK } from '@/lib/auth/whop-sdk';
+import { getRequestContextSDK } from '@/lib/whop-sdk';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { withErrorHandler, createSuccessResponse } from '@/server/middleware/errorHandler';
 import { errors, errorResponses } from '@/lib/apiResponse';
@@ -114,7 +114,7 @@ export const POST = withErrorHandler(
 
       case 'stats':
         const stats = await executeWithRecovery(
-          () => scheduler.getStats(),
+          () => scheduler.schedulePendingJobs(),
           {
             service: 'scheduler',
             retry: true,
@@ -126,44 +126,6 @@ export const POST = withErrorHandler(
           action: 'stats',
           status: 'active',
           stats,
-          timestamp: new Date().toISOString()
-        }, context);
-
-      case 'cancel_job':
-        if (!jobId) {
-          throw errors.missingRequiredField('jobId', {
-            action: 'cancel_job',
-            validActions: ['start', 'stop', 'stats', 'cancel_job', 'trigger_run']
-          });
-        }
-
-        const cancelled = await executeWithRecovery(
-          () => scheduler.cancelJob(jobId),
-          {
-            service: 'scheduler',
-            retry: true,
-            context: {
-              operation: 'cancel_job',
-              jobId,
-              requestId: context.requestId
-            }
-          }
-        );
-
-        logger.info('Job cancellation attempted via API', {
-          jobId,
-          cancelled,
-          companyId,
-          userId,
-          requestId: context.requestId
-        });
-
-        return createSuccessResponse({
-          success: cancelled,
-          action: 'cancel_job',
-          jobId,
-          cancelled,
-          message: cancelled ? 'Job cancelled successfully' : 'Job not found or already processed',
           timestamp: new Date().toISOString()
         }, context);
 

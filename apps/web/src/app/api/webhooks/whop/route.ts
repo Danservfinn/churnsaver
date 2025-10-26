@@ -1,13 +1,12 @@
 // Whop webhook endpoint
 // POST /api/webhooks/whop
-
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { handleWhopWebhook } from '@/server/webhooks/whop';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { errors } from '@/lib/apiResponse';
 
 // Only allow POST requests with rate limiting
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     // Check rate limit before processing webhook
     const rateLimitResult = await checkRateLimit('webhook:global', RATE_LIMIT_CONFIGS.webhooks);
@@ -28,10 +27,10 @@ export async function POST(request: NextRequest) {
         timestamp: new Date().toISOString()
       });
 
-      return errors.unprocessableEntity('Rate limit exceeded', {
-        retryAfter: rateLimitResult.retryAfter,
-        resetAt: rateLimitResult.resetAt.toISOString(),
-      });
+      return NextResponse.json(
+        { error: 'Rate limit exceeded', retryAfter: rateLimitResult.retryAfter, resetAt: rateLimitResult.resetAt.toISOString() },
+        { status: 429 }
+      );
     }
 
     // Rate limit passed, process webhook
@@ -50,7 +49,10 @@ export async function POST(request: NextRequest) {
         timestamp: new Date().toISOString()
       });
 
-      return errors.serviceUnavailable('Rate limiting service temporarily unavailable');
+      return NextResponse.json(
+        { error: 'Rate limiting service temporarily unavailable' },
+        { status: 503 }
+      );
     }
 
     // In development, allow the request but log the error
@@ -63,15 +65,27 @@ export async function POST(request: NextRequest) {
 }
 
 // Handle unsupported methods (no rate limiting needed)
-export async function GET() {
-  return errors.methodNotAllowed('Method not allowed');
+export async function GET(): Promise<NextResponse> {
+  return NextResponse.json(
+    { error: 'Method not allowed' },
+    { status: 405 }
+  );
 }
 
-export async function PUT() {
-  return errors.methodNotAllowed('Method not allowed');
+export async function PUT(): Promise<NextResponse> {
+  return NextResponse.json(
+    { error: 'Method not allowed' },
+    { status: 405 }
+  );
 }
 
-export async function DELETE() {
-  return errors.methodNotAllowed('Method not allowed');
+export async function DELETE(): Promise<NextResponse> {
+  return NextResponse.json(
+    { error: 'Method not allowed' },
+    { status: 405 }
+  );
 }
+
+
+
 

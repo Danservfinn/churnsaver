@@ -8,7 +8,6 @@ import { logger } from '@/lib/logger';
 import { getRequestContext } from '@/lib/auth/whop';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { SettingsUpdateSchema, validateAndTransform } from '@/lib/validation';
-import { errors } from '@/lib/apiResponse';
 
 interface CreatorSettings {
   company_id: string;
@@ -41,7 +40,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // Enforce authentication in production for creator-facing endpoints
     if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
       logger.warn('Unauthorized request to settings - missing valid auth token');
-      return errors.unauthorized('Authentication required');
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
     }
 
     logger.info('Fetching creator settings', { companyId });
@@ -94,7 +96,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       processingTimeMs: Date.now() - startTime
     });
 
-    return errors.internalServerError('Failed to fetch settings');
+    return NextResponse.json(
+      { error: 'Failed to fetch settings' },
+      { status: 500 }
+    );
   }
 }
 
@@ -116,23 +121,33 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     );
 
     if (!rateLimitResult.allowed) {
-      return errors.unprocessableEntity('Rate limit exceeded', {
-        retryAfter: rateLimitResult.retryAfter,
-        resetAt: rateLimitResult.resetAt.toISOString(),
-      });
+      return NextResponse.json(
+        {
+          error: 'Rate limit exceeded',
+          retryAfter: rateLimitResult.retryAfter,
+          resetAt: rateLimitResult.resetAt.toISOString(),
+        },
+        { status: 422 }
+      );
     }
 
     // Enforce authentication in production for creator-facing endpoints
     if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
       logger.warn('Unauthorized request to settings - missing valid auth token');
-      return errors.unauthorized('Authentication required');
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
     }
 
     // Parse and validate request body using zod schema
     const validation = validateAndTransform(SettingsUpdateSchema, await request.json());
     if (!validation.success) {
       logger.warn('Settings update validation failed', { error: validation.error });
-      return errors.badRequest(`Invalid input: ${validation.error}`);
+      return NextResponse.json(
+        { error: `Invalid input: ${validation.error}` },
+        { status: 400 }
+      );
     }
 
     const validatedInput = validation.data;
@@ -186,6 +201,9 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
       processingTimeMs: Date.now() - startTime
     });
 
-    return errors.internalServerError('Failed to update settings');
+    return NextResponse.json(
+      { error: 'Failed to update settings' },
+      { status: 500 }
+    );
   }
 }

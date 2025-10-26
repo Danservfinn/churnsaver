@@ -383,3 +383,7 @@ A: Yes, full CSV export available.
 **Q: What happens if I uninstall?**
 A: All data remains accessible. Recovery stops immediately.
 
+
+
+
+

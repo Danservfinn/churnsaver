@@ -1,22 +1,66 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { randomUUID } from 'crypto';
+// API Response utilities
+// Provides standardized response handling and error categorization
 
-// Error categories for consistent classification
-export enum ErrorCategory {
-  VALIDATION = 'validation',
-  AUTHENTICATION = 'authentication',
-  AUTHORIZATION = 'authorization',
-  RATE_LIMIT = 'rate_limit',
-  DATABASE = 'database',
-  EXTERNAL_SERVICE = 'external_service',
-  NETWORK = 'network',
-  BUSINESS_LOGIC = 'business_logic',
-  SYSTEM = 'system',
-  SECURITY = 'security',
-  UNKNOWN = 'unknown'
+import { NextResponse } from 'next/server';
+
+/**
+ * Error codes for API responses
+ */
+export enum ErrorCode {
+  // Success codes
+  SUCCESS = 200,
+  CREATED = 201,
+  ACCEPTED = 202,
+  NO_CONTENT = 204,
+
+  // Client error codes
+  BAD_REQUEST = 400,
+  UNAUTHORIZED = 401,
+  FORBIDDEN = 403,
+  NOT_FOUND = 404,
+  METHOD_NOT_ALLOWED = 405,
+  CONFLICT = 409,
+  UNPROCESSABLE_ENTITY = 422,
+  TOO_MANY_REQUESTS = 429,
+
+  // Server error codes
+  INTERNAL_SERVER_ERROR = 500,
+  NOT_IMPLEMENTED = 501,
+  BAD_GATEWAY = 502,
+  SERVICE_UNAVAILABLE = 503,
+  GATEWAY_TIMEOUT = 504,
+
+  // Authentication specific codes
+  INVALID_TOKEN = 401,
+  TOKEN_EXPIRED = 401,
+  INSUFFICIENT_PERMISSIONS = 403,
+
+  // Validation specific codes
+  VALIDATION_ERROR = 400,
+  MISSING_REQUIRED_FIELD = 400,
+  INVALID_FORMAT = 400
 }
 
-// Error severity levels
+/**
+ * Error categories for logging and monitoring
+ */
+export enum ErrorCategory {
+  DATABASE = 'database',
+  AUTHENTICATION = 'authentication',
+  AUTHORIZATION = 'authorization',
+  VALIDATION = 'validation',
+  BUSINESS_LOGIC = 'business_logic',
+  EXTERNAL_SERVICE = 'external_service',
+  SECURITY = 'security',
+  SYSTEM = 'system',
+  UNKNOWN = 'unknown',
+  RATE_LIMIT = 'rate_limit',
+  NETWORK = 'network'
+}
+
+/**
+ * Error severity levels
+ */
 export enum ErrorSeverity {
   LOW = 'low',
   MEDIUM = 'medium',
@@ -24,81 +68,77 @@ export enum ErrorSeverity {
   CRITICAL = 'critical'
 }
 
-// Standard error codes
-export enum ErrorCode {
-  // Validation errors (400)
-  BAD_REQUEST = 'BAD_REQUEST',
-  INVALID_INPUT = 'INVALID_INPUT',
-  MISSING_REQUIRED_FIELD = 'MISSING_REQUIRED_FIELD',
-  INVALID_FORMAT = 'INVALID_FORMAT',
-  
-  // Authentication errors (401)
-  UNAUTHORIZED = 'UNAUTHORIZED',
-  INVALID_TOKEN = 'INVALID_TOKEN',
-  TOKEN_EXPIRED = 'TOKEN_EXPIRED',
-  MISSING_TOKEN = 'MISSING_TOKEN',
-  
-  // Authorization errors (403)
-  FORBIDDEN = 'FORBIDDEN',
-  INSUFFICIENT_PERMISSIONS = 'INSUFFICIENT_PERMISSIONS',
-  
-  // Not found errors (404)
-  NOT_FOUND = 'NOT_FOUND',
-  RESOURCE_NOT_FOUND = 'RESOURCE_NOT_FOUND',
-  
-  // Method errors (405)
-  METHOD_NOT_ALLOWED = 'METHOD_NOT_ALLOWED',
-  
-  // Conflict errors (409)
-  CONFLICT = 'CONFLICT',
-  RESOURCE_ALREADY_EXISTS = 'RESOURCE_ALREADY_EXISTS',
-  
-  // Rate limiting errors (422)
-  RATE_LIMITED = 'RATE_LIMITED',
-  UNPROCESSABLE_ENTITY = 'UNPROCESSABLE_ENTITY',
-  
-  // Server errors (500)
-  INTERNAL_SERVER_ERROR = 'INTERNAL_SERVER_ERROR',
-  DATABASE_ERROR = 'DATABASE_ERROR',
-  EXTERNAL_SERVICE_ERROR = 'EXTERNAL_SERVICE_ERROR',
-  NETWORK_ERROR = 'NETWORK_ERROR',
-  
-  // Service unavailable (503)
-  SERVICE_UNAVAILABLE = 'SERVICE_UNAVAILABLE',
-  MAINTENANCE_MODE = 'MAINTENANCE_MODE',
-  
-  // Security errors
-  SECURITY_VIOLATION = 'SECURITY_VIOLATION',
-  SUSPICIOUS_ACTIVITY = 'SUSPICIOUS_ACTIVITY'
+/**
+ * Application error class
+ */
+export class AppError extends Error {
+  public code: ErrorCode;
+  public category: ErrorCategory;
+  public severity: ErrorSeverity;
+  public statusCode: number;
+  public isOperational: boolean;
+  public retryable: boolean;
+  public details?: any;
+
+  constructor(
+    message: string,
+    code: ErrorCode,
+    category: ErrorCategory,
+    severity: ErrorSeverity,
+    statusCode: number = 500,
+    isOperational: boolean = true,
+    retryable: boolean = false,
+    details?: any
+  ) {
+    super(message);
+    this.code = code;
+    this.category = category;
+    this.severity = severity;
+    this.statusCode = statusCode;
+    this.isOperational = isOperational;
+    this.retryable = retryable;
+    this.details = details;
+  }
+
+  toJSON() {
+    return {
+      name: this.name,
+      message: this.message,
+      code: this.code,
+      category: this.category,
+      severity: this.severity,
+      statusCode: this.statusCode,
+      isOperational: this.isOperational,
+      retryable: this.retryable,
+      details: this.details,
+      stack: this.stack
+    };
+  }
 }
 
-// Enhanced error interface
-export interface StandardError {
-  error: string;
-  code: ErrorCode;
-  details?: any;
-  category: ErrorCategory;
-  severity: ErrorSeverity;
-  timestamp: string;
-  requestId: string;
-  retryable?: boolean;
-  retryAfter?: number;
-}
-
-// Enhanced API response interface
+/**
+ * API response interface
+ */
 export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
-  error?: StandardError;
+  error?: AppError;
   meta?: {
-    requestId: string;
-    timestamp: string;
-    version: string;
-    processingTimeMs?: number;
+    requestId?: string;
+    timestamp?: string;
+    version?: string;
+    pagination?: {
+      page?: number;
+      limit?: number;
+      total?: number;
+      totalPages?: number;
+    };
   };
 }
 
-// Request context interface
+/**
+ * Request context for API calls
+ */
 export interface RequestContext {
   requestId: string;
   startTime: number;
@@ -106,287 +146,131 @@ export interface RequestContext {
   url: string;
   ip?: string;
   userAgent?: string;
-  companyId?: string;
-  userId?: string;
 }
 
-// Error class for structured error handling
-export class AppError extends Error {
-  public readonly code: ErrorCode;
-  public readonly category: ErrorCategory;
-  public readonly severity: ErrorSeverity;
-  public readonly statusCode: number;
-  public readonly retryable: boolean;
-  public readonly retryAfter?: number;
-  public readonly context?: Record<string, any>;
-
-  constructor(
-    message: string,
-    code: ErrorCode = ErrorCode.INTERNAL_SERVER_ERROR,
-    category: ErrorCategory = ErrorCategory.UNKNOWN,
-    severity: ErrorSeverity = ErrorSeverity.MEDIUM,
-    statusCode: number = 500,
-    retryable: boolean = false,
-    retryAfter?: number,
-    context?: Record<string, any>
-  ) {
-    super(message);
-    this.name = 'AppError';
-    this.code = code;
-    this.category = category;
-    this.severity = severity;
-    this.statusCode = statusCode;
-    this.retryable = retryable;
-    this.retryAfter = retryAfter;
-    this.context = context;
-
-    // Maintains proper stack trace for where our error was thrown (only available on V8)
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, AppError);
-    }
-  }
-
-  toJSON(): StandardError {
-    return {
-      error: this.message,
-      code: this.code,
-      category: this.category,
-      severity: this.severity,
-      timestamp: new Date().toISOString(),
-      requestId: this.context?.requestId || 'unknown',
-      retryable: this.retryable,
-      retryAfter: this.retryAfter,
-      details: this.context
-    };
-  }
-}
-
-// Create request context
-export function createRequestContext(request: NextRequest): RequestContext {
+/**
+ * Create request context
+ */
+export function createRequestContext(request: Request): RequestContext {
+  const url = new URL(request.url);
+  
   return {
-    requestId: randomUUID(),
+    requestId: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     startTime: Date.now(),
     method: request.method,
-    url: request.url,
-    ip: request.headers.get('x-forwarded-for') ||
-        request.headers.get('x-real-ip') ||
-        'unknown',
-    userAgent: request.headers.get('user-agent')?.substring(0, 200) || 'unknown',
-    companyId: request.headers.get('x-company-id') || undefined,
-    userId: request.headers.get('x-user-id') || undefined
+    url: url.pathname + url.search,
+    ip: request.headers.get('x-forwarded-for') || 
+         request.headers.get('x-real-ip') || 
+         'unknown',
+    userAgent: request.headers.get('user-agent') || 'unknown'
   };
 }
 
-// Helper to build AppError from unknown input
-function buildAppErrorFromUnknown(u: unknown, details?: any): AppError {
-  if (u instanceof AppError) {
-    return u;
-  } else if (u instanceof Error) {
-    return new AppError(
-      u.message,
-      ErrorCode.INTERNAL_SERVER_ERROR,
-      ErrorCategory.SYSTEM,
-      ErrorSeverity.MEDIUM,
-      500,
-      false,
-      undefined,
-      { originalError: u.name, stack: u.stack, ...details }
-    );
-  } else {
-    return new AppError(
-      String(u),
-      ErrorCode.INTERNAL_SERVER_ERROR,
-      ErrorCategory.SYSTEM,
-      ErrorSeverity.MEDIUM,
-      500,
-      false,
-      undefined,
-      details
-    );
-  }
-}
-
-// Helper to get app version
-function getAppVersion(): string {
-  return process.env.npm_package_version || '1.0.0';
-}
-
-// Creates a standardized error response
-export function apiError(
-  error: AppError | Error | string,
-  context?: RequestContext,
-  details?: any
-): NextResponse<ApiResponse> {
-  const appError = buildAppErrorFromUnknown(error, details);
-  const standardError = appError.toJSON();
-  const statusCode = appError.statusCode;
-
-  // Add request context if provided
-  if (context) {
-    standardError.requestId = context.requestId;
-  }
-
-  const response: ApiResponse = {
-    success: false,
-    error: standardError,
-    meta: {
-      requestId: standardError.requestId,
-      timestamp: standardError.timestamp,
-      version: getAppVersion(),
-      processingTimeMs: context ? Date.now() - context.startTime : undefined
-    }
-  };
-
-  return NextResponse.json(response, {
-    status: statusCode,
-    headers: {
-      'X-Request-ID': standardError.requestId,
-      'Cache-Control': 'no-cache, no-store, must-revalidate'
-    }
-  });
-}
-
-// Creates a standardized success response
-export function apiSuccess<T>(
+/**
+ * Create successful API response
+ */
+export function apiSuccess<T = any>(
   data: T,
   context?: RequestContext,
-  statusCode: number = 200
+  meta?: Partial<ApiResponse<T>['meta']>
 ): NextResponse<ApiResponse<T>> {
   const response: ApiResponse<T> = {
     success: true,
     data,
     meta: {
-      requestId: context?.requestId || 'unknown',
+      requestId: context?.requestId,
       timestamp: new Date().toISOString(),
-      version: getAppVersion(),
-      processingTimeMs: context ? Date.now() - context.startTime : undefined
+      version: '1.0.0',
+      ...meta
     }
   };
 
-  return NextResponse.json(response, {
-    status: statusCode,
-    headers: {
-      'X-Request-ID': context?.requestId || 'unknown',
-      'Cache-Control': 'no-cache, no-store, must-revalidate'
+  return NextResponse.json(response);
+}
+
+/**
+ * Create error API response
+ */
+export function apiError(
+  error: AppError,
+  context?: RequestContext
+): NextResponse<ApiResponse<null>> {
+  const response: ApiResponse<null> = {
+    success: false,
+    error,
+    meta: {
+      requestId: context?.requestId,
+      timestamp: new Date().toISOString(),
+      version: '1.0.0'
     }
+  };
+
+  return NextResponse.json(response, { 
+    status: error.statusCode 
   });
 }
 
-// Common error creators with proper categorization
+/**
+ * Error factory functions
+ */
 export const errors = {
-  // Validation errors (400)
-  badRequest: (message: string, details?: any) =>
-    new AppError(message, ErrorCode.BAD_REQUEST, ErrorCategory.VALIDATION, ErrorSeverity.LOW, 400, false, undefined, details),
+  badRequest: (message: string = 'Bad request', details?: any) => 
+    new AppError(message, ErrorCode.BAD_REQUEST, ErrorCategory.VALIDATION, ErrorSeverity.MEDIUM, 400, true, false, details),
   
-  invalidInput: (message: string, details?: any) =>
-    new AppError(message, ErrorCode.INVALID_INPUT, ErrorCategory.VALIDATION, ErrorSeverity.LOW, 400, false, undefined, details),
+  unauthorized: (message: string = 'Unauthorized', details?: any) => 
+    new AppError(message, ErrorCode.UNAUTHORIZED, ErrorCategory.AUTHENTICATION, ErrorSeverity.MEDIUM, 401, true, false, details),
   
-  missingRequiredField: (field: string, details?: any) =>
-    new AppError(`Missing required field: ${field}`, ErrorCode.MISSING_REQUIRED_FIELD, ErrorCategory.VALIDATION, ErrorSeverity.LOW, 400, false, undefined, { field, ...details }),
-
-  // Authentication errors (401)
-  unauthorized: (message: string = 'Authentication required', details?: any) =>
-    new AppError(message, ErrorCode.UNAUTHORIZED, ErrorCategory.AUTHENTICATION, ErrorSeverity.MEDIUM, 401, false, undefined, details),
+  forbidden: (message: string = 'Forbidden', details?: any) => 
+    new AppError(message, ErrorCode.FORBIDDEN, ErrorCategory.AUTHORIZATION, ErrorSeverity.MEDIUM, 403, true, false, details),
   
-  invalidToken: (details?: any) =>
-    new AppError('Invalid authentication token', ErrorCode.INVALID_TOKEN, ErrorCategory.AUTHENTICATION, ErrorSeverity.MEDIUM, 401, false, undefined, details),
+  notFound: (message: string = 'Not found', details?: any) => 
+    new AppError(message, ErrorCode.NOT_FOUND, ErrorCategory.BUSINESS_LOGIC, ErrorSeverity.MEDIUM, 404, true, false, details),
   
-  tokenExpired: (details?: any) =>
-    new AppError('Authentication token has expired', ErrorCode.TOKEN_EXPIRED, ErrorCategory.AUTHENTICATION, ErrorSeverity.MEDIUM, 401, false, undefined, details),
-
-  // Authorization errors (403)
-  forbidden: (message: string = 'Access forbidden', details?: any) =>
-    new AppError(message, ErrorCode.FORBIDDEN, ErrorCategory.AUTHORIZATION, ErrorSeverity.MEDIUM, 403, false, undefined, details),
-
-  // Not found errors (404)
-  notFound: (resource: string = 'Resource', details?: any) =>
-    new AppError(`${resource} not found`, ErrorCode.NOT_FOUND, ErrorCategory.BUSINESS_LOGIC, ErrorSeverity.LOW, 404, false, undefined, details),
-
-  // Method errors (405)
-  methodNotAllowed: (method: string, details?: any) =>
-    new AppError(`Method ${method} not allowed`, ErrorCode.METHOD_NOT_ALLOWED, ErrorCategory.VALIDATION, ErrorSeverity.LOW, 405, false, undefined, details),
-
-  // Conflict errors (409)
-  conflict: (message: string, details?: any) =>
-    new AppError(message, ErrorCode.CONFLICT, ErrorCategory.BUSINESS_LOGIC, ErrorSeverity.MEDIUM, 409, false, undefined, details),
-
-  // Rate limiting errors (422)
-  rateLimited: (retryAfter: number, details?: any) =>
-    new AppError('Rate limit exceeded', ErrorCode.RATE_LIMITED, ErrorCategory.RATE_LIMIT, ErrorSeverity.MEDIUM, 422, true, retryAfter, details),
+  methodNotAllowed: (message: string = 'Method not allowed', details?: any) => 
+    new AppError(message, ErrorCode.METHOD_NOT_ALLOWED, ErrorCategory.VALIDATION, ErrorSeverity.MEDIUM, 405, true, false, details),
   
-  unprocessableEntity: (message: string, details?: any) =>
-    new AppError(message, ErrorCode.UNPROCESSABLE_ENTITY, ErrorCategory.VALIDATION, ErrorSeverity.MEDIUM, 422, false, undefined, details),
-
-  // Server errors (500)
-  internalServerError: (message: string = 'Internal server error', details?: any) =>
-    new AppError(message, ErrorCode.INTERNAL_SERVER_ERROR, ErrorCategory.SYSTEM, ErrorSeverity.HIGH, 500, false, undefined, details),
+  conflict: (message: string = 'Conflict', details?: any) => 
+    new AppError(message, ErrorCode.CONFLICT, ErrorCategory.BUSINESS_LOGIC, ErrorSeverity.MEDIUM, 409, true, false, details),
   
-  databaseError: (message: string = 'Database operation failed', details?: any) =>
-    new AppError(message, ErrorCode.DATABASE_ERROR, ErrorCategory.DATABASE, ErrorSeverity.HIGH, 500, false, undefined, details),
+  unprocessableEntity: (message: string = 'Unprocessable entity', details?: any) => 
+    new AppError(message, ErrorCode.UNPROCESSABLE_ENTITY, ErrorCategory.VALIDATION, ErrorSeverity.MEDIUM, 422, true, false, details),
   
-  externalServiceError: (service: string, message: string = 'External service error', details?: any) =>
-    new AppError(`${service}: ${message}`, ErrorCode.EXTERNAL_SERVICE_ERROR, ErrorCategory.EXTERNAL_SERVICE, ErrorSeverity.HIGH, 500, true, undefined, { service, ...details }),
+  tooManyRequests: (message: string = 'Too many requests', details?: any) => 
+    new AppError(message, ErrorCode.TOO_MANY_REQUESTS, ErrorCategory.RATE_LIMIT, ErrorSeverity.HIGH, 429, true, false, details),
   
-  networkError: (message: string = 'Network error', details?: any) =>
-    new AppError(message, ErrorCode.NETWORK_ERROR, ErrorCategory.NETWORK, ErrorSeverity.HIGH, 500, true, undefined, details),
-
-  // Service unavailable (503)
-  serviceUnavailable: (message: string = 'Service temporarily unavailable', details?: any) =>
-    new AppError(message, ErrorCode.SERVICE_UNAVAILABLE, ErrorCategory.SYSTEM, ErrorSeverity.HIGH, 503, true, 30, details),
+  internalServerError: (message: string = 'Internal server error', details?: any) => 
+    new AppError(message, ErrorCode.INTERNAL_SERVER_ERROR, ErrorCategory.SYSTEM, ErrorSeverity.HIGH, 500, false, true, details),
   
-  maintenanceMode: (details?: any) =>
-    new AppError('Service is under maintenance', ErrorCode.MAINTENANCE_MODE, ErrorCategory.SYSTEM, ErrorSeverity.MEDIUM, 503, true, 300, details),
-
-  // Security errors
-  securityViolation: (message: string, details?: any) =>
-    new AppError(message, ErrorCode.SECURITY_VIOLATION, ErrorCategory.SECURITY, ErrorSeverity.CRITICAL, 403, false, undefined, details),
+  notImplemented: (message: string = 'Not implemented', details?: any) => 
+    new AppError(message, ErrorCode.NOT_IMPLEMENTED, ErrorCategory.SYSTEM, ErrorSeverity.MEDIUM, 501, true, false, details),
   
-  suspiciousActivity: (message: string, details?: any) =>
-    new AppError(message, ErrorCode.SUSPICIOUS_ACTIVITY, ErrorCategory.SECURITY, ErrorSeverity.HIGH, 403, false, undefined, details)
-};
-
-// Legacy compatibility functions for existing API endpoints
-export function createLegacyErrorResponse(error: AppError, context?: RequestContext): NextResponse {
-  return apiError(error, context);
-}
-
-export function createLegacySuccessResponse<T>(data: T, context?: RequestContext): NextResponse<ApiResponse<T>> {
-  return apiSuccess(data, context);
-}
-
-// Legacy interface for backward compatibility
-export interface ApiError {
-  error: string;
-  code?: string;
-  details?: any;
-}
-
-// Legacy wrapper functions to maintain compatibility with existing code
-// These functions convert AppError instances to NextResponse objects
-export const legacyErrors = {
-  badRequest: (message: string, details?: any) => apiError(errors.badRequest(message, details)),
-  unauthorized: (message: string = 'Unauthorized', details?: any) => apiError(errors.unauthorized(message, details)),
-  forbidden: (message: string = 'Forbidden', details?: any) => apiError(errors.forbidden(message, details)),
-  notFound: (message: string = 'Not Found', details?: any) => apiError(errors.notFound(message, details)),
-  methodNotAllowed: (message: string = 'Method Not Allowed', details?: any) => apiError(errors.methodNotAllowed('UNKNOWN', details)),
-  conflict: (message: string = 'Conflict', details?: any) => apiError(errors.conflict(message, details)),
-  unprocessableEntity: (message: string = 'Unprocessable Entity', details?: any) => apiError(errors.unprocessableEntity(message, details)),
-  internalServerError: (message: string = 'Internal Server Error', details?: any) => apiError(errors.internalServerError(message, details)),
-  serviceUnavailable: (message: string = 'Service Unavailable', details?: any) => apiError(errors.serviceUnavailable(message, details)),
-};
-
-// Override the existing errors export to maintain backward compatibility
-// while providing the new enhanced error handling
-export const errorResponses = {
-  ...errors,
-  // Legacy wrappers that return NextResponse objects
-  badRequestResponse: (message: string, details?: any) => apiError(errors.badRequest(message, details)),
-  unauthorizedResponse: (message: string = 'Unauthorized', details?: any) => apiError(errors.unauthorized(message, details)),
-  forbiddenResponse: (message: string = 'Forbidden', details?: any) => apiError(errors.forbidden(message, details)),
-  notFoundResponse: (message: string = 'Not Found', details?: any) => apiError(errors.notFound(message, details)),
-  methodNotAllowedResponse: (method: string, details?: any) => apiError(errors.methodNotAllowed(method, details)),
-  conflictResponse: (message: string, details?: any) => apiError(errors.conflict(message, details)),
-  unprocessableEntityResponse: (message: string, details?: any) => apiError(errors.unprocessableEntity(message, details)),
-  internalServerErrorResponse: (message: string = 'Internal Server Error', details?: any) => apiError(errors.internalServerError(message, details)),
-  serviceUnavailableResponse: (message: string = 'Service Unavailable', details?: any) => apiError(errors.serviceUnavailable(message, details)),
+  badGateway: (message: string = 'Bad gateway', details?: any) => 
+    new AppError(message, ErrorCode.BAD_GATEWAY, ErrorCategory.EXTERNAL_SERVICE, ErrorSeverity.HIGH, 502, true, false, details),
+  
+  serviceUnavailable: (message: string = 'Service unavailable', details?: any) => 
+    new AppError(message, ErrorCode.SERVICE_UNAVAILABLE, ErrorCategory.EXTERNAL_SERVICE, ErrorSeverity.HIGH, 503, true, false, details),
+  
+  gatewayTimeout: (message: string = 'Gateway timeout', details?: any) => 
+    new AppError(message, ErrorCode.GATEWAY_TIMEOUT, ErrorCategory.NETWORK, ErrorSeverity.MEDIUM, 504, true, false, details),
+  
+  invalidToken: (message: string = 'Invalid token', details?: any) => 
+    new AppError(message, ErrorCode.INVALID_TOKEN, ErrorCategory.AUTHENTICATION, ErrorSeverity.MEDIUM, 401, true, false, details),
+  
+  tokenExpired: (message: string = 'Token expired', details?: any) => 
+    new AppError(message, ErrorCode.TOKEN_EXPIRED, ErrorCategory.AUTHENTICATION, ErrorSeverity.MEDIUM, 401, true, false, details),
+  
+  insufficientPermissions: (message: string = 'Insufficient permissions', details?: any) => 
+    new AppError(message, ErrorCode.INSUFFICIENT_PERMISSIONS, ErrorCategory.AUTHORIZATION, ErrorSeverity.MEDIUM, 403, true, false, details),
+  
+  validationError: (message: string = 'Validation error', details?: any) => 
+    new AppError(message, ErrorCode.VALIDATION_ERROR, ErrorCategory.VALIDATION, ErrorSeverity.MEDIUM, 400, true, false, details),
+  
+  missingRequiredField: (message: string = 'Missing required field', details?: any) => 
+    new AppError(message, ErrorCode.MISSING_REQUIRED_FIELD, ErrorCategory.VALIDATION, ErrorSeverity.MEDIUM, 400, true, false, details),
+  
+  invalidFormat: (message: string = 'Invalid format', details?: any) => 
+    new AppError(message, ErrorCode.INVALID_FORMAT, ErrorCategory.VALIDATION, ErrorSeverity.MEDIUM, 400, true, false, details),
+  
+  rateLimited: (message: string = 'Rate limited', details?: any) => 
+    new AppError(message, ErrorCode.TOO_MANY_REQUESTS, ErrorCategory.RATE_LIMIT, ErrorSeverity.HIGH, 429, true, false, details)
 };

@@ -16,16 +16,19 @@ import { errors } from '@/lib/apiResponse';
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ membershipId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     // Get company context from request
-    const context = getRequestContext(request);
+    const context = await getRequestContext(request);
     const companyId = context.companyId;
 
     // Enforce authentication in production for creator-facing endpoints
     if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
       logger.warn('Unauthorized request to membership details - missing valid auth token');
-      return errors.unauthorized('Authentication required');
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
     }
 
     const { membershipId } = await params;
@@ -33,19 +36,32 @@ export async function GET(
     // Validate membership access
     const hasAccess = await validateMembershipAccess(membershipId);
     if (!hasAccess) {
-      return errors.notFound('Membership not found or not accessible');
+      return NextResponse.json(
+        { error: 'Membership not found or not accessible' },
+        { status: 404 }
+      );
     }
 
     // Get full membership details
     const membership = await getMembershipDetails(membershipId);
     if (!membership) {
-      return errors.internalServerError('Failed to retrieve membership details');
+      return NextResponse.json(
+        { error: 'Failed to retrieve membership details' },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({ membership });
   } catch (error) {
     console.error('Membership API error:', error);
-    return errors.internalServerError('Internal server error');
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
+
+
+
+
 

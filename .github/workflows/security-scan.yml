@@ -1,0 +1,629 @@
+name: Security Vulnerability Scanning
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  dependency-scan:
+    runs-on: ubuntu-latest
+    name: Dependency Security Scan
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.15.9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run npm audit
+        run: |
+          npm audit --audit-level=moderate --json > audit-results.json
+          npm audit --audit-level=moderate
+        continue-on-error: true
+
+      - name: Upload audit results
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-results
+          path: |
+            audit-results.json
+
+      - name: Comment audit results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            try {
+              const auditData = JSON.parse(fs.readFileSync('audit-results.json', 'utf8'));
+              const vulnerabilities = auditData.vulnerabilities || {};
+              
+              let comment = `## 🔒 Dependency Security Scan\n\n`;
+              
+              // Count vulnerabilities by severity
+              const severityCounts = {
+                low: 0,
+                moderate: 0,
+                high: 0,
+                critical: 0
+              };
+              
+              Object.values(vulnerabilities).forEach(vuln => {
+                severityCounts[vuln.severity]++;
+              });
+              
+              comment += `**Vulnerability Summary**:\n`;
+              comment += `- 🔴 Critical: ${severityCounts.critical}\n`;
+              comment += `- 🟠 High: ${severityCounts.high}\n`;
+              comment += `- 🟡 Moderate: ${severityCounts.moderate}\n`;
+              comment += `- 🟢 Low: ${severityCounts.low}\n\n`;
+              
+              // Add security status
+              if (severityCounts.critical > 0 || severityCounts.high > 0) {
+                comment += `🚨 **Security Status**: CRITICAL - High-severity vulnerabilities found\n\n`;
+                comment += `Please address these vulnerabilities before merging this PR.\n\n`;
+              } else if (severityCounts.moderate > 0) {
+                comment += `⚠️ **Security Status**: WARNING - Moderate vulnerabilities found\n\n`;
+                comment += `Consider addressing these vulnerabilities before merging.\n\n`;
+              } else {
+                comment += `✅ **Security Status**: PASSED - No critical or high vulnerabilities\n\n`;
+              }
+              
+              // List top vulnerabilities
+              const topVulns = Object.values(vulnerabilities)
+                .sort((a, b) => {
+                  const severityOrder = { critical: 4, high: 3, moderate: 2, low: 1 };
+                  return severityOrder[b.severity] - severityOrder[a.severity];
+                })
+                .slice(0, 10);
+              
+              if (topVulns.length > 0) {
+                comment += `**Top Vulnerabilities**:\n`;
+                topVulns.forEach((vuln, index) => {
+                  const emoji = vuln.severity === 'critical' ? '🔴' : 
+                              vuln.severity === 'high' ? '🟠' : 
+                              vuln.severity === 'moderate' ? '🟡' : '🟢';
+                  comment += `${index + 1}. ${emoji} **${vuln.severity.toUpperCase()}**: \`${vuln.name}\` in \`${vuln.moduleName}\`\n`;
+                  comment += `   - **Version**: ${vuln.range}\n`;
+                  comment += `   - **Fixed in**: ${vuln.fixAvailable ? vuln.fixAvailable.version : 'Not available'}\n`;
+                  comment += `   - **More info**: ${vuln.url}\n\n`;
+                });
+              }
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            } catch (error) {
+              console.log('Could not parse audit results:', error.message);
+            }
+
+  snyk-scan:
+    runs-on: ubuntu-latest
+    name: Snyk Security Scan
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.15.9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          SNYK_ORG: churn-saver
+          SNYK_PROJECT: churn-saver-web
+        with:
+          args: --severity-threshold=high
+
+      - name: Upload Snyk results
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-results
+          path: |
+            snyk-results.json
+
+  codeql-analysis:
+    runs-on: ubuntu-latest
+    name: CodeQL Analysis
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'javascript', 'typescript' ]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    name: Secret Scanning
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run TruffleHog Security Scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          base: main
+          head: ${{ github.ref }}
+          extra_args: --debug --json
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      - name: Upload secret scan results
+        uses: actions/upload-artifact@v4
+        with:
+          name: secret-scan-results
+          path: |
+            trufflehog-results.json
+            gitleaks-report.json
+
+  container-scan:
+    runs-on: ubuntu-latest
+    name: Container Security Scan
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: |
+          docker buildx build \
+            --tag churn-saver-web:latest \
+            --load \
+            .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'churn-saver-web:latest'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Upload Trivy results
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-results
+          path: |
+            trivy-results.sarif
+
+  security-summary:
+    runs-on: ubuntu-latest
+    name: Security Summary
+    needs: [dependency-scan, snyk-scan, codeql-analysis, secret-scan, container-scan]
+    if: always()
+    
+    steps:
+      - name: Download all security artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: security-artifacts/
+
+      - name: Create security summary
+        run: |
+          echo "# 🔒 Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Initialize counters
+          CRITICAL_VULNS=0
+          HIGH_VULNS=0
+          MODERATE_VULNS=0
+          LOW_VULNS=0
+          SECRETS_FOUND=0
+          
+          # Analyze npm audit results
+          if [ -f "security-artifacts/npm-audit-results/audit-results.json" ]; then
+            CRITICAL_VULNS=$(jq -r '.vulnerabilities | map(select(.severity == "critical")) | length' security-artifacts/npm-audit-results/audit-results.json)
+            HIGH_VULNS=$(jq -r '.vulnerabilities | map(select(.severity == "high")) | length' security-artifacts/npm-audit-results/audit-results.json)
+            MODERATE_VULNS=$(jq -r '.vulnerabilities | map(select(.severity == "moderate")) | length' security-artifacts/npm-audit-results/audit-results.json)
+            LOW_VULNS=$(jq -r '.vulnerabilities | map(select(.severity == "low")) | length' security-artifacts/npm-audit-results/audit-results.json)
+          fi
+          
+          # Analyze secret scan results
+          if [ -f "security-artifacts/secret-scan-results/gitleaks-report.json" ]; then
+            SECRETS_FOUND=$(jq -r '.Leaks | length' security-artifacts/secret-scan-results/gitleaks-report.json)
+          fi
+          
+          # Create summary table
+          echo "## 📊 Vulnerability Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Severity | Count | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔴 Critical | $CRITICAL_VULNS | $([ $CRITICAL_VULNS -eq 0 ] && echo '✅ Passed' || echo '❌ Failed') |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🟠 High | $HIGH_VULNS | $([ $HIGH_VULNS -eq 0 ] && echo '✅ Passed' || echo '⚠️ Warning') |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🟡 Moderate | $MODERATE_VULNS | $([ $MODERATE_VULNS -eq 0 ] && echo '✅ Passed' || echo '⚠️ Warning') |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🟢 Low | $LOW_VULNS | $([ $LOW_VULNS -eq 0 ] && echo '✅ Passed' || echo '⚠️ Warning') |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Add secret scan summary
+          echo "## 🔍 Secret Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Category | Count | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Secrets Found | $SECRETS_FOUND | $([ $SECRETS_FOUND -eq 0 ] && echo '✅ Passed' || echo '❌ Failed') |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Overall security status
+          if [ $CRITICAL_VULNS -eq 0 ] && [ $HIGH_VULNS -eq 0 ] && [ $SECRETS_FOUND -eq 0 ]; then
+            echo "## 🛡️ Overall Security Status" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **PASSED** - No critical security issues found" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## 🛡️ Overall Security Status" >> $GITHUB_STEP_SUMMARY
+            echo "❌ **FAILED** - Critical security issues require attention" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Add recommendations
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📋 Security Recommendations" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ $CRITICAL_VULNS -gt 0 ]; then
+            echo "- 🚨 **Critical vulnerabilities found** - Address immediately before merging" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ $HIGH_VULNS -gt 0 ]; then
+            echo "- ⚠️ **High vulnerabilities found** - Address before next release" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ $SECRETS_FOUND -gt 0 ]; then
+            echo "- 🔍 **Secrets detected** - Remove sensitive information immediately" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ $CRITICAL_VULNS -eq 0 ] && [ $HIGH_VULNS -eq 0 ] && [ $SECRETS_FOUND -eq 0 ]; then
+            echo "- ✅ **Good security posture** - Continue following security best practices" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Set security status
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Determine overall security status
+            let status = 'success';
+            let description = 'No critical security issues found';
+            
+            // Check for critical vulnerabilities
+            if (fs.existsSync('security-artifacts/npm-audit-results/audit-results.json')) {
+              const auditData = JSON.parse(fs.readFileSync('security-artifacts/npm-audit-results/audit-results.json', 'utf8'));
+              const vulnerabilities = auditData.vulnerabilities || {};
+              
+              const criticalVulns = Object.values(vulnerabilities).filter(v => v.severity === 'critical');
+              const highVulns = Object.values(vulnerabilities).filter(v => v.severity === 'high');
+              
+              if (criticalVulns.length > 0 || highVulns.length > 0) {
+                status = 'failure';
+                description = 'Critical or high vulnerabilities found';
+              }
+            }
+            
+            // Check for secrets
+            if (fs.existsSync('security-artifacts/secret-scan-results/gitleaks-report.json')) {
+              const secretsData = JSON.parse(fs.readFileSync('security-artifacts/secret-scan-results/gitleaks-report.json', 'utf8'));
+              
+              if (secretsData.Leaks && secretsData.Leaks.length > 0) {
+                status = 'failure';
+                description = 'Secrets detected in code';
+              }
+            }
+            
+            // Set commit status
+            github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: status,
+              target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              description: description,
+              context: 'security-scan'
+            });
+
+  security-alert:
+    runs-on: ubuntu-latest
+    name: Security Alert
+    needs: [security-summary]
+    if: failure() && github.event_name == 'pull_request'
+    
+    steps:
+      - name: Create security alert
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const prNumber = context.issue.number;
+            const author = context.payload.pull_request.user.login;
+            
+            const alertMessage = `
+            ## 🚨 Security Alert - Action Required
+            
+            @${author}, critical security issues have been detected in your pull request.
+            
+            ### 🔴 Critical Issues Found
+            
+            Your PR contains security vulnerabilities or secrets that must be addressed before it can be merged.
+            
+            ### 🚨 Immediate Actions Required
+            
+            1. **Review Security Findings**: Check the security scan results in the PR checks
+            2. **Fix Vulnerabilities**: Update or replace vulnerable dependencies
+            3. **Remove Secrets**: Remove any detected sensitive information
+            4. **Re-run Tests**: Ensure all security checks pass
+            5. **Request Review**: Tag security team for review
+            
+            ### 🛡️ Security Resources
+            
+            - **Security Guidelines**: [Read our security practices](https://github.com/${owner}/${repo}/blob/main/docs/security.md)
+            - **Security Team**: @security-team
+            - **Security Issues**: [Create security issue](https://github.com/${owner}/${repo}/issues/new?assignees=&labels=security&template=security_report.md)
+            - **Emergency Contact**: security@churnsaver.com
+            
+            ### 📋 Security Checklist
+            
+            - [ ] All critical vulnerabilities fixed
+            - [ ] All high vulnerabilities addressed
+            - [ ] No secrets detected in code
+            - [ ] Security team review completed
+            - [ ] All security scans passing
+            
+            ### ⏰ Timeline
+            
+            - **Expected Resolution**: Within 24 hours for critical issues
+            - **Follow-up**: Security team will review fixes
+            - **Merge Block**: PR cannot be merged until security issues are resolved
+            
+            ---
+            
+            *This is an automated security alert. Please take immediate action.*
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: prNumber,
+              owner: owner,
+              repo: repo,
+              body: alertMessage
+            });
+            
+            // Add security labels
+            github.rest.issues.addLabels({
+              issue_number: prNumber,
+              owner: owner,
+              repo: repo,
+              labels: ['security', 'critical', 'needs-security-review']
+            });
+            
+            // Request security team review
+            github.rest.pulls.requestReviewers({
+              owner: owner,
+              repo: repo,
+              pull_number: prNumber,
+              reviewers: ['security-team']
+            });
+
+  security-report:
+    runs-on: ubuntu-latest
+    name: Generate Security Report
+    needs: [security-summary]
+    if: github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    
+    steps:
+      - name: Download security artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: security-report/
+
+      - name: Generate security report
+        run: |
+          # Create security report
+          cat > security-report.md << 'EOF'
+          # Security Scan Report
+          
+          **Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          **Commit**: ${{ github.sha }}
+          **Branch**: ${{ github.ref_name }}
+          
+          ## Executive Summary
+          
+          EOF
+          
+          # Add vulnerability summary if available
+          if [ -f "security-report/npm-audit-results/audit-results.json" ]; then
+            cat >> security-report.md << 'EOF'
+          
+          ## Vulnerability Analysis
+          
+          ### Dependency Vulnerabilities
+          
+          EOF
+            jq -r '
+            .vulnerabilities | 
+            group_by(.severity) | 
+            to_entries[] | 
+            . as $severity | 
+            "- **\($severity | ascii_upcase)**: \($severity | length) vulnerabilities"
+          ' security-report/npm-audit-results/audit-results.json >> security-report.md
+          fi
+          
+          # Add secret scan summary if available
+          if [ -f "security-report/secret-scan-results/gitleaks-report.json" ]; then
+            cat >> security-report.md << 'EOF'
+          
+          ## Secret Analysis
+          
+          ### Secrets Detected
+          
+          - **Count**: $(jq -r '.Leaks | length' security-report/secret-scan-results/gitleaks-report.json)
+          
+          EOF
+          fi
+          
+          # Add recommendations
+          cat >> security-report.md << 'EOF'
+          
+          ## Recommendations
+          
+          ### Immediate Actions
+          - Review and address any critical vulnerabilities
+          - Remove any detected secrets from codebase
+          - Update dependencies to latest secure versions
+          - Implement security best practices
+          
+          ### Long-term Improvements
+          - Implement automated security testing
+          - Regular security audits and penetration testing
+          - Security training for development team
+          - Implement security monitoring and alerting
+          
+          EOF
+          
+      - name: Upload security report
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report
+          path: security-report.md
+      
+      - name: Create security issue if critical findings
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Check for critical issues
+            let hasCriticalIssues = false;
+            
+            if (fs.existsSync('security-report/npm-audit-results/audit-results.json')) {
+              const auditData = JSON.parse(fs.readFileSync('security-report/npm-audit-results/audit-results.json', 'utf8'));
+              const criticalVulns = Object.values(auditData.vulnerabilities || {}).filter(v => v.severity === 'critical');
+              
+              if (criticalVulns.length > 0) {
+                hasCriticalIssues = true;
+              }
+            }
+            
+            if (fs.existsSync('security-report/secret-scan-results/gitleaks-report.json')) {
+              const secretsData = JSON.parse(fs.readFileSync('security-report/secret-scan-results/gitleaks-report.json', 'utf8'));
+              
+              if (secretsData.Leaks && secretsData.Leaks.length > 0) {
+                hasCriticalIssues = true;
+              }
+            }
+            
+            // Create security issue if critical issues found
+            if (hasCriticalIssues) {
+              const issueTitle = `🚨 Security Alert - Critical Issues Detected - ${new Date().toISOString().split('T')[0]}`;
+              const issueBody = `
+              ## 🚨 Critical Security Issues Detected
+              
+              **Scan Date**: ${new Date().toISOString()}
+              **Commit**: ${{ github.sha }}
+              **Branch**: ${{ github.ref_name }}
+              
+              ### Issues Found
+              
+              Critical security vulnerabilities or secrets have been detected in the codebase.
+              
+              ### 📋 Action Items
+              
+              1. **Immediate Review**: Security team to review findings
+              2. **Risk Assessment**: Evaluate impact and exposure
+              3. **Remediation Plan**: Create plan to address issues
+              4. **Implementation**: Apply security fixes
+              5. **Verification**: Re-run security scans
+              
+              ### 📊 Impact Assessment
+              
+              - **Risk Level**: CRITICAL
+              - **Action Required**: IMMEDIATE
+              - **Team**: @security-team
+              - **Timeline**: Within 24 hours
+              
+              ### 🔗 Related Resources
+              
+              - **Security Scan**: [View results](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+              - **Security Policy**: [Link to policy](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/main/SECURITY.md)
+              - **Contact**: security@churnsaver.com
+              
+              ---
+              
+              *This issue was automatically created by the security scanning workflow.*
+              `;
+              
+              github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: issueTitle,
+                body: issueBody,
+                labels: ['security', 'critical', 'automated-alert'],
+                assignees: ['security-team']
+              });
+            }

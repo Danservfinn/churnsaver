@@ -27,11 +27,24 @@ CREATE INDEX IF NOT EXISTS idx_migration_history_executed_at ON migration_histor
 ALTER TABLE migration_history ENABLE ROW LEVEL SECURITY;
 
 -- Create RLS policy - only allow system administrators to modify migration history
-CREATE POLICY migration_history_admin_policy ON migration_history
-    FOR ALL USING (
-        -- This should be updated to match your admin role check
-        current_setting('app.is_admin', true)::boolean = true
-    );
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE policyname = 'migration_history_admin_policy'
+          AND tablename = 'migration_history'
+          AND schemaname = ANY(current_schemas(true))
+    ) THEN
+        EXECUTE $pol$
+            CREATE POLICY migration_history_admin_policy ON migration_history
+                FOR ALL USING (
+                    current_setting('app.is_admin', true)::boolean = true
+                )
+        $pol$;
+    END IF;
+END;
+$$;
 
 -- Function to record migration execution
 CREATE OR REPLACE FUNCTION record_migration_execution(
@@ -143,7 +156,7 @@ INSERT INTO migration_history (
 (8, '008_performance_indexes.sql', 'forward', 'completed', 'placeholder_checksum', now() - interval '3 days', now() - interval '3 days'),
 (9, '009_foreign_keys.sql', 'forward', 'completed', 'placeholder_checksum', now() - interval '2 days', now() - interval '2 days'),
 (10, '010_rate_limits_table.sql', 'forward', 'completed', 'placeholder_checksum', now() - interval '1 day', now() - interval '1 day')
-ON CONFLICT (migration_number, migration_type) DO NOTHING;
+ON CONFLICT (migration_number) DO NOTHING;
 
 -- Log migration completion
 DO $$

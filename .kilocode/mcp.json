@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://postgres.bhiiqapevietyvepvhpq:0BoDyCmM%26PWhUM@aws-1-us-east-1.pooler.supabase.com:6543/postgres?sslmode=no-verify&pgbouncer=true&options=project%3Dbhiiqapevietyvepvhpq"
+      ]
+    }
+  }
+}

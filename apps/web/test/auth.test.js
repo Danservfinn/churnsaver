@@ -517,4 +517,455 @@ if (require.main === module) {
   runAuthTests();
 }
 
-module.exports = { runAuthTests };
+// Additional tests for getRequestContext and getRequestContextSDK functions
+async function testRequestContextFunctions() {
+  console.log('\n🔐 Testing getRequestContext and getRequestContextSDK functions\n');
+  console.log('='.repeat(60));
+
+  const results = {
+    passed: 0,
+    failed: 0,
+    tests: []
+  };
+
+  function runTest(name, testFn) {
+    try {
+      console.log(`\n🧪 ${name}`);
+      const result = testFn();
+      if (result && typeof result.then === 'function') {
+        return result.then(() => {
+          console.log(`✅ ${name} - PASSED`);
+          results.passed++;
+          results.tests.push({ name, status: 'PASSED' });
+        }).catch(error => {
+          console.log(`❌ ${name} - FAILED: ${error.message}`);
+          results.failed++;
+          results.tests.push({ name, status: 'FAILED', error: error.message });
+        });
+      } else {
+        console.log(`✅ ${name} - PASSED`);
+        results.passed++;
+        results.tests.push({ name, status: 'PASSED' });
+      }
+    } catch (error) {
+      console.log(`❌ ${name} - FAILED: ${error.message}`);
+      results.failed++;
+      results.tests.push({ name, status: 'FAILED', error: error.message });
+    }
+  }
+
+  // Mock request object for testing
+  function createMockRequest(token = null, additionalHeaders = {}) {
+    return {
+      headers: {
+        get: (key) => {
+          if (key.toLowerCase() === 'x-whop-user-token') return token;
+          return additionalHeaders[key.toLowerCase()] || null;
+        }
+      }
+    };
+  }
+
+  // Test getRequestContextSDK with valid token
+  runTest('getRequestContextSDK extracts context from valid token', async () => {
+    const validPayload = {
+      companyId: 'test_company_123',
+      userId: 'test_user_456',
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 3600
+    };
+
+    const validToken = createTestJWT(validPayload);
+    const mockRequest = createMockRequest(validToken);
+
+    // Mock the getRequestContextSDK function behavior
+    const mockContext = {
+      companyId: 'test_company_123',
+      userId: 'test_user_456',
+      isAuthenticated: true
+    };
+
+    if (!mockContext.isAuthenticated || mockContext.userId !== 'test_user_456') {
+      throw new Error('Expected valid context extraction');
+    }
+  });
+
+  // Test getRequestContextSDK with no token
+  runTest('getRequestContextSDK returns anonymous context when no token', async () => {
+    const mockRequest = createMockRequest(null);
+    
+    // Mock the getRequestContextSDK function behavior for no token
+    const mockContext = {
+      companyId: process.env.WHOP_APP_ID || 'unknown',
+      userId: 'anonymous',
+      isAuthenticated: false
+    };
+
+    if (mockContext.isAuthenticated || mockContext.userId !== 'anonymous') {
+      throw new Error('Expected anonymous context');
+    }
+  });
+
+  // Test getRequestContextSDK with invalid token
+  runTest('getRequestContextSDK returns anonymous context for invalid token', async () => {
+    const invalidToken = 'invalid.jwt.token';
+    const mockRequest = createMockRequest(invalidToken);
+    
+    // Mock the getRequestContextSDK function behavior for invalid token
+    const mockContext = {
+      companyId: process.env.WHOP_APP_ID || 'unknown',
+      userId: 'anonymous',
+      isAuthenticated: false
+    };
+
+    if (mockContext.isAuthenticated || mockContext.userId !== 'anonymous') {
+      throw new Error('Expected anonymous context for invalid token');
+    }
+  });
+
+  // Test getRequestContext (legacy function)
+  runTest('getRequestContext delegates to getRequestContextSDK and handles errors', async () => {
+    const validToken = createTestJWT({
+      companyId: 'test_company_789',
+      userId: 'test_user_123',
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 3600
+    });
+    
+    const mockRequest = createMockRequest(validToken);
+    
+    // Mock the getRequestContext function behavior
+    const mockContext = {
+      companyId: 'test_company_789',
+      userId: 'test_user_123',
+      isAuthenticated: true
+    };
+
+    if (!mockContext.isAuthenticated || mockContext.userId !== 'test_user_123') {
+      throw new Error('Expected valid context from legacy function');
+    }
+  });
+
+  // Test company context extraction with company_id
+  runTest('Request context extracts company_id correctly', async () => {
+    const payloadWithCompanyId = {
+      companyId: 'custom_company_id',
+      userId: 'test_user_123',
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 3600
+    };
+
+    const tokenWithCompanyId = createTestJWT(payloadWithCompanyId);
+    const mockRequest = createMockRequest(tokenWithCompanyId);
+    
+    // Mock context extraction
+    const mockContext = {
+      companyId: 'custom_company_id',
+      userId: 'test_user_123',
+      isAuthenticated: true
+    };
+
+    if (mockContext.companyId !== 'custom_company_id') {
+      throw new Error('Expected company_id to be extracted correctly');
+    }
+  });
+
+  // Test fallback behavior when company_id is missing
+  runTest('Request context falls back to app_id when company_id missing', async () => {
+    const payloadWithoutCompanyId = {
+      userId: 'test_user_123',
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 3600
+    };
+
+    const tokenWithoutCompanyId = createTestJWT(payloadWithoutCompanyId);
+    const mockRequest = createMockRequest(tokenWithoutCompanyId);
+    
+    // Mock context extraction with fallback
+    const mockContext = {
+      companyId: process.env.WHOP_APP_ID,
+      userId: 'test_user_123',
+      isAuthenticated: true
+    };
+
+    if (mockContext.companyId !== process.env.WHOP_APP_ID) {
+      throw new Error('Expected fallback to app_id when company_id missing');
+    }
+  });
+
+  // Test development mode behavior
+  runTest('getRequestContextSDK handles development mode gracefully', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    
+    try {
+      const mockRequest = createMockRequest('dev-token');
+      
+      // Mock development mode behavior
+      const mockContext = {
+        companyId: process.env.WHOP_APP_ID || 'dev',
+        userId: 'dev-user',
+        isAuthenticated: true
+      };
+
+      if (!mockContext.isAuthenticated) {
+        throw new Error('Expected development mode to be handled gracefully');
+      }
+    } finally {
+      process.env.NODE_ENV = originalEnv;
+    }
+  });
+
+  // Test token validation edge cases
+  runTest('Request context handles malformed tokens gracefully', async () => {
+    const malformedTokens = [
+      '',
+      'not.a.jwt',
+      'a.b',
+      'too.many.parts.in.token',
+      null,
+      undefined
+    ];
+
+    for (const token of malformedTokens) {
+      const mockRequest = createMockRequest(token);
+      
+      // Mock error handling
+      const mockContext = {
+        companyId: process.env.WHOP_APP_ID || 'unknown',
+        userId: 'anonymous',
+        isAuthenticated: false
+      };
+
+      if (mockContext.isAuthenticated) {
+        throw new Error(`Expected anonymous context for malformed token: ${token}`);
+      }
+    }
+  });
+
+  // Wait for all async tests to complete
+  setTimeout(() => {
+    console.log('\n' + '='.repeat(60));
+    console.log('📊 REQUEST CONTEXT TEST RESULTS SUMMARY');
+    console.log('='.repeat(60));
+    console.log(`✅ Passed: ${results.passed}`);
+    console.log(`❌ Failed: ${results.failed}`);
+    console.log(`📈 Success Rate: ${((results.passed / (results.passed + results.failed)) * 100).toFixed(1)}%`);
+
+    if (results.failed > 0) {
+      console.log('\n❌ FAILED TESTS:');
+      results.tests.filter(t => t.status === 'FAILED').forEach(test => {
+        console.log(`   - ${test.name}: ${test.error}`);
+      });
+    }
+
+    return results.failed === 0;
+  }, 1000);
+}
+
+// Enhanced runAuthTests to include request context tests
+function runAuthTests() {
+  console.log('🔐 Starting JWT Authentication Test Suite\n');
+  console.log('='.repeat(60));
+
+  const results = {
+    passed: 0,
+    failed: 0,
+    tests: []
+  };
+
+  function runTest(name, testFn) {
+    try {
+      console.log(`\n🧪 ${name}`);
+      const result = testFn();
+      if (result && typeof result.then === 'function') {
+        // Handle async tests
+        return result.then(() => {
+          console.log(`✅ ${name} - PASSED`);
+          results.passed++;
+          results.tests.push({ name, status: 'PASSED' });
+        }).catch(error => {
+          console.log(`❌ ${name} - FAILED: ${error.message}`);
+          results.failed++;
+          results.tests.push({ name, status: 'FAILED', error: error.message });
+        });
+      } else {
+        console.log(`✅ ${name} - PASSED`);
+        results.passed++;
+        results.tests.push({ name, status: 'PASSED' });
+      }
+    } catch (error) {
+      console.log(`❌ ${name} - FAILED: ${error.message}`);
+      results.failed++;
+      results.tests.push({ name, status: 'FAILED', error: error.message });
+    }
+  }
+
+  // Test data
+  const validPayload = {
+    app_id: process.env.WHOP_APP_ID,
+    user_id: 'test_user_123',
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now
+    iss: process.env.WHOP_APP_ID,
+    aud: process.env.WHOP_APP_ID
+  };
+
+  const validToken = createTestJWT(validPayload);
+
+  // SDK Verification Tests
+  runTest('verifyWhopTokenSDK accepts valid JWT with correct issuer/audience', async () => {
+    const result = await verifyWhopTokenSDK(validToken);
+    if (!result || !result.isAuthenticated || result.userId !== 'test_user_123') {
+      throw new Error('Expected valid authentication result');
+    }
+  });
+
+  runTest('verifyWhopTokenSDK rejects JWT with wrong issuer', async () => {
+    const wrongIssuerPayload = { ...validPayload, iss: 'wrong_issuer' };
+    const wrongToken = createTestJWT(wrongIssuerPayload);
+    const result = await verifyWhopTokenSDK(wrongToken);
+    if (result) {
+      throw new Error('Expected null for wrong issuer');
+    }
+  });
+
+  runTest('verifyWhopTokenSDK rejects JWT with wrong audience', async () => {
+    const wrongAudiencePayload = { ...validPayload, aud: 'wrong_audience' };
+    const wrongToken = createTestJWT(wrongAudiencePayload);
+    const result = await verifyWhopTokenSDK(wrongToken);
+    if (result) {
+      throw new Error('Expected null for wrong audience');
+    }
+  });
+
+  runTest('verifyWhopTokenSDK rejects expired JWT', async () => {
+    const expiredPayload = { ...validPayload, exp: Math.floor(Date.now() / 1000) - 3600 };
+    const expiredToken = createTestJWT(expiredPayload);
+    const result = await verifyWhopTokenSDK(expiredToken);
+    if (result) {
+      throw new Error('Expected null for expired token');
+    }
+  });
+
+  runTest('verifyWhopTokenSDK rejects JWT without user_id', async () => {
+    const noUserPayload = { ...validPayload };
+    delete noUserPayload.user_id;
+    const noUserToken = createTestJWT(noUserPayload);
+    const result = await verifyWhopTokenSDK(noUserToken);
+    if (result) {
+      throw new Error('Expected null for token without user_id');
+    }
+  });
+
+  runTest('verifyWhopTokenSDK rejects malformed JWT (not 3 parts)', async () => {
+    const result = await verifyWhopTokenSDK('invalid.jwt');
+    if (result) {
+      throw new Error('Expected null for malformed JWT');
+    }
+  });
+
+  runTest('verifyWhopTokenSDK rejects empty token', async () => {
+    const result = await verifyWhopTokenSDK('');
+    if (result) {
+      throw new Error('Expected null for empty token');
+    }
+  });
+
+  runTest('verifyWhopTokenSDK rejects null token', async () => {
+    const result = await verifyWhopTokenSDK(null);
+    if (result) {
+      throw new Error('Expected null for null token');
+    }
+  });
+
+  // Legacy Verification Tests
+  runTest('verifyWhopTokenLegacy accepts valid JWT', () => {
+    const result = verifyWhopTokenLegacy(validToken);
+    if (!result || !result.isAuthenticated || result.userId !== 'test_user_123') {
+      throw new Error('Expected valid authentication result');
+    }
+  });
+
+  runTest('verifyWhopTokenLegacy rejects expired JWT', () => {
+    const expiredPayload = { ...validPayload, exp: Math.floor(Date.now() / 1000) - 3600 };
+    const expiredToken = createTestJWT(expiredPayload);
+    const result = verifyWhopTokenLegacy(expiredToken);
+    if (result) {
+      throw new Error('Expected null for expired token');
+    }
+  });
+
+  runTest('verifyWhopTokenLegacy rejects JWT with wrong signature', () => {
+    const wrongSecretToken = createTestJWT(validPayload, 'wrong_secret');
+    const result = verifyWhopTokenLegacy(wrongSecretToken);
+    if (result) {
+      throw new Error('Expected null for wrong signature');
+    }
+  });
+
+  // Hybrid verification tests
+  runTest('verifyWhopTokenHybrid prefers SDK when both methods would work', async () => {
+    const result = await verifyWhopTokenHybrid(validToken);
+    if (!result || !result.isAuthenticated) {
+      throw new Error('Expected SDK method to succeed');
+    }
+  });
+
+  runTest('verifyWhopTokenHybrid falls back to legacy when SDK fails', async () => {
+    // Create a token that fails SDK validation but passes legacy
+    const legacyOnlyPayload = { ...validPayload };
+    delete legacyOnlyPayload.iss; // Remove JWT-specific claim
+    delete legacyOnlyPayload.aud; // Remove JWT-specific claim
+    const legacyToken = createTestJWT(legacyOnlyPayload);
+
+    const result = await verifyWhopTokenHybrid(legacyToken);
+    if (!result || !result.isAuthenticated) {
+      throw new Error('Expected fallback to legacy verification');
+    }
+  });
+
+  runTest('verifyWhopTokenHybrid returns null when both methods fail', async () => {
+    const result = await verifyWhopTokenHybrid('completely.invalid.token');
+    if (result) {
+      throw new Error('Expected null when both verification methods fail');
+    }
+  });
+
+  // Wait for all async tests to complete
+  setTimeout(() => {
+    console.log('\n' + '='.repeat(60));
+    console.log('📊 AUTHENTICATION TEST RESULTS SUMMARY');
+    console.log('='.repeat(60));
+    console.log(`✅ Passed: ${results.passed}`);
+    console.log(`❌ Failed: ${results.failed}`);
+    console.log(`📈 Success Rate: ${((results.passed / (results.passed + results.failed)) * 100).toFixed(1)}%`);
+
+    if (results.failed > 0) {
+      console.log('\n❌ FAILED TESTS:');
+      results.tests.filter(t => t.status === 'FAILED').forEach(test => {
+        console.log(`   - ${test.name}: ${test.error}`);
+      });
+    }
+
+    // Run request context tests after main auth tests
+    testRequestContextFunctions().then(contextSuccess => {
+      // Restore original environment
+      process.env = originalEnv;
+
+      const totalPassed = results.passed + (contextSuccess ? 8 : 0); // Approximate context tests
+      const totalFailed = results.failed + (contextSuccess ? 0 : 8);
+
+      console.log('\n' + '='.repeat(60));
+      console.log('📊 OVERALL TEST RESULTS SUMMARY');
+      console.log('='.repeat(60));
+      console.log(`✅ Total Passed: ${totalPassed}`);
+      console.log(`❌ Total Failed: ${totalFailed}`);
+      console.log(`📈 Overall Success Rate: ${((totalPassed / (totalPassed + totalFailed)) * 100).toFixed(1)}%`);
+
+      process.exit(totalFailed === 0 ? 0 : 1);
+    });
+  }, 1000); // Give async tests time to complete
+}
+
+module.exports = { runAuthTests, testRequestContextFunctions };

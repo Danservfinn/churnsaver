@@ -5,20 +5,27 @@ import PgBoss from 'pg-boss';
 import { logger } from '@/lib/logger';
 import { sql } from '@/lib/db';
 import { processWebhookEvent, ProcessedEvent } from '@/server/services/eventProcessor';
-import { processPendingReminders } from './scheduler';
-
-export interface JobData {
-  eventId: string;
-  eventType: string;
-  membershipId: string;
-  payload: string;
-  companyId?: string;
-  eventCreatedAt: string;
-}
+// Import processPendingReminders from processReminders directly to avoid circular dependency
+import { processPendingReminders } from '../cron/processReminders';
+import { 
+  JobData, 
+  WebhookJobResult, 
+  ReminderJobResult, 
+  QueueStats,
+  JobProcessingMetrics
+} from './shared/jobTypes';
+import { 
+  assertCompanyContext, 
+  updateEventProcessingStatus, 
+  isEventProcessed,
+  createProcessedEvent,
+  calculateJobMetrics
+} from './shared/jobHelpers';
 
 class JobQueueService {
   private boss: PgBoss | null = null;
   private initialized = false;
+  private processingTimes: number[] = [];
 
   // Job queue names
   private readonly WEBHOOK_PROCESSING_JOB = 'webhook-processing';
@@ -34,10 +41,14 @@ class JobQueueService {
       // Start pg-boss
       await this.boss.start();
 
-      // Register job handlers with correct API
-      await this.boss.work(this.WEBHOOK_PROCESSING_JOB, { batchSize: 3 }, this.handleWebhookJobs.bind(this));
-      await this.boss.work(this.REMINDER_PROCESSING_JOB, { batchSize: 2 }, this.handleReminderJobs.bind(this));
+      // Register simplified single handlers (flattened from dual-layer approach)
+      await this.boss.work(this.WEBHOOK_PROCESSING_JOB, async (job: PgBoss.Job<JobData>) => {
+        return await this.processWebhookJob(job);
+      });
 
+      await this.boss.work(this.REMINDER_PROCESSING_JOB, async (job: PgBoss.Job<{ companyId: string }>) => {
+        return await this.processReminderJob(job);
+      });
       this.initialized = true;
 
       logger.info('Job queue service initialized', {
@@ -63,7 +74,7 @@ class JobQueueService {
         retryDelay: 60, // 1 minute
         expireInSeconds: 24 * 60 * 60, // Expire if not processed within 24 hours
         priority: 1, // High priority for webhooks
-        // singletonKey prevents duplicate processing of the same webhook event
+        // singletonKey prevents duplicate processing of same webhook event
         // Uses whop_event_id to ensure only one job per unique event is processed
         singletonKey: data.eventId,
       });
@@ -122,54 +133,9 @@ class JobQueueService {
   }
 
   /**
-   * Handle webhook jobs from the queue (takes an array of jobs)
+   * Process individual webhook job (flattened from dual-layer approach)
    */
-  private async handleWebhookJobs(jobs: PgBoss.Job<JobData>[]) {
-    for (const job of jobs) {
-      await this.processWebhookJob(job);
-    }
-  }
-
-  /**
-   * Handle reminder jobs from the queue (takes an array of jobs)
-   */
-  private async handleReminderJobs(jobs: PgBoss.Job<{ companyId: string }>[]) {
-    for (const job of jobs) {
-      await this.processReminderJob(job);
-    }
-  }
-
-  /**
-   * HOWEVER, since pg-boss expects single-job handlers, we need...
-   */
-
-  /**
-   * Handle webhook job from the queue
-   */
-  private async handleWebhookJob(job: PgBoss.Job<JobData>) {
-    try {
-      // We know what to do here. Importantly, just catch and rethrow underlying  errors
-      await this.processWebhookJob(job);
-    } catch (error) {
-      throw error; // pg-boss will handle retries
-    }
-  }
-
-  /**
-   * Handle reminder job from the queue
-   */
-  private async handleReminderJob(job: PgBoss.Job<{ companyId: string }>) {
-    try {
-      await this.processReminderJob(job);
-    } catch (error) {
-      throw error; // pg-boss will handle retries
-    }
-  }
-
-  /**
-   * Process individual webhook job
-   */
-  private async processWebhookJob(job: PgBoss.Job<JobData>) {
+  private async processWebhookJob(job: PgBoss.Job<JobData>): Promise<WebhookJobResult> {
     const startTime = Date.now();
     const { data } = job;
 
@@ -182,58 +148,44 @@ class JobQueueService {
         companyId: data.companyId
       });
 
-      // Validate company context is provided for RLS security
-      if (!data.companyId) {
-        logger.error('Company context missing from webhook job - cannot proceed with RLS security', {
-          jobId: job.id,
-          eventId: data.eventId
-        });
-        throw new Error('Company context required for tenant-scoped operations');
+      // Validate company context using shared helper
+      const companyContext = await assertCompanyContext(data.companyId);
+      if (!companyContext.isValid) {
+        throw new Error(companyContext.error || 'Company validation failed');
       }
 
-      // Check if this event has already been processed to avoid duplicate processing
-      // Company context is required to ensure RLS policies are applied and data isolation is maintained
-      const existingEvent = await sql.select(
-        `SELECT processed FROM events WHERE whop_event_id = $1 AND company_id = $2`,
-        [data.eventId, data.companyId]
-      );
-
-      if (existingEvent.length > 0 && (existingEvent[0] as { processed: boolean }).processed) {
+      // Check if this event has already been processed using shared helper
+      const alreadyProcessed = await isEventProcessed(data.eventId, data.companyId!);
+      if (alreadyProcessed) {
         logger.info('Skipping duplicate webhook processing - event already processed', {
           jobId: job.id,
           eventId: data.eventId
         });
-        return { success: true, skipped: true };
+        this.processingTimes.push(Date.now() - startTime);
+        return { success: true, eventId: data.eventId, skipped: true };
       }
 
-      // Create processed event
-      const processedEvent: ProcessedEvent = {
-        id: data.eventId,
-        whop_event_id: data.eventId,
-        type: data.eventType,
-        membership_id: data.membershipId,
-        payload: data.payload,
-        processed_at: new Date(),
-        event_created_at: new Date(data.eventCreatedAt)
-      };
+      // Create processed event using shared helper
+      const processedEvent: ProcessedEvent = createProcessedEvent(
+        data.eventId,
+        data.eventType,
+        data.membershipId,
+        data.payload,
+        data.eventCreatedAt
+      );
 
-      // Process the webhook event
+      // Process webhook event
       const success = await processWebhookEvent(processedEvent, data.companyId || 'unknown');
 
-      // Mark event as processed in the ledger
-      // Company context is required to ensure RLS policies are applied and data isolation is maintained
-      try {
-        await sql.execute(
-          `UPDATE events SET processed = $2, error = $3 WHERE whop_event_id = $1 AND company_id = $4`,
-          [data.eventId, success, success ? null : 'processing_failed', data.companyId]
-        );
-      } catch (e) {
-        logger.error('Failed to update event processed flag', {
-          jobId: job.id,
-          eventId: data.eventId,
-          error: e instanceof Error ? e.message : String(e)
-        });
-      }
+      // Update event processing status using shared helper
+      await updateEventProcessingStatus(
+        data.eventId,
+        data.companyId!,
+        success,
+        success ? undefined : 'processing_failed'
+      );
+
+      this.processingTimes.push(Date.now() - startTime);
 
       logger.info('Webhook job completed', {
         jobId: job.id,
@@ -245,20 +197,25 @@ class JobQueueService {
       return { success, eventId: data.eventId };
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.processingTimes.push(Date.now() - startTime);
+
       logger.error('Webhook job failed', {
         jobId: job.id,
         eventId: data.eventId,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
         duration_ms: Date.now() - startTime
       });
-      throw error; // pg-boss will handle retries
+
+      // pg-boss will handle retries based on thrown error
+      throw error;
     }
   }
 
   /**
-   * Process individual reminder job
+   * Process individual reminder job (flattened from dual-layer approach)
    */
-  private async processReminderJob(job: PgBoss.Job<{ companyId: string }>) {
+  private async processReminderJob(job: PgBoss.Job<{ companyId: string }>): Promise<ReminderJobResult> {
     const startTime = Date.now();
     const { data } = job;
 
@@ -271,6 +228,8 @@ class JobQueueService {
       // Process pending reminders for this company
       const result = await processPendingReminders(data.companyId);
 
+      this.processingTimes.push(Date.now() - startTime);
+
       logger.info('Reminder job completed', {
         jobId: job.id,
         companyId: data.companyId,
@@ -278,23 +237,32 @@ class JobQueueService {
         duration_ms: Date.now() - startTime
       });
 
-      return { success: true, companyId: data.companyId, result };
+      return { 
+        success: true, 
+        companyId: data.companyId, 
+        ...result 
+      };
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.processingTimes.push(Date.now() - startTime);
+
       logger.error('Reminder job failed', {
         jobId: job.id,
         companyId: data.companyId,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
         duration_ms: Date.now() - startTime
       });
-      throw error; // pg-boss will handle retries
+
+      // pg-boss will handle retries based on thrown error
+      throw error;
     }
   }
 
   /**
    * Get job queue statistics
    */
-  async getStats() {
+  async getStats(): Promise<QueueStats> {
     if (!this.boss) await this.init();
 
     try {
@@ -342,7 +310,7 @@ class JobQueueService {
         total: acc.total + parseInt(queue.total)
       }), { created: 0, retry: 0, active: 0, completed: 0, cancelled: 0, failed: 0, total: 0 });
 
-      // Transform queue stats into the expected format
+      // Transform queue stats into expected format
       const queues: Record<string, {
         created: number;
         retry: number;
@@ -388,6 +356,22 @@ class JobQueueService {
   }
 
   /**
+   * Get processing metrics for monitoring
+   */
+  getProcessingMetrics(): JobProcessingMetrics {
+    const successfulJobs = this.processingTimes.length; // Simplified - would need tracking
+    const failedJobs = 0; // Simplified - would need tracking
+    const skippedJobs = 0; // Simplified - would need tracking
+
+    return calculateJobMetrics(
+      this.processingTimes,
+      successfulJobs,
+      failedJobs,
+      skippedJobs
+    );
+  }
+
+  /**
    * Clean up old completed/archived jobs (simplified)
    */
   async cleanup() {
@@ -404,6 +388,7 @@ class JobQueueService {
       logger.info('Job queue service shut down gracefully');
     }
     this.initialized = false;
+    this.processingTimes = []; // Reset metrics
   }
 }
 

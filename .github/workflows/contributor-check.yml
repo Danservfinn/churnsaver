@@ -1,0 +1,379 @@
+name: First-Time Contributor Check
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  contributor-check:
+    runs-on: ubuntu-latest
+    name: Check First-Time Contributor
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if first-time contributor
+        id: contributor-check
+        run: |
+          # Get the author of the PR
+          AUTHOR="${{ github.event.pull_request.user.login }}"
+          
+          # Check if this author has contributed before
+          CONTRIBUTIONS=$(git log --author="$AUTHOR" --oneline | wc -l)
+          
+          if [ "$CONTRIBUTIONS" -le 1 ]; then
+            echo "first_time=true" >> $GITHUB_OUTPUT
+            echo "🎉 Welcome $AUTHOR! This appears to be your first contribution to Churn Saver!"
+          else
+            echo "first_time=false" >> $GITHUB_OUTPUT
+            echo "👋 Welcome back $AUTHOR! Thanks for your continued contributions."
+          fi
+
+      - name: Add welcome comment for first-time contributors
+        if: steps.contributor-check.outputs.first_time == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const prNumber = context.issue.number;
+            const author = context.payload.pull_request.user.login;
+            
+            const welcomeMessage = `
+            ## 🎉 Welcome to Churn Saver, @${author}!
+            
+            Thank you for your first contribution! We're excited to have you in our community.
+            
+            ### 📋 Next Steps
+            
+            1. **Review Guidelines**: Make sure you've read our [Contributing Guidelines](https://github.com/${owner}/${repo}/blob/main/CONTRIBUTING.md)
+            2. **Check PR Template**: Ensure you've filled out the [PR template](https://github.com/${owner}/${repo}/blob/main/.github/PULL_REQUEST_TEMPLATE.md) completely
+            3. **Run Tests Locally**: Make sure all tests pass before requesting review
+            4. **Request Review**: Tag appropriate reviewers for your changes
+            
+            ### 🤝 Getting Help
+            
+            If you need any help:
+            - 💬 **GitHub Discussions**: [Join our community](https://github.com/${owner}/${repo}/discussions)
+            - 💬 **Slack**: [Join our Slack workspace](https://churn-saver.slack.com)
+            - 📖 **Documentation**: [Check our docs](https://github.com/${owner}/${repo}/blob/main/docs/README.md)
+            - 🐛 **Questions**: Ask in this PR or start a discussion
+            
+            ### 🏆 Contributor Recognition
+            
+            We value all contributions and recognize our community members:
+            - 📊 **Contributor Stats**: Track your impact on our project
+            - 🎁 **Swag**: Contributors receive exclusive Churn Saver merchandise
+            - 🌟 **Spotlight**: Monthly feature of top contributors
+            - 🎓 **Mentorship**: Learn from experienced developers
+            
+            ### 📝 Code Review Process
+            
+            Our maintainers will review your PR and provide feedback:
+            - 🔍 **Automated Checks**: CI/CD runs automatically
+            - 👥 **Manual Review**: Team members review code logic and architecture
+            - 🛡️ **Security Review**: Security implications are assessed
+            - ⚡ **Performance Review**: Performance impact is evaluated
+            
+            ### 🚀 What to Expect
+            
+            1. **Automated Checks**: Will run in a few minutes
+            2. **Review Process**: Usually within 24-48 hours
+            3. **Feedback**: We'll provide constructive feedback
+            4. **Merge**: Once approved and all checks pass
+            
+            Thanks again for contributing to Churn Saver! 🎈
+            
+            ---
+            
+            *This is an automated message from our contributor welcome bot.*
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: prNumber,
+              owner: owner,
+              repo: repo,
+              body: welcomeMessage
+            });
+
+      - name: Add returning contributor message
+        if: steps.contributor-check.outputs.first_time == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const prNumber = context.issue.number;
+            const author = context.payload.pull_request.user.login;
+            
+            const welcomeBackMessage = `
+            ## 👋 Welcome back, @${author}!
+            
+            Great to see you contributing to Churn Saver again! 
+            
+            ### 📊 Your Impact
+            
+            Your continued contributions help make Churn Saver better for everyone. We appreciate your dedication to the project!
+            
+            ### 🏆 Recognition Opportunities
+            
+            Don't forget about our contributor recognition programs:
+            - 🌟 **Monthly Spotlight**: Featured in our community updates
+            - 🎁 **Contributor Swag**: Exclusive merchandise for active contributors
+            - 🎓 **Mentorship**: Opportunities to mentor new contributors
+            - 📢 **Speaking**: Present at community events
+            
+            ### 📝 Quick Reminders
+            
+            - 📋 **PR Template**: Make sure it's completely filled out
+            - 🧪 **Tests**: Ensure all tests pass locally
+            - 📖 **Docs**: Update documentation if needed
+            - 🔍 **Review**: Request appropriate reviewers
+            
+            Thanks for your continued contributions! 🚀
+            
+            ---
+            
+            *This is an automated message from our contributor welcome bot.*
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: prNumber,
+              owner: owner,
+              repo: repo,
+              body: welcomeBackMessage
+            });
+
+      - name: Add contributor labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const prNumber = context.issue.number;
+            const isFirstTime = "${{ steps.contributor-check.outputs.first_time }}" === 'true';
+            
+            const labelsToAdd = [];
+            
+            if (isFirstTime) {
+              labelsToAdd.push('first-time-contributor');
+            } else {
+              labelsToAdd.push('returning-contributor');
+            }
+            
+            // Add community label
+            labelsToAdd.push('community-contribution');
+            
+            // Add the labels
+            github.rest.issues.addLabels({
+              issue_number: prNumber,
+              owner: owner,
+              repo: repo,
+              labels: labelsToAdd
+            });
+
+      - name: Check for contribution guidelines compliance
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const prNumber = context.issue.number;
+            const prBody = context.payload.pull_request.body || '';
+            
+            const complianceIssues = [];
+            
+            // Check if PR description is substantial
+            if (prBody.length < 100) {
+              complianceIssues.push('❌ PR description is too short. Please provide more details about your changes.');
+            }
+            
+            // Check for required sections
+            const requiredSections = ['## 📝 Description', '## 🎯 Type of Change', '## ✅ Final Checklist'];
+            for (const section of requiredSections) {
+              if (!prBody.includes(section)) {
+                complianceIssues.push(`❌ Missing required section: ${section}`);
+              }
+            }
+            
+            // Check if testing section is filled out
+            if (prBody.includes('## 🧪 Testing')) {
+              const testingSection = prBody.split('## 🧪 Testing')[1]?.split('##')[0] || '';
+              if (!testingSection.includes('[x]') && !testingSection.includes('[X]')) {
+                complianceIssues.push('❌ Please indicate which tests you have completed in the testing section.');
+              }
+            }
+            
+            // Check if final checklist is filled out
+            if (prBody.includes('## ✅ Final Checklist')) {
+              const checklistSection = prBody.split('## ✅ Final Checklist')[1]?.split('##')[0] || '';
+              const checkedItems = (checklistSection.match(/\[x\]/gi) || []).length;
+              const totalItems = (checklistSection.match(/\[[x\s]\]/gi) || []).length;
+              
+              if (totalItems > 0 && checkedItems / totalItems < 0.8) {
+                complianceIssues.push('❌ Please complete more items in the final checklist.');
+              }
+            }
+            
+            if (complianceIssues.length > 0) {
+              const complianceMessage = `
+              ## 📋 Contribution Guidelines Compliance
+              
+              We noticed some issues with your PR that need to be addressed:
+              
+              ${complianceIssues.join('\n')}
+              
+              ### 📖 Resources
+              
+              - **Contributing Guidelines**: [Read our guidelines](https://github.com/${owner}/${repo}/blob/main/CONTRIBUTING.md)
+              - **PR Template**: [Review the template](https://github.com/${owner}/${repo}/blob/main/.github/PULL_REQUEST_TEMPLATE.md)
+              - **Help**: [Ask questions in discussions](https://github.com/${owner}/${repo}/discussions)
+              
+              Please update your PR to address these issues. This helps us review your contribution more efficiently!
+              
+              ---
+              
+              *This is an automated message to help improve contribution quality.*
+              `;
+              
+              github.rest.issues.createComment({
+                issue_number: prNumber,
+                owner: owner,
+                repo: repo,
+                body: complianceMessage
+              });
+            }
+
+      - name: Assign to project board
+        if: steps.contributor-check.outputs.first_time == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const prNumber = context.issue.number;
+            
+            try {
+              // Add to "Community Contributions" project board if it exists
+              // This would need to be configured with your specific project board ID
+              console.log('PR would be added to project board for first-time contributor');
+            } catch (error) {
+              console.log('Could not add to project board:', error.message);
+            }
+
+  contributor-stats:
+    runs-on: ubuntu-latest
+    name: Update Contributor Stats
+    if: github.event.action == 'closed' && github.event.pull_request.merged == true
+    needs: contributor-check
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Update contributor statistics
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const author = context.payload.pull_request.user.login;
+            const prNumber = context.issue.number;
+            const mergedAt = context.payload.pull_request.merged_at;
+            
+            // Get contributor's total contributions
+            const commits = await github.rest.repos.listCommits({
+              owner: owner,
+              repo: repo,
+              author: author,
+              per_page: 100
+            });
+            
+            const totalContributions = commits.data.length;
+            
+            // Create a celebration comment for milestone contributions
+            let milestoneMessage = '';
+            if (totalContributions === 1) {
+              milestoneMessage = '🎉 **First Contribution!** Welcome to the Churn Saver team!';
+            } else if (totalContributions === 5) {
+              milestoneMessage = '🏆 **5 Contributions!** You\'re becoming a regular contributor!';
+            } else if (totalContributions === 10) {
+              milestoneMessage = '⭐ **10 Contributions!** You\'re officially a core contributor!';
+            } else if (totalContributions === 25) {
+              milestoneMessage = '🌟 **25 Contributions!** Incredible dedication to the project!';
+            } else if (totalContributions === 50) {
+              milestoneMessage = '💎 **50 Contributions!** You\'re a Churn Saver champion!';
+            } else if (totalContributions === 100) {
+              milestoneMessage = '👑 **100 Contributions!** Legendary contributor status achieved!';
+            }
+            
+            if (milestoneMessage) {
+              const celebrationMessage = `
+              ## ${milestoneMessage}
+              
+              @${author}, congratulations on reaching **${totalContributions} contributions** to Churn Saver!
+              
+              ### 🎁 Recognition Benefits
+              
+              As a valued contributor, you're eligible for:
+              - 📦 **Contributor Swag**: Exclusive Churn Saver merchandise
+              - 🌟 **Community Spotlight**: Featured in our monthly newsletter
+              - 🎓 **Mentorship Opportunities**: Help guide new contributors
+              - 🎪 **Event Access**: Special access to community events
+              
+              ### 📊 Your Impact
+              
+              Your contributions help:
+              - 🐛 Fix bugs and improve stability
+              - ✨ Add new features and capabilities
+              - 📖 Improve documentation and accessibility
+              - 🚀 Enhance performance and security
+              
+              ### 🏆 Next Milestones
+              
+              Keep contributing to reach these milestones:
+              ${totalContributions < 5 ? '- 🎯 **5 contributions**: Regular contributor status' : ''}
+              ${totalContributions < 10 ? '- 🎯 **10 contributions**: Core contributor status' : ''}
+              ${totalContributions < 25 ? '- 🎯 **25 contributions**: Dedicated contributor status' : ''}
+              ${totalContributions < 50 ? '- 🎯 **50 contributions**: Champion contributor status' : ''}
+              ${totalContributions < 100 ? '- 🎯 **100 contributions**: Legendary contributor status' : ''}
+              
+              Thank you for your amazing contributions to Churn Saver! 🎈
+              
+              ---
+              
+              *This is an automated message celebrating your contribution milestone.*
+              `;
+              
+              github.rest.issues.createComment({
+                issue_number: prNumber,
+                owner: owner,
+                repo: repo,
+                body: celebrationMessage
+              });
+            }
+            
+            // Add milestone label if applicable
+            if (milestoneMessage) {
+              const milestoneLabels = {
+                1: 'first-contribution',
+                5: 'five-contributions',
+                10: 'ten-contributions',
+                25: 'twenty-five-contributions',
+                50: 'fifty-contributions',
+                100: 'hundred-contributions'
+              };
+              
+              const label = milestoneLabels[totalContributions];
+              if (label) {
+                try {
+                  await github.rest.issues.addLabels({
+                    issue_number: prNumber,
+                    owner: owner,
+                    repo: repo,
+                    labels: [label]
+                  });
+                } catch (error) {
+                  console.log('Could not add milestone label:', error.message);
+                }
+              }
+            }

@@ -64,27 +64,40 @@ class MetricsService {
     // HTTP Metrics
     this.createMetric('http_requests_total', 'counter', 'Total HTTP requests', 'requests');
     this.createMetric('http_request_duration_ms', 'histogram', 'HTTP request duration', 'ms');
-    
+
+    // Web Vitals Metrics
+    this.createMetric('web_vitals_cls', 'gauge', 'Cumulative Layout Shift', '');
+    this.createMetric('web_vitals_fid', 'gauge', 'First Input Delay', 'ms');
+    this.createMetric('web_vitals_fcp', 'gauge', 'First Contentful Paint', 'ms');
+    this.createMetric('web_vitals_lcp', 'gauge', 'Largest Contentful Paint', 'ms');
+    this.createMetric('web_vitals_ttfb', 'gauge', 'Time to First Byte', 'ms');
+
     // Webhook Metrics
     this.createMetric('webhook_events_processed_total', 'counter', 'Webhook events processed', 'events');
     this.createMetric('webhook_processing_duration_ms', 'histogram', 'Webhook processing duration', 'ms');
     this.createMetric('webhook_success_rate', 'gauge', 'Webhook success rate', '%');
-    
+
     // Database Metrics
     this.createMetric('database_connections_active', 'gauge', 'Active database connections', 'connections');
     this.createMetric('database_query_duration_ms', 'histogram', 'Database query duration', 'ms');
     this.createMetric('database_slow_queries_total', 'counter', 'Slow database queries', 'queries');
-    
+
     // Business Metrics
     this.createMetric('recovery_cases_created_total', 'counter', 'Recovery cases created', 'cases');
     this.createMetric('reminders_sent_total', 'counter', 'Reminders sent', 'reminders');
     this.createMetric('reminder_success_rate', 'gauge', 'Reminder delivery success rate', '%');
     this.createMetric('active_companies', 'gauge', 'Active companies', 'companies');
-    
+
+    // CTR and Recovery Metrics
+    this.createMetric('nudge_actions_total', 'counter', 'Nudge actions tracked', 'actions');
+    this.createMetric('nudge_ctr_rate', 'gauge', 'Nudge click-through rate', '%');
+    this.createMetric('time_to_recovery_ms', 'histogram', 'Time to recovery', 'ms');
+    this.createMetric('avg_time_to_recovery_ms', 'gauge', 'Average time to recovery', 'ms');
+
     // Job Queue Metrics
     this.createMetric('job_queue_depth', 'gauge', 'Job queue depth', 'jobs');
     this.createMetric('job_processing_duration_ms', 'histogram', 'Job processing duration', 'ms');
-    
+
     // External Service Metrics
     this.createMetric('external_api_calls_total', 'counter', 'External API calls', 'calls');
     this.createMetric('external_api_success_rate', 'gauge', 'External API success rate', '%');
@@ -117,6 +130,27 @@ class MetricsService {
     });
 
     // P1 Alerts
+    // Performance Alerts - Web Vitals
+    this.createAlertRule({
+      name: 'poor_lcp',
+      metricName: 'web_vitals_lcp',
+      condition: 'gt',
+      threshold: 2500, // 2.5 seconds
+      severity: 'P1',
+      duration: 300,
+      enabled: true
+    });
+
+    this.createAlertRule({
+      name: 'poor_cls',
+      metricName: 'web_vitals_cls',
+      condition: 'gt',
+      threshold: 0.1, // 0.1 CLS score
+      severity: 'P1',
+      duration: 300,
+      enabled: true
+    });
+
     this.createAlertRule({
       name: 'high_error_rate',
       metricName: 'webhook_success_rate',
@@ -144,6 +178,27 @@ class MetricsService {
       threshold: 80,
       severity: 'P1',
       duration: 60,
+      enabled: true
+    });
+
+    // Business Metrics Alerts
+    this.createAlertRule({
+      name: 'low_recovery_rate',
+      metricName: 'reminder_success_rate',
+      condition: 'lt',
+      threshold: 20, // 20% success rate
+      severity: 'P1',
+      duration: 3600, // 1 hour
+      enabled: true
+    });
+
+    this.createAlertRule({
+      name: 'long_recovery_time',
+      metricName: 'avg_time_to_recovery_ms',
+      condition: 'gt',
+      threshold: 604800000, // 7 days in milliseconds
+      severity: 'P1',
+      duration: 3600,
       enabled: true
     });
 
@@ -423,6 +478,31 @@ class MetricsService {
     }
   }
 
+  // CTR tracking for nudges
+  trackNudgeCTR(nudgeId: string, userId: string, action: 'clicked' | 'dismissed') {
+    this.recordCounter('nudge_actions_total', 1, {
+      nudge_id: nudgeId,
+      user_id: userId,
+      action: action,
+      type: 'ctr_tracking'
+    });
+
+    // Calculate CTR rate
+    this.updateCTRRate(nudgeId);
+  }
+
+  // Time to recovery tracking
+  recordTimeToRecovery(caseId: string, companyId: string, timeToRecovery: number, successful: boolean) {
+    this.recordHistogram('time_to_recovery_ms', timeToRecovery, {
+      case_id: caseId,
+      company_id: companyId,
+      successful: successful.toString()
+    });
+
+    // Update average time to recovery
+    this.updateAverageTimeToRecovery(companyId);
+  }
+
   // Business metrics
   recordRecoveryCase(companyId: string, caseType: string) {
     this.recordCounter('recovery_cases_created_total', 1, { company_id: companyId, case_type: caseType });
@@ -449,9 +529,17 @@ class MetricsService {
   recordExternalApiCall(service: string, endpoint: string, statusCode: number, duration: number) {
     this.recordCounter('external_api_calls_total', 1, { service, endpoint, status_code: statusCode.toString() });
     this.recordHistogram('external_api_duration_ms', duration, { service, endpoint });
-    
+
     // Update success rate
     this.updateSuccessRate('external_api_success_rate', 'external_api_calls_total', { service });
+  }
+
+  // Web Vitals tracking
+  recordWebVitals(metric: string, value: number, labels?: Record<string, string>) {
+    const metricName = `web_vitals_${metric.toLowerCase()}`;
+    this.setGauge(metricName, value, labels);
+
+    logger.info('Web Vitals recorded', { metric, value, labels });
   }
 
   private updateSuccessRate(rateMetricName: string, totalMetricName: string, labels: Record<string, string>) {
@@ -462,10 +550,42 @@ class MetricsService {
     const recentValues = totalMetric.values.slice(-100); // Last 100 values
     const successCount = recentValues.filter(v => v.labels?.success === 'true').length;
     const totalCount = recentValues.length;
-    
+
     if (totalCount > 0) {
       const successRate = (successCount / totalCount) * 100;
       this.setGauge(rateMetricName, successRate, labels);
+    }
+  }
+
+  private updateCTRRate(nudgeId: string) {
+    const nudgeMetric = this.metrics.get('nudge_actions_total');
+    if (!nudgeMetric) return;
+
+    // Calculate CTR from recent nudge actions
+    const recentValues = nudgeMetric.values.slice(-100); // Last 100 values
+    const clickCount = recentValues.filter(v =>
+      v.labels?.nudge_id === nudgeId && v.labels?.action === 'clicked'
+    ).length;
+    const totalCount = recentValues.filter(v => v.labels?.nudge_id === nudgeId).length;
+
+    if (totalCount > 0) {
+      const ctr = (clickCount / totalCount) * 100;
+      this.setGauge('nudge_ctr_rate', ctr, { nudge_id: nudgeId });
+    }
+  }
+
+  private updateAverageTimeToRecovery(companyId: string) {
+    const recoveryMetric = this.metrics.get('time_to_recovery_ms');
+    if (!recoveryMetric) return;
+
+    // Calculate average time to recovery for the company
+    const companyValues = recoveryMetric.values.filter(v =>
+      v.labels?.company_id === companyId && v.labels?.successful === 'true'
+    );
+
+    if (companyValues.length > 0) {
+      const avgTime = companyValues.reduce((sum, v) => sum + v.value, 0) / companyValues.length;
+      this.setGauge('avg_time_to_recovery_ms', avgTime, { company_id: companyId });
     }
   }
 }

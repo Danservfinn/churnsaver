@@ -3,7 +3,7 @@
 
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
-import { getRequestContextSDK, RequestContext } from './whop-sdk';
+import { getRequestContextSDK, RequestContext } from '@/lib/whop-sdk';
 
 // Single source of truth function for Whop authentication
 // Delegates to jose-based verification from whop-sdk.ts
@@ -43,3 +43,6 @@ export async function getRequestContext(request: { headers: { get: (key: string)
 
 // Export types for backward compatibility
 export type { RequestContext };
+
+
+

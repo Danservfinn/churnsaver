@@ -246,6 +246,15 @@ For safe testing procedures when non-production credentials are locked:
 - [ ] Credential sources documented in team vault
 - [ ] No production secrets accessible in test environments
 
+### Reminder Core Tests
+
+A dedicated unit test suite validates the shared reminder orchestration utilities (`shouldSendReminder`, `processReminderBatch`) that both the serverless scheduler and the local cron helper consume:
+
+```bash
+cd apps/web
+npm run test -- --runInBand test/companyDiscovery.test.ts
+```
+
 ## Monitoring & Logging
 
 ### Application Logs
@@ -438,6 +447,7 @@ The application uses Vercel's built-in cron service for reliable reminder proces
 - Comprehensive error handling and logging
 - Rate limiting and authentication enforced in production
 - Concurrent processing protection to prevent duplicates
+- Shared reminder core (`src/server/services/shared/companyDiscovery.ts`) is reused across the serverless entrypoint and the local cron helper so reminder eligibility logic stays identical in every environment
 
 **Monitoring:**
 - Health check: `GET /api/scheduler/reminders`
@@ -736,4 +746,8 @@ alerts:
 - Monitor provider API limits and usage patterns
 - Plan for traffic spikes during key business periods
 - Implement queue-based processing for high-volume scenarios
+
+
+
+
 

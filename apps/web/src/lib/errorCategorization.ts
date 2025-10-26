@@ -408,7 +408,7 @@ export interface ActionDefinition {
 }
 
 // Unified action catalog
-const ACTIONS_BY_CATEGORY: Record<ErrorCategory, ActionDefinition[]> = {
+export const ACTIONS_BY_CATEGORY: Record<ErrorCategory, ActionDefinition[]> = {
   [ErrorCategory.DATABASE]: [
     // Suggested actions (from getSuggestedActions)
     { description: 'Check database connection', automated: false, priority: 'high' },
@@ -523,4 +523,14 @@ export function getRecoveryActions(categorizedError: CategorizedError): Recovery
       priority: action.priority,
       estimatedTime: action.estimatedTime
     }));
+}
+
+// Get suggested actions for categorized error
+export function getSuggestedActions(categorizedError: CategorizedError): string[] {
+  const { categorizedError: error } = categorizedError;
+  const actions = ACTIONS_BY_CATEGORY[error.category] || ACTIONS_BY_CATEGORY[ErrorCategory.UNKNOWN];
+  
+  return actions
+    .filter(action => !action.action) // Filter out recovery actions (those with action property)
+    .map(action => action.description);
 }

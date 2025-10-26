@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql, initDb } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { getRequestContextSDK } from '@/lib/auth/whop-sdk';
+import { getRequestContextSDK } from '@/lib/whop-sdk';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { errors } from '@/lib/apiResponse';
 
@@ -22,7 +22,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // Enforce authentication in production for creator-facing endpoints
     if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
       logger.warn('Unauthorized request to cases export - missing valid auth token');
-      return errors.unauthorized('Authentication required');
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
     }
 
     // Apply rate limiting for creator-facing case actions (30/min per company)
@@ -32,10 +35,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
 
     if (!rateLimitResult.allowed) {
-      return errors.unprocessableEntity('Rate limit exceeded', {
-        retryAfter: rateLimitResult.retryAfter,
-        resetAt: rateLimitResult.resetAt.toISOString(),
-      });
+      return NextResponse.json(
+        { error: 'Rate limit exceeded', retryAfter: rateLimitResult.retryAfter, resetAt: rateLimitResult.resetAt.toISOString() },
+        { status: 422 }
+      );
     }
 
     const { searchParams } = new URL(request.url);
@@ -179,6 +182,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       processingTimeMs: Date.now() - startTime
     });
 
-    return errors.internalServerError('Failed to export cases');
+    return NextResponse.json(
+      { error: 'Failed to export cases' },
+      { status: 500 }
+    );
   }
 }

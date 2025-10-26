@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { nudgeCaseAgain, cancelRecoveryCase, terminateMembership } from '@/server/services/cases';
 import { logger } from '@/lib/logger';
+import { createActionResponse } from '@/lib/common/formatters';
 
 // Server actions for case management
 
@@ -11,27 +12,11 @@ export async function nudgeCase(formData: FormData) {
 
   if (!caseId) {
     logger.error('Nudge case action: missing caseId');
-    return { success: false, message: 'Case ID is required' };
+    return createActionResponse(false, 'Case ID is required');
   }
 
-  try {
-    logger.info('Manual nudge requested', { caseId });
-
-    const success = await nudgeCaseAgain(caseId, 'unknown');
-
-    if (success) {
-      revalidatePath('/dashboard');
-      return { success: true, message: 'Nudge sent successfully' };
-    } else {
-      return { success: false, message: 'Failed to send nudge' };
-    }
-  } catch (error) {
-    logger.error('Nudge case action failed', {
-      caseId,
-      error: error instanceof Error ? error.message : String(error)
-    });
-    return { success: false, message: 'An error occurred while sending nudge' };
-  }
+  return handleCaseAction('nudge', caseId, () => nudgeCaseAgain(caseId, 'unknown'),
+    'Nudge sent successfully', 'Failed to send nudge');
 }
 
 export async function cancelCase(formData: FormData) {
@@ -39,27 +24,11 @@ export async function cancelCase(formData: FormData) {
 
   if (!caseId) {
     logger.error('Cancel case action: missing caseId');
-    return { success: false, message: 'Case ID is required' };
+    return createActionResponse(false, 'Case ID is required');
   }
 
-  try {
-    logger.info('Cancel case requested', { caseId });
-
-    const success = await cancelRecoveryCase(caseId, 'unknown');
-
-    if (success) {
-      revalidatePath('/dashboard');
-      return { success: true, message: 'Case cancelled successfully' };
-    } else {
-      return { success: false, message: 'Failed to cancel case (may already be closed)' };
-    }
-  } catch (error) {
-    logger.error('Cancel case action failed', {
-      caseId,
-      error: error instanceof Error ? error.message : String(error)
-    });
-    return { success: false, message: 'An error occurred while cancelling case' };
-  }
+  return handleCaseAction('cancel', caseId, () => cancelRecoveryCase(caseId, 'unknown'),
+    'Case cancelled successfully', 'Failed to cancel case (may already be closed)');
 }
 
 export async function terminateCaseMembership(formData: FormData) {
@@ -67,26 +36,42 @@ export async function terminateCaseMembership(formData: FormData) {
 
   if (!caseId) {
     logger.error('Terminate membership action: missing caseId');
-    return { success: false, message: 'Case ID is required' };
+    return createActionResponse(false, 'Case ID is required');
   }
 
-  try {
-    logger.info('Terminate membership requested', { caseId });
+  return handleCaseAction('terminate', caseId, () => terminateMembership(caseId, 'unknown'),
+    'Membership terminated successfully', 'Failed to terminate membership');
+}
 
-    const success = await terminateMembership(caseId, 'unknown');
+// Helper function to reduce duplication in case action handlers
+async function handleCaseAction(
+  action: string,
+  caseId: string,
+  operation: () => Promise<boolean>,
+  successMessage: string,
+  failureMessage: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    logger.info(`${action} case requested`, { caseId });
+
+    const success = await operation();
 
     if (success) {
       revalidatePath('/dashboard');
-      return { success: true, message: 'Membership terminated successfully' };
+      return createActionResponse(true, successMessage);
     } else {
-      return { success: false, message: 'Failed to terminate membership' };
+      return createActionResponse(false, failureMessage);
     }
   } catch (error) {
-    logger.error('Terminate membership action failed', {
+    logger.error(`${action} case action failed`, {
       caseId,
       error: error instanceof Error ? error.message : String(error)
     });
-    return { success: false, message: 'An error occurred while terminating membership' };
+    return createActionResponse(false, `An error occurred while ${action}ing case`);
   }
 }
+
+
+
+
 

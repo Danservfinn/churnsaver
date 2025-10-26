@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getRequestContextSDK } from '@/lib/auth/whop-sdk';
+import { getRequestContextSDK } from '@/lib/whop-sdk';
 import { logger } from '@/lib/logger';
 import { apiSuccess, errors } from '@/lib/apiResponse';
 
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     // Get request context from Whop token
     const context = await getRequestContextSDK({
@@ -46,6 +46,9 @@ export async function GET(request: NextRequest) {
       path: '/api/health/context'
     });
 
-    return errors.internalServerError('Failed to get context').toJSON();
+    return NextResponse.json(
+      { error: 'Failed to get context' },
+      { status: 500 }
+    );
   }
 }

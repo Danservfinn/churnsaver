@@ -5,14 +5,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cancelMembershipAtPeriodEnd } from '@/server/services/memberships';
 import { cancelRecoveryCase } from '@/server/services/cases';
 import { logger } from '@/lib/logger';
-import { getRequestContextSDK } from '@/lib/auth/whop-sdk';
+import { getRequestContextSDK } from '@/lib/whop-sdk';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
-import { errors } from '@/lib/apiResponse';
+import { errorResponses } from '@/lib/apiResponse';
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ caseId: string }> }
-) {
+): Promise<NextResponse> {
   const startTime = Date.now();
 
   const { caseId } = await params;
@@ -25,7 +25,7 @@ export async function POST(
     // Enforce authentication in production for creator-facing endpoints
     if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
       logger.warn('Unauthorized request to cancel membership - missing valid auth token');
-      return errors.unauthorized('Authentication required');
+      return errorResponses.unauthorizedResponse('Authentication required');
     }
 
     // Apply rate limiting for creator-facing case actions (30/min per company)
@@ -35,14 +35,14 @@ export async function POST(
     );
 
     if (!rateLimitResult.allowed) {
-      return errors.unprocessableEntity('Rate limit exceeded', {
+      return errorResponses.unprocessableEntityResponse('Rate limit exceeded', {
         retryAfter: rateLimitResult.retryAfter,
         resetAt: rateLimitResult.resetAt.toISOString(),
       });
     }
 
     if (!caseId) {
-      return errors.badRequest('Case ID is required');
+      return errorResponses.badRequestResponse('Case ID is required');
     }
 
     logger.info('API: Cancel membership at period end requested', { caseId, companyId });
@@ -51,7 +51,7 @@ export async function POST(
     const caseCancelled = await cancelRecoveryCase(caseId, companyId);
     if (!caseCancelled) {
       logger.warn('API: Failed to cancel recovery case before membership cancellation', { caseId, companyId });
-      return errors.badRequest('Failed to cancel recovery case');
+      return errorResponses.badRequestResponse('Failed to cancel recovery case');
     }
 
     // Get the case details to extract membership ID
@@ -63,7 +63,7 @@ export async function POST(
 
     if (cases.length === 0) {
       logger.warn('Case not found for membership cancellation', { caseId, companyId });
-      return errors.notFound('Case not found');
+      return errorResponses.notFoundResponse('Case not found');
     }
 
     const membershipId = (cases[0] as { membership_id: string }).membership_id;
@@ -88,7 +88,7 @@ export async function POST(
         error: result.error,
         processingTimeMs: Date.now() - startTime
       });
-      return errors.badRequest(result.error || 'Failed to cancel membership');
+      return errorResponses.badRequestResponse(result.error || 'Failed to cancel membership');
     }
   } catch (error) {
     logger.error('API: Cancel membership at period end failed', {
@@ -97,7 +97,11 @@ export async function POST(
       processingTimeMs: Date.now() - startTime
     });
 
-    return errors.internalServerError('An error occurred while cancelling membership');
+    return errorResponses.internalServerErrorResponse('An error occurred while cancelling membership');
   }
 }
+
+
+
+
 

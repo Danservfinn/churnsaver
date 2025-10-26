@@ -7,12 +7,12 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { 
-  Activity, 
-  AlertCircle, 
-  CheckCircle, 
-  Clock, 
-  Database, 
+import {
+  Activity,
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  Database,
   ExternalLink,
   RefreshCw,
   TrendingDown,
@@ -20,6 +20,7 @@ import {
   Users,
   Zap
 } from 'lucide-react';
+import { formatDuration, formatNumber } from '@/lib/common/formatters';
 
 interface DashboardData {
   timestamp: string;
@@ -68,6 +69,15 @@ interface DashboardData {
       successRate: number;
       avgResponseTime: number;
     };
+    performance: {
+      webVitalsCLS: number;
+      webVitalsFID: number;
+      webVitalsFCP: number;
+      webVitalsLCP: number;
+      webVitalsTTFB: number;
+      avgTimeToRecovery: number;
+      nudgeCTR: number;
+    };
   };
   alerts: {
     active: Array<{
@@ -96,6 +106,237 @@ interface DashboardData {
     queue: any;
     external: any;
   };
+}
+
+// Component rendering functions for better organization
+function renderOverviewCards(data: DashboardData) {
+  return (
+    <>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">System Status</CardTitle>
+          {getStatusIcon(data.overview.status)}
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center space-x-2">
+            <Badge className={getStatusColor(data.overview.status)}>
+              {data.overview.status.toUpperCase()}
+            </Badge>
+            <span className="text-2xl font-bold">
+              {data.overview.activeAlertsCount}
+            </span>
+          </div>
+          <p className="text-xs text-gray-600">Active alerts</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Uptime</CardTitle>
+          <Clock className="w-4 h-4" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">
+            {formatDuration(data.overview.uptime)}
+          </div>
+          <p className="text-xs text-gray-600">
+            Version {data.overview.version} • {data.overview.environment}
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Requests</CardTitle>
+          <Activity className="w-4 h-4" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">
+            {formatNumber(data.metrics.http.requestsPerMinute)}/min
+          </div>
+          <p className="text-xs text-gray-600">
+            {data.metrics.http.errorRate.toFixed(1)}% error rate • {data.metrics.http.avgResponseTime}ms avg
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Active Companies</CardTitle>
+          <Users className="w-4 h-4" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">
+            {data.metrics.business.activeCompanies}
+          </div>
+          <p className="text-xs text-gray-600">
+            {data.metrics.business.recoveryCases} recovery cases • {data.metrics.business.remindersSent} reminders
+          </p>
+        </CardContent>
+      </Card>
+    </>
+  );
+}
+
+function renderMetricsCards(data: DashboardData) {
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Activity className="w-5 h-5 mr-2" />
+            HTTP Performance
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-lg font-semibold">{formatNumber(data.metrics.http.requestsTotal)}</div>
+              <p className="text-sm text-gray-600">Total Requests</p>
+            </div>
+            <div>
+              <div className="text-lg font-semibold">{data.metrics.http.avgResponseTime}ms</div>
+              <p className="text-sm text-gray-600">Avg Response Time</p>
+            </div>
+            <div>
+              <div className="text-lg font-semibold">{data.metrics.http.requestsPerMinute}</div>
+              <p className="text-sm text-gray-600">Requests/Minute</p>
+            </div>
+            <div>
+              <div className="text-lg font-semibold">{data.metrics.http.errorRate.toFixed(1)}%</div>
+              <p className="text-sm text-gray-600">Error Rate</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Zap className="w-5 h-5 mr-2" />
+            Webhook Processing
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-lg font-semibold">{formatNumber(data.metrics.webhooks.eventsProcessed)}</div>
+              <p className="text-sm text-gray-600">Events Processed</p>
+            </div>
+            <div>
+              <div className="text-lg font-semibold">{data.metrics.webhooks.successRate.toFixed(1)}%</div>
+              <p className="text-sm text-gray-600">Success Rate</p>
+            </div>
+            <div>
+              <div className="text-lg font-semibold">{data.metrics.webhooks.processingTime}ms</div>
+              <p className="text-sm text-gray-600">Processing Time</p>
+            </div>
+            <div>
+              <div className="text-lg font-semibold">{data.metrics.webhooks.eventsPerHour}</div>
+              <p className="text-sm text-gray-600">Events/Hour</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Database className="w-5 h-5 mr-2" />
+            Database Performance
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-lg font-semibold">{data.metrics.database.activeConnections}</div>
+              <p className="text-sm text-gray-600">Active Connections</p>
+            </div>
+            <div>
+              <div className="text-lg font-semibold">{data.metrics.database.avgQueryTime}ms</div>
+              <p className="text-sm text-gray-600">Avg Query Time</p>
+            </div>
+            <div>
+              <div className="text-lg font-semibold">{data.metrics.database.slowQueries}</div>
+              <p className="text-sm text-gray-600">Slow Queries</p>
+            </div>
+            <div>
+              <div className="text-lg font-semibold">{data.metrics.database.connectionUtilization}%</div>
+              <p className="text-sm text-gray-600">Connection Utilization</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Clock className="w-5 h-5 mr-2" />
+            Job Queue
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-lg font-semibold">{data.metrics.queue.depth}</div>
+              <p className="text-sm text-gray-600">Queue Depth</p>
+            </div>
+            <div>
+              <div className="text-lg font-semibold">{data.metrics.queue.processingTime}ms</div>
+              <p className="text-sm text-gray-600">Processing Time</p>
+            </div>
+            <div>
+              <div className="text-lg font-semibold">{data.metrics.queue.throughput}</div>
+              <p className="text-sm text-gray-600">Throughput/min</p>
+            </div>
+            <div>
+              <div className="text-lg font-semibold">{data.metrics.queue.failedJobs}</div>
+              <p className="text-sm text-gray-600">Failed Jobs</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <TrendingUp className="w-5 h-5 mr-2" />
+            Performance Metrics
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-lg font-semibold">{data.metrics.performance.webVitalsLCP.toFixed(1)}ms</div>
+              <p className="text-sm text-gray-600">Largest Contentful Paint</p>
+            </div>
+            <div>
+              <div className="text-lg font-semibold">{data.metrics.performance.webVitalsCLS.toFixed(3)}</div>
+              <p className="text-sm text-gray-600">Cumulative Layout Shift</p>
+            </div>
+            <div>
+              <div className="text-lg font-semibold">{data.metrics.performance.webVitalsFCP.toFixed(1)}ms</div>
+              <p className="text-sm text-gray-600">First Contentful Paint</p>
+            </div>
+            <div>
+              <div className="text-lg font-semibold">{data.metrics.performance.webVitalsFID.toFixed(1)}ms</div>
+              <p className="text-sm text-gray-600">First Input Delay</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+            <div>
+              <div className="text-lg font-semibold">{formatDuration(data.metrics.performance.avgTimeToRecovery)}</div>
+              <p className="text-sm text-gray-600">Avg Time to Recovery</p>
+            </div>
+            <div>
+              <div className="text-lg font-semibold">{data.metrics.performance.nudgeCTR.toFixed(1)}%</div>
+              <p className="text-sm text-gray-600">Nudge CTR</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </>
+  );
 }
 
 export default function MonitoringDashboard() {
@@ -133,56 +374,33 @@ export default function MonitoringDashboard() {
     }
   }, [autoRefresh]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'healthy': return 'text-green-600 bg-green-100';
-      case 'degraded': return 'text-yellow-600 bg-yellow-100';
-      case 'unhealthy': return 'text-red-600 bg-red-100';
-      default: return 'text-gray-600 bg-gray-100';
-    }
-  };
+  // Status utilities
+  const getStatusColor = (status: string): string => STATUS_COLORS[status as keyof typeof STATUS_COLORS] || STATUS_COLORS.default;
+  const getStatusIcon = (status: string) => STATUS_ICONS[status as keyof typeof STATUS_ICONS] || STATUS_ICONS.default;
+  const getSeverityColor = (severity: string): string => SEVERITY_COLORS[severity as keyof typeof SEVERITY_COLORS] || SEVERITY_COLORS.default;
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'healthy': return <CheckCircle className="w-4 h-4" />;
-      case 'degraded': return <AlertCircle className="w-4 h-4" />;
-      case 'unhealthy': return <AlertCircle className="w-4 h-4" />;
-      default: return <Activity className="w-4 h-4" />;
-    }
-  };
+  // Constants for better maintainability
+  const STATUS_COLORS = {
+    healthy: 'text-green-600 bg-green-100',
+    degraded: 'text-yellow-600 bg-yellow-100',
+    unhealthy: 'text-red-600 bg-red-100',
+    default: 'text-gray-600 bg-gray-100'
+  } as const;
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'P0': return 'bg-red-100 text-red-800 border-red-200';
-      case 'P1': return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'P2': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'P3': return 'bg-blue-100 text-blue-800 border-blue-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
+  const STATUS_ICONS = {
+    healthy: <CheckCircle className="w-4 h-4" />,
+    degraded: <AlertCircle className="w-4 h-4" />,
+    unhealthy: <AlertCircle className="w-4 h-4" />,
+    default: <Activity className="w-4 h-4" />
+  } as const;
 
-  const formatDuration = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    } else if (minutes > 0) {
-      return `${minutes}m ${secs}s`;
-    } else {
-      return `${secs}s`;
-    }
-  };
-
-  const formatNumber = (num: number) => {
-    if (num >= 1000000) {
-      return `${(num / 1000000).toFixed(1)}M`;
-    } else if (num >= 1000) {
-      return `${(num / 1000).toFixed(1)}K`;
-    }
-    return num.toString();
-  };
+  const SEVERITY_COLORS = {
+    P0: 'bg-red-100 text-red-800 border-red-200',
+    P1: 'bg-orange-100 text-orange-800 border-orange-200',
+    P2: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    P3: 'bg-blue-100 text-blue-800 border-blue-200',
+    default: 'bg-gray-100 text-gray-800 border-gray-200'
+  } as const;
 
   if (loading) {
     return (
@@ -252,191 +470,12 @@ export default function MonitoringDashboard() {
 
       {/* Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">System Status</CardTitle>
-            {getStatusIcon(data.overview.status)}
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center space-x-2">
-              <Badge className={getStatusColor(data.overview.status)}>
-                {data.overview.status.toUpperCase()}
-              </Badge>
-              <span className="text-2xl font-bold">
-                {data.overview.activeAlertsCount}
-              </span>
-            </div>
-            <p className="text-xs text-gray-600">Active alerts</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Uptime</CardTitle>
-            <Clock className="w-4 h-4" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatDuration(data.overview.uptime)}
-            </div>
-            <p className="text-xs text-gray-600">
-              Version {data.overview.version} • {data.overview.environment}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Requests</CardTitle>
-            <Activity className="w-4 h-4" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatNumber(data.metrics.http.requestsPerMinute)}/min
-            </div>
-            <p className="text-xs text-gray-600">
-              {data.metrics.http.errorRate.toFixed(1)}% error rate • {data.metrics.http.avgResponseTime}ms avg
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Companies</CardTitle>
-            <Users className="w-4 h-4" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {data.metrics.business.activeCompanies}
-            </div>
-            <p className="text-xs text-gray-600">
-              {data.metrics.business.recoveryCases} recovery cases • {data.metrics.business.remindersSent} reminders
-            </p>
-          </CardContent>
-        </Card>
+        {renderOverviewCards(data)}
       </div>
 
       {/* Metrics Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* HTTP Metrics */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Activity className="w-5 h-5 mr-2" />
-              HTTP Performance
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="text-lg font-semibold">{formatNumber(data.metrics.http.requestsTotal)}</div>
-                <p className="text-sm text-gray-600">Total Requests</p>
-              </div>
-              <div>
-                <div className="text-lg font-semibold">{data.metrics.http.avgResponseTime}ms</div>
-                <p className="text-sm text-gray-600">Avg Response Time</p>
-              </div>
-              <div>
-                <div className="text-lg font-semibold">{data.metrics.http.requestsPerMinute}</div>
-                <p className="text-sm text-gray-600">Requests/Minute</p>
-              </div>
-              <div>
-                <div className="text-lg font-semibold">{data.metrics.http.errorRate.toFixed(1)}%</div>
-                <p className="text-sm text-gray-600">Error Rate</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Webhook Metrics */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Zap className="w-5 h-5 mr-2" />
-              Webhook Processing
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="text-lg font-semibold">{formatNumber(data.metrics.webhooks.eventsProcessed)}</div>
-                <p className="text-sm text-gray-600">Events Processed</p>
-              </div>
-              <div>
-                <div className="text-lg font-semibold">{data.metrics.webhooks.successRate.toFixed(1)}%</div>
-                <p className="text-sm text-gray-600">Success Rate</p>
-              </div>
-              <div>
-                <div className="text-lg font-semibold">{data.metrics.webhooks.processingTime}ms</div>
-                <p className="text-sm text-gray-600">Processing Time</p>
-              </div>
-              <div>
-                <div className="text-lg font-semibold">{data.metrics.webhooks.eventsPerHour}</div>
-                <p className="text-sm text-gray-600">Events/Hour</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Database Metrics */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Database className="w-5 h-5 mr-2" />
-              Database Performance
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="text-lg font-semibold">{data.metrics.database.activeConnections}</div>
-                <p className="text-sm text-gray-600">Active Connections</p>
-              </div>
-              <div>
-                <div className="text-lg font-semibold">{data.metrics.database.avgQueryTime}ms</div>
-                <p className="text-sm text-gray-600">Avg Query Time</p>
-              </div>
-              <div>
-                <div className="text-lg font-semibold">{data.metrics.database.slowQueries}</div>
-                <p className="text-sm text-gray-600">Slow Queries</p>
-              </div>
-              <div>
-                <div className="text-lg font-semibold">{data.metrics.database.connectionUtilization}%</div>
-                <p className="text-sm text-gray-600">Connection Utilization</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Job Queue Metrics */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Clock className="w-5 h-5 mr-2" />
-              Job Queue
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="text-lg font-semibold">{data.metrics.queue.depth}</div>
-                <p className="text-sm text-gray-600">Queue Depth</p>
-              </div>
-              <div>
-                <div className="text-lg font-semibold">{data.metrics.queue.processingTime}ms</div>
-                <p className="text-sm text-gray-600">Processing Time</p>
-              </div>
-              <div>
-                <div className="text-lg font-semibold">{data.metrics.queue.throughput}</div>
-                <p className="text-sm text-gray-600">Throughput/min</p>
-              </div>
-              <div>
-                <div className="text-lg font-semibold">{data.metrics.queue.failedJobs}</div>
-                <p className="text-sm text-gray-600">Failed Jobs</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {renderMetricsCards(data)}
       </div>
 
       {/* Alerts Section */}

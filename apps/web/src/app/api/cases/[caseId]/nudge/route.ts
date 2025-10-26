@@ -4,15 +4,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { nudgeCaseAgain } from '@/server/services/cases';
 import { logger } from '@/lib/logger';
-import { getRequestContextSDK } from '@/lib/auth/whop-sdk';
+import { getRequestContextSDK } from '@/lib/whop-sdk';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { CaseIdParamSchema, validateAndTransform } from '@/lib/validation';
-import { errors } from '@/lib/apiResponse';
+import { errorResponses } from '@/lib/apiResponse';
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ caseId: string }> }
-) {
+): Promise<NextResponse> {
   const startTime = Date.now();
 
   try {
@@ -26,7 +26,7 @@ export async function POST(
     );
 
     if (!rateLimitResult.allowed) {
-      return errors.unprocessableEntity('Rate limit exceeded', {
+      return errorResponses.unprocessableEntityResponse('Rate limit exceeded', {
         retryAfter: rateLimitResult.retryAfter,
         resetAt: rateLimitResult.resetAt.toISOString(),
       });
@@ -38,7 +38,7 @@ export async function POST(
     // Enforce authentication in production for creator-facing endpoints
     if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
       logger.warn('Unauthorized request to case nudge - missing/failed SDK auth token');
-      return errors.unauthorized('Authentication required');
+      return errorResponses.unauthorizedResponse('Authentication required');
     }
 
     const companyId = context.companyId;
@@ -47,7 +47,7 @@ export async function POST(
     const paramValidation = validateAndTransform(CaseIdParamSchema, { caseId });
     if (!paramValidation.success) {
       logger.warn('Case ID parameter validation failed', { caseId, error: paramValidation.error });
-      return errors.badRequest(`Invalid case ID format: ${paramValidation.error}`);
+      return errorResponses.badRequestResponse(`Invalid case ID format: ${paramValidation.error}`);
     }
 
     const { caseId: validatedCaseId } = paramValidation.data;
@@ -64,7 +64,7 @@ export async function POST(
       });
     } else {
       logger.warn('API: Failed to send nudge (SDK auth)', { caseId, processingTimeMs: Date.now() - startTime });
-      return errors.badRequest('Failed to send nudge');
+      return errorResponses.badRequestResponse('Failed to send nudge');
     }
   } catch (error) {
     logger.error('API: Nudge case failed (SDK auth)', {
@@ -73,6 +73,6 @@ export async function POST(
       processingTimeMs: Date.now() - startTime
     });
 
-    return errors.internalServerError('An error occurred while sending nudge');
+    return errorResponses.internalServerErrorResponse('An error occurred while sending nudge');
   }
 }

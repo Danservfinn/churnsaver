@@ -32,13 +32,13 @@ CREATE TABLE IF NOT EXISTS security_alerts (
 );
 
 -- Indexes for efficient querying
-CREATE INDEX idx_security_alerts_created_at ON security_alerts(created_at DESC);
-CREATE INDEX idx_security_alerts_category_severity ON security_alerts(category, severity);
-CREATE INDEX idx_security_alerts_ip ON security_alerts(ip) WHERE ip IS NOT NULL;
-CREATE INDEX idx_security_alerts_user_id ON security_alerts(user_id) WHERE user_id IS NOT NULL;
-CREATE INDEX idx_security_alerts_company_id ON security_alerts(company_id) WHERE company_id IS NOT NULL;
-CREATE INDEX idx_security_alerts_resolved ON security_alerts(resolved) WHERE resolved = FALSE;
-CREATE INDEX idx_security_alerts_metadata_gin ON security_alerts USING gin(metadata);
+CREATE INDEX IF NOT EXISTS idx_security_alerts_created_at ON security_alerts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_security_alerts_category_severity ON security_alerts(category, severity);
+CREATE INDEX IF NOT EXISTS idx_security_alerts_ip ON security_alerts(ip) WHERE ip IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_security_alerts_user_id ON security_alerts(user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_security_alerts_company_id ON security_alerts(company_id) WHERE company_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_security_alerts_resolved ON security_alerts(resolved) WHERE resolved = FALSE;
+CREATE INDEX IF NOT EXISTS idx_security_alerts_metadata_gin ON security_alerts USING gin(metadata);
 
 -- Security metrics table for dashboard analytics
 CREATE TABLE IF NOT EXISTS security_metrics (
@@ -49,8 +49,8 @@ CREATE TABLE IF NOT EXISTS security_metrics (
     recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE INDEX idx_security_metrics_name_time ON security_metrics(metric_name, recorded_at DESC);
-CREATE INDEX idx_security_metrics_tags_gin ON security_metrics USING gin(tags);
+CREATE INDEX IF NOT EXISTS idx_security_metrics_name_time ON security_metrics(metric_name, recorded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_security_metrics_tags_gin ON security_metrics USING gin(tags);
 
 -- Security event patterns table for known threat signatures
 CREATE TABLE IF NOT EXISTS security_patterns (
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS security_patterns (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE INDEX idx_security_patterns_active ON security_patterns(is_active) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_security_patterns_active ON security_patterns(is_active) WHERE is_active = TRUE;
 
 -- Security audit log table for compliance
 CREATE TABLE IF NOT EXISTS security_audit_log (
@@ -96,32 +96,76 @@ CREATE TABLE IF NOT EXISTS security_audit_log (
 );
 
 -- Partition audit log by month for performance
-CREATE TABLE IF NOT EXISTS security_audit_log_y2024m10 PARTITION OF security_audit_log
-    FOR VALUES FROM ('2024-10-01') TO ('2024-11-01');
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_partitioned_table pt
+        JOIN pg_class c ON c.oid = pt.partrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname = 'security_audit_log'
+          AND n.nspname = ANY (current_schemas(true))
+    ) THEN
+        EXECUTE $stmt$
+            CREATE TABLE IF NOT EXISTS security_audit_log_y2024m10
+            PARTITION OF security_audit_log
+            FOR VALUES FROM ('2024-10-01') TO ('2024-11-01')
+        $stmt$;
+    ELSE
+        RAISE NOTICE 'security_audit_log is not partitioned; skipping partition creation';
+    END IF;
+END;
+$$;
 
 -- Indexes for audit log
-CREATE INDEX idx_security_audit_log_created_at ON security_audit_log(created_at DESC);
-CREATE INDEX idx_security_audit_log_event_type ON security_audit_log(event_type);
-CREATE INDEX idx_security_audit_log_category_severity ON security_audit_log(category, severity);
-CREATE INDEX idx_security_audit_log_user_id ON security_audit_log(user_id) WHERE user_id IS NOT NULL;
-CREATE INDEX idx_security_audit_log_ip ON security_audit_log(ip) WHERE ip IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_security_audit_log_created_at ON security_audit_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_security_audit_log_event_type ON security_audit_log(event_type);
+CREATE INDEX IF NOT EXISTS idx_security_audit_log_category_severity ON security_audit_log(category, severity);
+CREATE INDEX IF NOT EXISTS idx_security_audit_log_user_id ON security_audit_log(user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_security_audit_log_ip ON security_audit_log(ip) WHERE ip IS NOT NULL;
 
 -- Row Level Security for multi-tenant access
 ALTER TABLE security_alerts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE security_audit_log ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies: Users can only see alerts/audit logs for their company
-CREATE POLICY "Users can view own company security alerts" ON security_alerts
-    FOR SELECT USING (
-        company_id = current_setting('app.current_company_id', true) OR
-        current_setting('app.current_company_id', true) IS NULL
-    );
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE policyname = 'Users can view own company security alerts'
+          AND tablename = 'security_alerts'
+          AND schemaname = ANY(current_schemas(true))
+    ) THEN
+        EXECUTE $pol$
+        CREATE POLICY "Users can view own company security alerts" ON security_alerts
+            FOR SELECT USING (
+                company_id = current_setting('app.current_company_id', true) OR
+                current_setting('app.current_company_id', true) IS NULL
+            )
+        $pol$;
+    END IF;
+END;
+$$;
 
-CREATE POLICY "Users can view own company audit logs" ON security_audit_log
-    FOR SELECT USING (
-        company_id = current_setting('app.current_company_id', true) OR
-        current_setting('app.current_company_id', true) IS NULL
-    );
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE policyname = 'Users can view own company audit logs'
+          AND tablename = 'security_audit_log'
+          AND schemaname = ANY(current_schemas(true))
+    ) THEN
+        EXECUTE $pol$
+        CREATE POLICY "Users can view own company audit logs" ON security_audit_log
+            FOR SELECT USING (
+                company_id = current_setting('app.current_company_id', true) OR
+                current_setting('app.current_company_id', true) IS NULL
+            )
+        $pol$;
+    END IF;
+END;
+$$;
 
 -- Insert default security patterns
 INSERT INTO security_patterns (pattern_name, pattern_type, description, signature, severity) VALUES
@@ -154,10 +198,19 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger to automatically update metrics
-CREATE TRIGGER trigger_update_security_metrics
-    AFTER INSERT ON security_alerts
-    FOR EACH ROW
-    EXECUTE FUNCTION update_security_metrics();
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger
+        WHERE tgname = 'trigger_update_security_metrics'
+    ) THEN
+        CREATE TRIGGER trigger_update_security_metrics
+            AFTER INSERT ON security_alerts
+            FOR EACH ROW
+            EXECUTE FUNCTION update_security_metrics();
+    END IF;
+END;
+$$;
 
 -- Function to clean up old audit logs (retention policy)
 CREATE OR REPLACE FUNCTION cleanup_old_security_audit_logs()

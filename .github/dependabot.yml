@@ -1,0 +1,455 @@
+# Dependabot configuration for Churn Saver
+# This configuration helps keep dependencies up to date automatically
+
+version: 2
+updates:
+  # Enable version updates for npm packages
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "team-maintainers"
+      - "security-team"
+    assignees:
+      - "team-maintainers"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "automated-pr"
+    milestone: "Dependencies"
+  
+  # Enable version updates for npm packages in apps/web
+  - package-ecosystem: "npm"
+    directory: "/apps/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "team-maintainers"
+      - "security-team"
+    assignees:
+      - "team-maintainers"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "automated-pr"
+      - "frontend"
+    milestone: "Dependencies"
+
+  # Enable version updates for Docker base images
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "team-maintainers"
+      - "devops-team"
+    assignees:
+      - "team-maintainers"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "automated-pr"
+      - "infrastructure"
+    milestone: "Dependencies"
+
+  # Enable version updates for GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "team-maintainers"
+      - "devops-team"
+    assignees:
+      - "team-maintainers"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "automated-pr"
+      - "ci-cd"
+    milestone: "Dependencies"
+
+# Configure dependency groups for better organization
+groups:
+  # Production dependencies group
+  production-dependencies:
+    patterns:
+      - "*"
+    dependency-type: "production"
+    update-types:
+      - "version-update:semver-patch"
+      - "version-update:semver-minor"
+  
+  # Development dependencies group
+  development-dependencies:
+    patterns:
+      - "*"
+    dependency-type: "development"
+    update-types:
+      - "version-update:semver-patch"
+      - "version-update:semver-minor"
+  
+  # Security critical dependencies
+  security-critical:
+    patterns:
+      - "express*"
+      - "jsonwebtoken*"
+      - "helmet*"
+      - "cors*"
+      - "bcrypt*"
+      - "jose*"
+      - "zod*"
+    update-types:
+      - "version-update:semver-patch"
+      - "version-update:semver-minor"
+      - "version-update:semver-major"
+  
+  # React ecosystem
+  react-ecosystem:
+    patterns:
+      - "react*"
+      - "next*"
+      - "@radix-ui/*"
+      - "lucide-react*"
+      - "tailwind*"
+    update-types:
+      - "version-update:semver-patch"
+      - "version-update:semver-minor"
+  
+  # Database and ORM
+  database-ecosystem:
+    patterns:
+      - "pg*"
+      - "pg-boss*"
+      - "@types/pg*"
+    update-types:
+      - "version-update:semver-patch"
+      - "version-update:semver-minor"
+  
+  # Testing framework
+  testing-ecosystem:
+    patterns:
+      - "jest*"
+      - "@testing-library/*"
+      - "playwright*"
+      - "supertest*"
+    update-types:
+      - "version-update:semver-patch"
+      - "version-update:semver-minor"
+  
+  # Development tools
+  development-tools:
+    patterns:
+      - "typescript*"
+      - "@types/*"
+      - "eslint*"
+      - "prettier*"
+      - "biome*"
+      - "husky*"
+      - "lint-staged*"
+    update-types:
+      - "version-update:semver-patch"
+      - "version-update:semver-minor"
+
+# Configure security updates for high-priority vulnerabilities
+security-updates:
+  enable: true
+  schedule:
+    interval: "daily"
+    time: "06:00"
+    timezone: "America/New_York"
+  open-pull-requests-limit: 10
+  reviewers:
+    - "security-team"
+    - "team-maintainers"
+  assignees:
+    - "security-team"
+  commit-message:
+    prefix: "security"
+    include: "scope"
+  labels:
+    - "security"
+    - "dependencies"
+    - "high-priority"
+    - "automated-pr"
+  milestone: "Security"
+
+# Configure pull request settings
+pull-request:
+  # Add labels to PRs based on dependency type
+  labels:
+    # Dependency type labels
+    - "dependencies"
+    - "automated-pr"
+    
+    # Security labels for critical updates
+    - "security"
+    
+    # Area labels based on ecosystem
+    - "frontend"
+    - "backend"
+    - "infrastructure"
+    - "ci-cd"
+    - "testing"
+    
+    # Priority labels based on update type
+    - "high-priority"
+    - "medium-priority"
+    - "low-priority"
+  
+  # Add reviewers based on dependency type
+  reviewers:
+    - "team-maintainers"  # Always include maintainers
+    - "security-team"      # For security-related updates
+    - "devops-team"        # For infrastructure and CI/CD
+    - "frontend-team"       # For frontend dependencies
+    - "backend-team"        # For backend dependencies
+  
+  # Assign to maintainers for quick review
+  assignees:
+    - "team-maintainers"
+  
+  # Set milestone for tracking
+  milestone: "Dependencies"
+
+# Configure commit message format
+commit-message:
+  # Use conventional commit format
+  prefix: "chore"
+  include: "scope"
+  
+  # Examples:
+  # chore(deps): update express from 4.18.0 to 4.18.1
+  # chore(deps): update react from 18.2.0 to 18.2.1
+  # chore(security): update lodash from 4.17.20 to 4.17.21
+  
+  # Include additional context
+  include-scope: true
+  
+  # Group updates by dependency type
+  group-dynamic: true
+
+# Configure notification settings
+notifications:
+  # Notify maintainers of dependency updates
+  slack:
+    workspace: "churn-saver"
+    channel: "#dependencies"
+    webhook-url: ${{ secrets.DEPENDABOT_SLACK_WEBHOOK }}
+  
+  # Email notifications for critical security updates
+  email:
+    recipients:
+      - "security-team@churnsaver.com"
+      - "maintainers@churnsaver.com"
+    on-failure: true
+    on-success: false
+    on-aborted: true
+
+# Configure rate limiting
+rate-limit:
+  # Limit concurrent PRs to avoid overwhelming reviewers
+  concurrent-prs: 5
+  
+  # Limit PRs per day to avoid noise
+  prs-per-day: 10
+  
+  # Limit PRs per hour for critical updates
+  prs-per-hour: 3
+
+# Configure exception handling
+ignore:
+  # Ignore specific packages that should not be auto-updated
+  - dependency-name: "node"
+    reason: "Node.js version should be updated manually based on project requirements"
+  - dependency-name: "pnpm"
+    reason: "Package manager version should be updated manually"
+  - dependency-name: "@whop/*"
+    reason: "Whop SDK versions should be reviewed manually for compatibility"
+  
+  # Ignore pre-release versions
+  versions:
+    - dependency-name: "*"
+      update-types: ["version-update:semver-major"]
+      ignore-pre-releases: true
+  
+  # Ignore specific version patterns
+  dependency-groups:
+    - patterns: ["*"]
+      update-types: ["version-update:semver-major"]
+      ignore-conditions:
+        # Don't auto-update major versions that might break compatibility
+        - "dependency-group:production-dependencies"
+        - "dependency-group:security-critical"
+
+# Configure custom registry settings
+registries:
+  # Use npm registry for standard packages
+  npm:
+    type: "npm-registry"
+    url: "https://registry.npmjs.org"
+    replaces-base: true
+  
+  # Use GitHub packages for internal packages
+  github:
+    type: "npm-registry"
+    url: "https://npm.pkg.github.com"
+    token: ${{ secrets.GITHUB_TOKEN }}
+    replaces-base: false
+
+# Configure quality checks
+quality-checks:
+  # Run security audits on dependency updates
+  security-audit: true
+  
+  # Check for license compatibility
+  license-check: true
+  
+  # Check for compatibility with Node.js version
+  compatibility-check:
+    node-version: "18"
+  
+  # Check for breaking changes
+  breaking-change-check: true
+  
+  # Run tests on dependency update PRs
+  test-run: true
+  
+  # Check bundle size impact
+  bundle-size-check: true
+  
+  # Check performance impact
+  performance-check: true
+
+# Configure approval requirements
+approval-requirements:
+  # Require approval from maintainers for major version updates
+  major-version-updates:
+    required-approvals: 2
+    require-maintainer-approval: true
+  
+  # Require approval from security team for security updates
+  security-updates:
+    required-approvals: 1
+    require-security-team-approval: true
+  
+  # Standard dependency updates
+  standard-updates:
+    required-approvals: 1
+    require-maintainer-approval: false
+
+# Configure merge strategy
+merge-strategy:
+  # Use squash merge for dependency updates
+  method: "squash"
+  
+  # Auto-merge safe updates
+  auto-merge:
+    enabled: true
+    conditions:
+      # Only auto-merge patch updates
+      update-types: ["version-update:semver-patch"]
+      
+      # Only auto-merge if all checks pass
+      require-tests-passing: true
+      require-security-scan-passing: true
+      require-code-quality-passing: true
+      
+      # Only auto-merge if no review comments
+      require-no-review-comments: true
+      
+      # Only auto-merge if approved by maintainer
+      require-maintainer-approval: true
+
+# Configure post-merge actions
+post-merge:
+  # Update changelog
+  changelog:
+    enabled: true
+    template: |
+      ## Dependencies Update - {{ date }}
+      
+      ### Updated Packages
+      {{#each updates}}
+      - **{{ packageName }}**: {{ previousVersion }} → {{ newVersion }} ({{ updateType }})
+      {{/each}}
+      
+      ### Security Updates
+      {{#each securityUpdates}}
+      - **{{ packageName }}**: {{ previousVersion }} → {{ newVersion }} ({{ updateType }})
+      {{/each}}
+      
+      ### Impact
+      - **Bundle Size**: {{ bundleSizeChange }}
+      - **Security**: {{ securityImpact }}
+      - **Performance**: {{ performanceImpact }}
+      
+      ### Migration Notes
+      {{#each breakingChanges}}
+      - **{{ packageName }}**: {{ changeDescription }}
+      {{/each}}
+  
+  # Notify team
+  notifications:
+    slack:
+      enabled: true
+      channel: "#general"
+      message: |
+        🔄 **Dependencies Updated**
+        
+        {{#if securityUpdates}}
+        🚨 **Security Updates Applied**
+        {{#each securityUpdates}}
+        - {{ packageName }}: {{ previousVersion }} → {{ newVersion }}
+        {{/each}}
+        {{/if}}
+        
+        {{#if standardUpdates}}
+        📦 **Standard Updates Applied**
+        {{#each standardUpdates}}
+        - {{ packageName }}: {{ previousVersion }} → {{ newVersion }}
+        {{/each}}
+        {{/if}}
+        
+        📊 **Impact**: {{ overallImpact }}
+        🔗 **PR**: {{ pullRequestUrl }}
+    
+    email:
+      enabled: true
+      recipients:
+        - "team@churnsaver.com"
+      subject: "Churn Saver - Dependencies Updated"
+      template: |
+        Dependencies have been automatically updated and merged.
+        
+        Summary:
+        - Security Updates: {{ securityUpdatesCount }}
+        - Standard Updates: {{ standardUpdatesCount }}
+        - Bundle Size Impact: {{ bundleSizeChange }}
+        
+        View details: {{ pullRequestUrl }}

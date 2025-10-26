@@ -4,14 +4,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { terminateMembership } from '@/server/services/cases';
 import { logger } from '@/lib/logger';
-import { getRequestContextSDK } from '@/lib/auth/whop-sdk';
+import { getRequestContextSDK } from '@/lib/whop-sdk';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
-import { errors } from '@/lib/apiResponse';
+import { errorResponses } from '@/lib/apiResponse';
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ caseId: string }> }
-) {
+): Promise<NextResponse> {
   const startTime = Date.now();
 
   const { caseId } = await params;
@@ -24,7 +24,7 @@ export async function POST(
     // Enforce authentication in production for creator-facing endpoints
     if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
       logger.warn('Unauthorized request to terminate membership - missing valid auth token');
-      return errors.unauthorized('Authentication required');
+      return errorResponses.unauthorizedResponse('Authentication required');
     }
 
     // Apply rate limiting for creator-facing case actions (30/min per company)
@@ -34,14 +34,14 @@ export async function POST(
     );
 
     if (!rateLimitResult.allowed) {
-      return errors.unprocessableEntity('Rate limit exceeded', {
+      return errorResponses.unprocessableEntityResponse('Rate limit exceeded', {
         retryAfter: rateLimitResult.retryAfter,
         resetAt: rateLimitResult.resetAt.toISOString(),
       });
     }
 
     if (!caseId) {
-      return errors.badRequest('Case ID is required');
+      return errorResponses.badRequestResponse('Case ID is required');
     }
 
     logger.info('API: Terminate membership requested', { caseId, companyId });
@@ -56,7 +56,7 @@ export async function POST(
       });
     } else {
       logger.warn('API: Failed to terminate membership', { caseId, processingTimeMs: Date.now() - startTime });
-      return errors.badRequest('Failed to terminate membership');
+      return errorResponses.badRequestResponse('Failed to terminate membership');
     }
   } catch (error) {
     logger.error('API: Terminate membership failed', {
@@ -65,6 +65,6 @@ export async function POST(
       processingTimeMs: Date.now() - startTime
     });
 
-    return errors.internalServerError('An error occurred while terminating membership');
+    return errorResponses.internalServerErrorResponse('An error occurred while terminating membership');
   }
 }

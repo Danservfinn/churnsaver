@@ -63,3 +63,6 @@ Thumbs.db
 
 # Supabase (temp artifacts)
 supabase/.temp/
+
+#Ignore cursor AI rules
+.cursor/rules/codacy.mdc

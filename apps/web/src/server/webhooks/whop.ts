@@ -4,47 +4,32 @@
 import { createHmac, timingSafeEqual as nodeTimingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { initDb, sql } from '@/lib/db';
-import { env } from '@/lib/env';
+import { env, additionalEnv } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { processWebhookEvent, ProcessedEvent } from '@/server/services/eventProcessor';
-import { getWebhookCompanyContext } from '@/lib/auth/whop-sdk';
+import { whopsdk, getWebhookCompanyContext } from '@/lib/whop-sdk';
 import { jobQueue } from '@/server/services/jobQueue';
-import { encryptWebhookPayload, deriveMinimalPayload } from '@/lib/encryption';
+import { encryptWebhookPayload, deriveMinimalPayload } from '@/lib/whop/dataTransformers';
 import { securityMonitor } from '@/lib/security-monitoring';
 
 export interface WhopWebhookPayload {
   id?: string; // whop_event_id (may be in id or whop_event_id)
   whop_event_id?: string; // alternative field name
   type: string;
-  data: Record<string, unknown>;
+  data: Record<string, unknown> | any; // Allow for SDK-specific data types
   created_at?: string;
+  [key: string]: any; // Allow for additional properties from SDK
 }
+
 
 /**
  * Timing-safe hex string comparison using crypto.timingSafeEqual
  */
-export function timingSafeEqual(a: string, b: string): boolean {
-  try {
-    // Normalize hex strings: remove 0x prefix, convert to lowercase
-    const aHex = a.replace(/^0x/, '').toLowerCase();
-    const bHex = b.replace(/^0x/, '').toLowerCase();
-
-    // Validate both are valid hex strings of equal length
-    if (aHex.length !== bHex.length ||
-        aHex.length === 0 ||
-        !/^[0-9a-f]+$/.test(aHex) ||
-        !/^[0-9a-f]+$/.test(bHex)) {
-      return false;
-    }
-
-    // Convert to buffers and compare
-    const aBuf = Buffer.from(aHex, 'hex');
-    const bBuf = Buffer.from(bHex, 'hex');
-    return nodeTimingSafeEqual(aBuf, bBuf);
-  } catch {
-    return false;
-  }
-}
+/**
+ * Timing-safe hex string comparison using crypto.timingSafeEqual
+ * Import from webhookValidator to ensure consistency
+ */
+import { timingSafeEqualHex } from '@/lib/whop/webhookValidator';
 
 /**
  * Parse signature header supporting all supported formats:
@@ -114,7 +99,7 @@ export function verifyWebhookSignature(
     // Perform timing-safe comparison if we have a valid signature
     let signatureValid = false;
     if (provided) {
-      signatureValid = timingSafeEqual(expectedSignature, provided);
+      signatureValid = timingSafeEqualHex(expectedSignature, provided);
     }
 
     if (!signatureValid) {
@@ -127,7 +112,11 @@ export function verifyWebhookSignature(
       logger.warn('Webhook signature verification failed', {
         errors: validationErrors,
         hasTimestamp: !!timestampHeader,
-        signatureFormat: signatureHeader ? signatureHeader.substring(0, 20) + '...' : 'missing'
+        signatureFormat: signatureHeader ? signatureHeader.substring(0, 20) + '...' : 'missing',
+        signatureLength: signatureHeader ? signatureHeader.length : 0,
+        bodyLength: body.length,
+        timestampValue: timestampHeader || 'missing',
+        validationTime: Date.now()
       });
     }
 
@@ -155,10 +144,10 @@ function validateTimestamp(timestampHeader?: string | null): { valid: boolean; e
     }
     const nowSec = Math.floor(Date.now() / 1000);
     const skewSec = Math.abs(nowSec - ts);
-    if (skewSec > env.WEBHOOK_TIMESTAMP_SKEW_SECONDS) {
+    if (skewSec > additionalEnv.WEBHOOK_TIMESTAMP_SKEW_SECONDS) {
       return {
         valid: false,
-        error: `Webhook timestamp outside allowed window: ${skewSec}s > ${env.WEBHOOK_TIMESTAMP_SKEW_SECONDS}s`
+        error: `Webhook timestamp outside allowed window: ${skewSec}s > ${additionalEnv.WEBHOOK_TIMESTAMP_SKEW_SECONDS}s`
       };
     }
   }
@@ -166,37 +155,6 @@ function validateTimestamp(timestampHeader?: string | null): { valid: boolean; e
   return { valid: true };
 }
 
-/**
- * Validate HMAC-SHA256 webhook signature with support for multiple formats
- * Returns true if signature is valid, false otherwise
- */
-export function validateWebhookSignature(
-  body: string,
-  signatureHeader: string,
-  secret: string
-): boolean {
-  try {
-    // Parse signature header supporting all supported formats
-    const provided = parseSignatureHeader(signatureHeader);
-    if (!provided) {
-      logger.warn('Unsupported webhook signature format', { signatureHeader });
-      return false;
-    }
-
-    // Compute expected signature
-    const expectedSignature = createHmac('sha256', secret)
-      .update(body, 'utf8')
-      .digest('hex');
-
-    // Perform timing-safe comparison
-    return timingSafeEqual(expectedSignature, provided);
-  } catch (error) {
-    logger.error('Webhook signature validation failed with exception', {
-      error: error instanceof Error ? error.message : String(error)
-    });
-    return false;
-  }
-}
 
 /**
  * Upsert webhook event to database with privacy-focused payload storage
@@ -214,7 +172,7 @@ async function upsertWebhookEvent(payload: WhopWebhookPayload, eventTime: Date, 
     const payloadMin = deriveMinimalPayload(payload as unknown as Record<string, unknown>);
 
     // Encrypt full payload if encryption key is available
-    const payloadEncrypted = encryptWebhookPayload(payload as unknown as Record<string, unknown>, env.ENCRYPTION_KEY);
+    const payloadEncrypted = await encryptWebhookPayload(payload as unknown as Record<string, unknown>);
 
     await sql.execute(`
       INSERT INTO events (
@@ -275,6 +233,24 @@ function extractMembershipId(payload: WhopWebhookPayload): string {
   return 'unknown';
 }
 
+// Handle webhook events based on action
+async function handlePaymentSucceededWebhook(data: any) {
+  // Process payment succeeded webhook
+  logger.info('Processing payment succeeded webhook', { data });
+  
+  // Here you would typically:
+  // 1. Update membership status in database
+  // 2. Send notifications
+  // 3. Update analytics
+  // 4. Trigger any business logic
+  
+  // For now, just log the event
+  return {
+    processed: true,
+    data
+  };
+}
+
 // Main webhook handler
 export async function handleWhopWebhook(request: NextRequest): Promise<NextResponse> {
   const startTime = Date.now();
@@ -290,39 +266,65 @@ export async function handleWhopWebhook(request: NextRequest): Promise<NextRespo
     const signature = request.headers.get('x-whop-signature') || request.headers.get('X-Whop-Signature');
     const timestamp = request.headers.get('x-whop-timestamp') || request.headers.get('X-Whop-Timestamp');
 
-    // Verify signature
+    // Validate signature manually first (don't trust @whop/api for signature validation)
     if (!signature) {
-      logger.warn('Webhook received without signature');
-      return NextResponse.json({ error: 'Missing signature' }, { status: 401 });
-    }
+      logger.warn('Missing webhook signature', {
+        error_category: 'authentication',
+        hasTimestamp: !!timestamp,
+        bodyLength: body.length
+      });
 
-    // Skip validation if WHOP_WEBHOOK_SECRET is not set (development mode)
-    if (!env.WHOP_WEBHOOK_SECRET) {
-      logger.warn('Webhook signature validation skipped - WHOP_WEBHOOK_SECRET not configured');
-    } else if (!validateWebhookSignature(body, signature, env.WHOP_WEBHOOK_SECRET)) {
       const clientIP = request.headers.get('x-forwarded-for') ||
                         request.headers.get('x-real-ip') ||
                         'unknown';
-      const userAgent = request.headers.get('user-agent')?.substring(0, 200) || 'unknown';
 
-      logger.webhook('failed', {
-        eventId: 'unknown',
-        eventType: 'unknown',
-        error: 'Invalid signature',
-        error_category: 'authentication'
+      await securityMonitor.processSecurityEvent({
+        category: 'authentication',
+        severity: 'high',
+        type: 'webhook_signature_missing',
+        description: 'Webhook signature header missing',
+        ip: clientIP,
+        endpoint: '/api/webhooks/whop',
+        metadata: {
+          hasTimestamp: !!timestamp,
+          bodyLength: body.length
+        }
       });
 
-      // Report to security monitoring
+      return NextResponse.json({ error: 'Missing signature' }, { status: 401 });
+    }
+
+    // Verify signature manually
+    const webhookSecret = env.WHOP_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      logger.error('WHOP_WEBHOOK_SECRET not configured', {
+        error_category: 'configuration'
+      });
+      return NextResponse.json({ error: 'Configuration error' }, { status: 500 });
+    }
+
+    const isValidSignature = verifyWebhookSignature(body, signature, webhookSecret, timestamp);
+    if (!isValidSignature) {
+      logger.warn('Webhook signature verification failed', {
+        error_category: 'authentication',
+        signatureLength: signature.length,
+        hasTimestamp: !!timestamp,
+        bodyLength: body.length
+      });
+
+      const clientIP = request.headers.get('x-forwarded-for') ||
+                        request.headers.get('x-real-ip') ||
+                        'unknown';
+
       await securityMonitor.processSecurityEvent({
         category: 'authentication',
         severity: 'high',
         type: 'webhook_signature_invalid',
-        description: 'Invalid webhook signature detected',
+        description: 'Webhook signature verification failed',
         ip: clientIP,
-        userAgent,
         endpoint: '/api/webhooks/whop',
         metadata: {
-          signatureLength: signature?.length || 0,
+          signatureLength: signature.length,
           hasTimestamp: !!timestamp,
           bodyLength: body.length
         }
@@ -331,21 +333,41 @@ export async function handleWhopWebhook(request: NextRequest): Promise<NextRespo
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
-    // Parse payload
-    let payload: WhopWebhookPayload | null = null;
+    // Parse the JSON payload
+    let payload: WhopWebhookPayload;
     try {
-      payload = JSON.parse(body) as WhopWebhookPayload;
+      payload = JSON.parse(body);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to parse webhook payload', {
-        error: errorMessage,
-        error_category: 'parsing',
-        bodyLength: body.length
+      logger.warn('Invalid JSON in webhook payload', {
+        error: error instanceof Error ? error.message : String(error),
+        error_category: 'validation'
       });
-      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+
+      const clientIP = request.headers.get('x-forwarded-for') ||
+                        request.headers.get('x-real-ip') ||
+                        'unknown';
+
+      await securityMonitor.processSecurityEvent({
+        category: 'authentication',
+        severity: 'medium',
+        type: 'webhook_payload_invalid_json',
+        description: 'Webhook payload contains invalid JSON',
+        ip: clientIP,
+        endpoint: '/api/webhooks/whop',
+        metadata: {
+          bodyLength: body.length,
+          error: error instanceof Error ? error.message : String(error)
+        }
+      });
+
+      return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 });
     }
 
     // Validate required fields (accept both id and whop_event_id)
+    if (!payload) {
+      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
+    }
+    
     const eventId: string = (payload.id || payload.whop_event_id)!;
     lastEventId = eventId;
     if (!eventId || !payload.type) {
@@ -379,11 +401,29 @@ export async function handleWhopWebhook(request: NextRequest): Promise<NextRespo
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    // Check idempotency - if event already processed, return OK immediately
+    const existingEvent = await sql.select<{ id: string }>(
+      `SELECT id FROM events WHERE whop_event_id = $1`,
+      [eventId]
+    );
+
+    if (existingEvent.length > 0) {
+      logger.info('Webhook event already processed, returning OK', {
+        eventId,
+        eventType: payload.type
+      });
+      return NextResponse.json({ success: true, eventId }, { status: 200 });
+    }
+
     // Extract event time (use created_at or current time)
     const eventTime = payload.created_at ? new Date(payload.created_at) : new Date();
 
     // Derive company context from webhook headers
-    const companyId = getWebhookCompanyContext(Object.fromEntries(request.headers.entries()));
+    const headersObj: Record<string, string> = {};
+    request.headers.forEach((value, key) => {
+      headersObj[key] = value;
+    });
+    const companyId = getWebhookCompanyContext(headersObj);
 
     // Log successful webhook receipt
     logger.webhook('received', {
@@ -396,6 +436,11 @@ export async function handleWhopWebhook(request: NextRequest): Promise<NextRespo
 
     // Upsert event (idempotent)
     await upsertWebhookEvent(payload, eventTime, companyId);
+
+    // Handle webhook events based on type
+    if (payload.type === "payment.succeeded") {
+      await handlePaymentSucceededWebhook(payload.data);
+    }
 
     // Enqueue event processing job (don't block the webhook response)
     setImmediate(async () => {
@@ -472,7 +517,7 @@ export async function handleWhopWebhook(request: NextRequest): Promise<NextRespo
       });
     }
 
-    return NextResponse.json({ success: true, eventId }, { status: 200 });
+    return NextResponse.json({ success: true }, { status: 200 });
 
   } catch (error) {
     const eventId = lastEventId;

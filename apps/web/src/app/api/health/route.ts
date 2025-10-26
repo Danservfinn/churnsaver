@@ -67,12 +67,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       error: error instanceof Error ? error.message : String(error)
     });
 
-    return errors.serviceUnavailable(
-      'Health check failed',
+    return NextResponse.json(
       {
+        error: 'Health check failed',
         checkType: checkType || 'application',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 503 }
     );
   }
 }
@@ -387,4 +388,8 @@ async function checkComprehensiveHealth(request: NextRequest): Promise<NextRespo
     });
   }
 }
+
+
+
+
 

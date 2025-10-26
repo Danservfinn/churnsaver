@@ -1,160 +1,273 @@
-// AES-GCM encryption utilities for webhook payload privacy
-// Uses ENCRYPTION_KEY environment variable for optional encryption
+// Encryption utilities
+// Provides secure encryption and decryption for sensitive data
 
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import { createCipheriv, createDecipheriv, randomBytes, scrypt } from 'crypto';
+import { promisify } from 'util';
+import bcrypt from 'bcrypt';
+import { z } from 'zod';
 
-export interface EncryptionResult {
-  encrypted: Buffer;
-  iv: Buffer;
-  tag: Buffer;
-}
-
-/**
- * Encrypts data using AES-GCM with a random IV
- * @param data - Data to encrypt (string or Buffer)
- * @param key - 32-byte encryption key
- * @returns EncryptionResult with encrypted data, IV, and auth tag
- */
-export function encryptAESGCM(data: string | Buffer, key: string): EncryptionResult {
-  if (key.length !== 32) {
-    throw new Error('Encryption key must be exactly 32 bytes (256 bits)');
-  }
-
-  const iv = randomBytes(16); // 96-bit IV for GCM
-  const cipher = createCipheriv('aes-256-gcm', Buffer.from(key, 'utf8'), iv);
-
-  let encrypted: Buffer;
-  if (typeof data === 'string') {
-    encrypted = Buffer.concat([
-      cipher.update(data, 'utf8'),
-      cipher.final()
-    ]);
-  } else {
-    encrypted = Buffer.concat([
-      cipher.update(data),
-      cipher.final()
-    ]);
-  }
-
-  const tag = cipher.getAuthTag();
-
-  return { encrypted, iv, tag };
-}
+// Type assertions for GCM cipher operations
+type CipherGCM = ReturnType<typeof createCipheriv> & { getAuthTag(): Buffer };
+type DecipherGCM = ReturnType<typeof createDecipheriv> & { setAuthTag(tag: Buffer): void };
 
 /**
- * Decrypts data encrypted with encryptAESGCM
- * @param encrypted - Encrypted data buffer
- * @param iv - Initialization vector used for encryption
- * @param tag - Authentication tag from encryption
- * @param key - 32-byte encryption key
- * @returns Decrypted data as string
+ * Encryption configuration with industry-standard parameters
  */
-export function decryptAESGCM(encrypted: Buffer, iv: Buffer, tag: Buffer, key: string): string {
-  if (key.length !== 32) {
-    throw new Error('Encryption key must be exactly 32 bytes (256 bits)');
-  }
-
-  const decipher = createDecipheriv('aes-256-gcm', Buffer.from(key, 'utf8'), iv);
-  decipher.setAuthTag(tag);
-
-  const decrypted = Buffer.concat([
-    decipher.update(encrypted),
-    decipher.final()
-  ]);
-
-  return decrypted.toString('utf8');
+interface EncryptionConfig {
+  algorithm: string;
+  keyLength: number; // 32 bytes for AES-256
+  ivLength: number; // 12 bytes for GCM (standard)
+  saltLength: number;
+  iterations: number; // Number of iterations for key derivation
+  authTagLength: number; // 16 bytes for GCM auth tag
 }
 
-/**
- * Encrypts a webhook payload if ENCRYPTION_KEY is available
- * @param payload - JSON payload to encrypt
- * @param encryptionKey - Optional encryption key from environment
- * @returns Buffer containing encrypted payload or null if no key
- */
-export function encryptWebhookPayload(payload: Record<string, unknown>, encryptionKey?: string): Buffer | null {
-  if (!encryptionKey) {
-    return null;
-  }
-
-  try {
-    const payloadStr = JSON.stringify(payload);
-    const result = encryptAESGCM(payloadStr, encryptionKey);
-
-    // Combine IV, tag, and encrypted data into a single buffer
-    // Format: IV (16 bytes) + Tag (16 bytes) + Encrypted data
-    const combined = Buffer.concat([result.iv, result.tag, result.encrypted]);
-    return combined;
-  } catch (error) {
-    throw new Error(`Failed to encrypt webhook payload: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
+const DEFAULT_CONFIG: EncryptionConfig = {
+  algorithm: 'aes-256-gcm',
+  keyLength: 32,
+  ivLength: 12, // Standard for GCM
+  saltLength: 32,
+  iterations: 32767, // OWASP recommended minimum
+  authTagLength: 16
+};
 
 /**
- * Decrypts a webhook payload encrypted with encryptWebhookPayload
- * @param encryptedData - Buffer containing encrypted payload
- * @param encryptionKey - Encryption key used for decryption
- * @returns Decrypted payload object
+ * Schema for validating encryption keys
  */
-export function decryptWebhookPayload(encryptedData: Buffer, encryptionKey: string): Record<string, unknown> {
-  try {
-    // Extract IV (first 16 bytes), tag (next 16 bytes), and encrypted data (rest)
-    const iv = encryptedData.subarray(0, 16);
-    const tag = encryptedData.subarray(16, 32);
-    const encrypted = encryptedData.subarray(32);
-
-    const decryptedStr = decryptAESGCM(encrypted, iv, tag, encryptionKey);
-    return JSON.parse(decryptedStr);
-  } catch (error) {
-    throw new Error(`Failed to decrypt webhook payload: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
+const EncryptionKeySchema = z.string().min(1, 'Encryption key cannot be empty');
 
 /**
- * Derives minimal payload from webhook payload for privacy
- * @param payload - Full webhook payload
- * @returns Minimal payload with only essential fields
+ * Schema for validating base64 keys
  */
-export function deriveMinimalPayload(payload: Record<string, unknown>): Record<string, unknown> {
-  const minimal: Record<string, unknown> = {
-    whop_event_id: payload.id || payload.whop_event_id,
-    type: payload.type,
-    membership_id: extractMembershipId(payload)
-  };
+const Base64KeySchema = z.string().regex(
+  /^[A-Za-z0-9+/]+={0,2}$/,
+  'Key must be valid base64'
+);
 
-  // Add failure_reason if present
-  if (payload.data && typeof payload.data === 'object') {
-    const data = payload.data as Record<string, unknown>;
-    if (data.failure_reason && typeof data.failure_reason === 'string') {
-      minimal.failure_reason = data.failure_reason;
+/**
+ * Validates and normalizes an encryption key
+ * @param key The raw encryption key
+ * @returns A Buffer containing normalized 32-byte key
+ * @throws Error if key is invalid
+ */
+async function validateAndNormalizeKey(key: string): Promise<Buffer> {
+  // Validate input
+  EncryptionKeySchema.parse(key);
+  
+  // If it's base64, decode it
+  if (Base64KeySchema.safeParse(key).success) {
+    const decoded = Buffer.from(key, 'base64');
+    
+    // Check if it's already 32 bytes
+    if (decoded.length === DEFAULT_CONFIG.keyLength) {
+      return decoded;
     }
-    // Add user_id if present (for user-related events)
-    if (data.user_id && typeof data.user_id === 'string') {
-      minimal.user_id = data.user_id;
-    }
+    
+    // If not 32 bytes, we'll derive a key from it
+    return await deriveKeyFromMaterial(key);
   }
-
-  return minimal;
+  
+  // For non-base64 keys, derive a proper key
+  return await deriveKeyFromMaterial(key);
 }
 
 /**
- * Extracts membership ID from webhook payload data
- * @param payload - Webhook payload
- * @returns Membership ID string or 'unknown'
+ * Derives a proper 32-byte key from any key material
+ * @param keyMaterial The raw key material
+ * @returns A 32-byte Buffer suitable for AES-256
  */
-function extractMembershipId(payload: Record<string, unknown>): string {
-  if (!payload.data || typeof payload.data !== 'object') {
-    return 'unknown';
-  }
-
-  const data = payload.data as Record<string, unknown>;
-
-  if (typeof data.membership_id === 'string') return data.membership_id;
-  if (data.membership && typeof (data.membership as { id: string }).id === 'string') {
-    return (data.membership as { id: string }).id;
-  }
-  if (typeof data.id === 'string' && payload.type && typeof payload.type === 'string' && payload.type.includes('membership')) {
-    return data.id;
-  }
-
-  return 'unknown';
+async function deriveKeyFromMaterial(keyMaterial: string): Promise<Buffer> {
+  const salt = Buffer.from('churn-saver-encryption-salt-v1', 'utf8');
+  return await scryptSync(keyMaterial, salt, DEFAULT_CONFIG.keyLength) as Buffer;
 }
+
+/**
+ * Encrypt data using AES-256-GCM with standard parameters
+ * @param data The data to encrypt
+ * @param key Optional encryption key (defaults to environment variable)
+ * @returns Base64url-encoded encrypted data with IV and auth tag
+ * @throws Error if encryption fails
+ */
+export async function encrypt(data: string, key?: string): Promise<string> {
+  try {
+    const rawKey = key || process.env.ENCRYPTION_KEY;
+    
+    if (!rawKey) {
+      throw new Error('Encryption key is required. Set ENCRYPTION_KEY environment variable or provide key parameter.');
+    }
+
+    // Validate and normalize the key
+    const encryptionKey = await validateAndNormalizeKey(rawKey);
+    
+    // Generate a random 12-byte IV (standard for GCM)
+    const iv = randomBytes(DEFAULT_CONFIG.ivLength);
+    
+    // Create cipher with validated key and standard IV
+    const cipher = createCipheriv(DEFAULT_CONFIG.algorithm, encryptionKey, iv) as CipherGCM;
+    
+    let encrypted = cipher.update(data, 'utf8');
+    encrypted = Buffer.concat([encrypted, cipher.final()]);
+    
+    const authTag = cipher.getAuthTag();
+    
+    // Combine IV, encrypted data, and auth tag for storage
+    // Format: IV (12 bytes) + Auth Tag (16 bytes) + Encrypted Data
+    const combined = Buffer.concat([iv, authTag, encrypted]);
+    
+    return combined.toString('base64url');
+    
+  } catch (error) {
+    throw new Error(`Encryption failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * Decrypt data using AES-256-GCM with standard parameters
+ * @param encryptedData Base64url-encoded encrypted data
+ * @param key Optional encryption key (defaults to environment variable)
+ * @returns The decrypted string
+ * @throws Error if decryption fails
+ */
+export async function decrypt(encryptedData: string, key?: string): Promise<string> {
+  try {
+    const rawKey = key || process.env.ENCRYPTION_KEY;
+    
+    if (!rawKey) {
+      throw new Error('Encryption key is required. Set ENCRYPTION_KEY environment variable or provide key parameter.');
+    }
+
+    // Validate and normalize the key
+    const encryptionKey = await validateAndNormalizeKey(rawKey);
+    
+    const combined = Buffer.from(encryptedData, 'base64url');
+    
+    // Extract IV, auth tag, and encrypted data
+    // Format: IV (12 bytes) + Auth Tag (16 bytes) + Encrypted Data
+    const iv = combined.subarray(0, DEFAULT_CONFIG.ivLength);
+    const authTag = combined.subarray(DEFAULT_CONFIG.ivLength, DEFAULT_CONFIG.ivLength + DEFAULT_CONFIG.authTagLength);
+    const encrypted = combined.subarray(DEFAULT_CONFIG.ivLength + DEFAULT_CONFIG.authTagLength);
+    
+    // Create decipher with validated key and extracted IV
+    const decipher = createDecipheriv(DEFAULT_CONFIG.algorithm, encryptionKey, iv) as DecipherGCM;
+    decipher.setAuthTag(authTag);
+    
+    let decrypted = decipher.update(encrypted);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+    
+    return decrypted.toString('utf8');
+    
+  } catch (error) {
+    throw new Error(`Decryption failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * Generate a secure random token
+ * @param length The number of random bytes to generate
+ * @returns Base64url-encoded random token
+ */
+export function generateSecureToken(length: number = 32): string {
+  return randomBytes(length).toString('base64url');
+}
+
+/**
+ * Hash a password using bcrypt (production-ready)
+ * @param password The password to hash
+ * @param saltRounds Optional salt rounds (defaults to 12)
+ * @returns The hashed password
+ */
+export async function hashPassword(password: string, saltRounds: number = 12): Promise<string> {
+  if (!password || password.length === 0) {
+    throw new Error('Password cannot be empty');
+  }
+  
+  return await bcrypt.hash(password, saltRounds);
+}
+
+/**
+ * Compare a password with a bcrypt hash
+ * @param password The password to check
+ * @param hash The bcrypt hash to compare against
+ * @returns True if password matches hash
+ */
+export async function comparePassword(password: string, hash: string): Promise<boolean> {
+  if (!password || password.length === 0) {
+    throw new Error('Password cannot be empty');
+  }
+  
+  if (!hash || hash.length === 0) {
+    throw new Error('Hash cannot be empty');
+  }
+  
+  return await bcrypt.compare(password, hash);
+}
+
+/**
+ * Generate a cryptographically secure random string
+ * @param length The desired length of string
+ * @returns A random string of alphanumeric characters
+ */
+export function generateRandomString(length: number = 16): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const randomValues = randomBytes(length);
+  let result = '';
+  
+  for (let i = 0; i < length; i++) {
+    result += chars[randomValues[i] % chars.length];
+  }
+  
+  return result;
+}
+
+/**
+ * Derive a key from password and salt using scrypt
+ * @param password The password to derive from
+ * @param salt The salt for key derivation
+ * @returns A derived key buffer
+ */
+export async function deriveKey(password: string, salt: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    scrypt(password, salt, DEFAULT_CONFIG.iterations, (err, derivedKey) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      
+      resolve(derivedKey as Buffer);
+    });
+  });
+}
+
+/**
+ * Validates if a string is a properly formatted base64 key
+ * @param key The key to validate
+ * @returns True if key is valid base64
+ */
+export function isValidBase64Key(key: string): boolean {
+  return Base64KeySchema.safeParse(key).success;
+}
+
+/**
+ * Validates if a base64 key is correct length for AES-256
+ * @param key The base64 key to validate
+ * @returns True if key is 32 bytes when decoded
+ */
+export function isCorrectKeyLength(key: string): boolean {
+  try {
+    const decoded = Buffer.from(key, 'base64');
+    return decoded.length === DEFAULT_CONFIG.keyLength;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Generate a properly formatted 32-byte base64 encryption key
+ * @returns A base64-encoded 32-byte key suitable for AES-256
+ */
+export function generateEncryptionKey(): string {
+  return randomBytes(DEFAULT_CONFIG.keyLength).toString('base64');
+}
+
+// Synchronous version of scrypt for key derivation
+const scryptSync = promisify(scrypt);

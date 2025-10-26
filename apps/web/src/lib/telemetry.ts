@@ -3,9 +3,8 @@
 
 import { trace, metrics, context, SpanStatusCode, SpanKind } from '@opentelemetry/api';
 import { NodeSDK } from '@opentelemetry/sdk-node';
-import { Resource } from '@opentelemetry/resources';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
-import { MeterProvider } from '@opentelemetry/sdk-metrics';
+import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
@@ -55,19 +54,19 @@ export class TelemetryService {
     }
 
     try {
-      const resource = new Resource({
-        [SemanticResourceAttributes.SERVICE_NAME]: this.config.serviceName,
-        [SemanticResourceAttributes.SERVICE_VERSION]: this.config.serviceVersion,
-        [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: this.config.environment,
-      });
+      // Configure resource attributes via environment to avoid ESM/type-stripping issues
+      process.env.OTEL_SERVICE_NAME = this.config.serviceName;
+      process.env.OTEL_RESOURCE_ATTRIBUTES = [
+        `${SemanticResourceAttributes.SERVICE_VERSION}=${this.config.serviceVersion}`,
+        `${SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT}=${this.config.environment}`
+      ].join(',');
 
       // Configure exporters based on environment
       const exporters = this.configureExporters();
 
       this.sdk = new NodeSDK({
-        resource,
         traceExporter: exporters.traceExporter,
-        metricExporter: exporters.metricExporter,
+        metricReader: exporters.metricReader,
         instrumentations: [
           new HttpInstrumentation(),
           new FetchInstrumentation(),
@@ -95,8 +94,10 @@ export class TelemetryService {
         traceExporter: new OTLPTraceExporter({
           url: `${this.config.otelExporterEndpoint}/v1/traces`,
         }),
-        metricExporter: new OTLPMetricExporter({
-          url: `${this.config.otelExporterEndpoint}/v1/metrics`,
+        metricReader: new PeriodicExportingMetricReader({
+          exporter: new OTLPMetricExporter({
+            url: `${this.config.otelExporterEndpoint}/v1/metrics`,
+          }),
         }),
       };
     }
@@ -104,7 +105,7 @@ export class TelemetryService {
     // Default to console exporters for development
     return {
       traceExporter: undefined,
-      metricExporter: undefined,
+      metricReader: undefined,
     };
   }
 

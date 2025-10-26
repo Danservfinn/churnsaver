@@ -1,19 +1,19 @@
-// Security metrics API endpoint
-// GET /api/security/metrics - Returns security monitoring data for dashboard
-
 import { NextRequest, NextResponse } from 'next/server';
-import { getRequestContextSDK } from '@/lib/auth/whop-sdk';
+import { getRequestContextSDK } from '@/lib/whop-sdk';
 import { securityMonitor, SecurityEvent } from '@/lib/security-monitoring';
 import { errors } from '@/lib/apiResponse';
 
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     // Authenticate request
     const context = await getRequestContextSDK(request);
     
     // In production, require authentication
     if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
-      return errors.unauthorized('Authentication required');
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
     }
 
     // Parse query parameters
@@ -57,14 +57,17 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     // Authenticate request
     const context = await getRequestContextSDK(request);
     
     // In production, require authentication
     if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
-      return errors.unauthorized('Authentication required');
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
     }
 
     // Parse request body for manual security event reporting
@@ -72,7 +75,10 @@ export async function POST(request: NextRequest) {
     const { category, severity, type, description, metadata } = body;
 
     if (!category || !severity || !type || !description) {
-      return errors.badRequest('Missing required fields: category, severity, type, description');
+      return NextResponse.json(
+        { error: 'Missing required fields: category, severity, type, description' },
+        { status: 400 }
+      );
     }
 
     // Get client information

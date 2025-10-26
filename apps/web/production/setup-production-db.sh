@@ -248,3 +248,7 @@ echo "5. Configure your Whop app webhooks to point to production"
 echo ""
 echo "📖 See production/README.md for detailed deployment instructions"
 
+
+
+
+

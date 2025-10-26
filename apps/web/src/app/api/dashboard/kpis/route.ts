@@ -37,13 +37,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     await initDb();
 
     // Get company context from request
-    const context = getRequestContext(request);
+    const context = await getRequestContext(request);
     const companyId = context.companyId;
 
     // Enforce authentication in production for creator-facing endpoints
     if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
       logger.warn('Unauthorized request to dashboard KPIs - missing valid auth token');
-      return errors.unauthorized('Authentication required');
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
     }
 
     // Apply rate limiting for creator-facing case actions (30/min per company)
@@ -53,17 +56,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
 
     if (!rateLimitResult.allowed) {
-      return errors.unprocessableEntity('Rate limit exceeded', {
-        retryAfter: rateLimitResult.retryAfter,
-        resetAt: rateLimitResult.resetAt.toISOString(),
-      });
+      return NextResponse.json(
+        { error: 'Rate limit exceeded', retryAfter: rateLimitResult.retryAfter, resetAt: rateLimitResult.resetAt.toISOString() },
+        { status: 422 }
+      );
     }
 
     // Validate query parameters using zod schema
     const queryValidation = validateAndTransform(KpiQuerySchema, Object.fromEntries(new URL(request.url).searchParams));
     if (!queryValidation.success) {
       logger.warn('KPI query validation failed', { error: queryValidation.error });
-      return errors.badRequest(`Invalid query parameters: ${queryValidation.error}`);
+      return NextResponse.json(
+        { error: `Invalid query parameters: ${queryValidation.error}` },
+        { status: 400 }
+      );
     }
 
     const windowDays = queryValidation.data.window;
@@ -153,6 +159,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       processingTimeMs: Date.now() - startTime
     });
 
-    return errors.internalServerError('Failed to calculate KPIs');
+    return NextResponse.json(
+      { error: 'Failed to calculate KPIs' },
+      { status: 500 }
+    );
   }
 }

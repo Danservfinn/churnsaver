@@ -12,6 +12,8 @@
 		"test": "node test/auth.test.js && node test/webhooks.test.js && node test/protected-api.test.js && node test/dashboard.test.js && npx tsx test/errorRecovery.test.ts",
 		"test:errorRecovery": "npx tsx test/errorRecovery.test.ts",
 		"test:circuitBreaker": "npx tsx test/errorRecovery.test.ts --grep 'Circuit Breaker'",
+		"test:integration": "node test/integration/*.test.js",
+		"db:migrate": "node scripts/init-db.js",
 		"data-privacy-maintenance": "npx tsx scripts/data-privacy-maintenance.ts"
 	},
 	"dependencies": {
@@ -60,7 +62,7 @@
 		"@types/react": "19.2.2",
 		"@types/uuid": "^10.0.0",
 		"eslint": "^8",
-		"eslint-config-next": "15.0.4",
+		"eslint-config-next": "16.0.0",
 		"jest": "^29.7.0",
 		"jsdom": "^27.0.1",
 		"typescript": "^5"

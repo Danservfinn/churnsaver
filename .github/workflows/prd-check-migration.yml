@@ -35,12 +35,16 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '20'
-        cache: 'npm'
+        cache: 'pnpm'
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 9.15.9
 
     - name: Install dependencies
-      run: |
-        cd apps/web
-        npm ci
+      working-directory: apps/web
+      run: pnpm install --frozen-lockfile
 
     - name: Setup test database (ephemeral)
       run: |

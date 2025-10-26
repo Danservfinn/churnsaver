@@ -31,12 +31,18 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '20'
-        cache: 'npm'
+        cache: 'pnpm'
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 9.15.9
+        run_install: false
 
     - name: Install dependencies
       run: |
         cd apps/web
-        npm ci
+        pnpm install --frozen-lockfile
 
     - name: Pre-flight sanity check
       run: |
@@ -48,12 +54,20 @@ jobs:
           exit 1
         fi
 
-        # Validate migration file exists
-        if [ ! -f "infra/migrations/001_init.sql" ]; then
-          echo "❌ Migration file not found: infra/migrations/001_init.sql"
+        # Validate migration directory exists
+        if [ ! -d "../../infra/migrations" ]; then
+          echo "❌ Migration directory not found: ../../infra/migrations"
           exit 1
         fi
 
+        # Check for migration files
+        MIGRATION_COUNT=$(find ../../infra/migrations -name "*.sql" ! -name "*rollback*" | wc -l)
+        if [ "$MIGRATION_COUNT" -eq 0 ]; then
+          echo "❌ No migration files found in ../../infra/migrations"
+          exit 1
+        fi
+
+        echo "✅ Found $MIGRATION_COUNT migration files"
         echo "✅ Pre-flight checks passed"
 
     - name: Test database connectivity
@@ -133,15 +147,17 @@ jobs:
         }
 
         checkMigrationState().then(state => {
-          console.log('::set-output name=state::' + state);
+          console.log('state=' + state);
+          return state;
         }).catch(() => {
-          console.log('::set-output name=state::error');
+          console.log('state=error');
+          return 'error';
         });
-        " 2>/dev/null || echo "::set-output name=state::error")
+        " 2>/dev/null || echo "state=error")
 
-        # GitHub deprecated set-output, but this maintains compatibility
+        # Use GitHub Output syntax (non-deprecated)
         echo "MIGRATION_STATE=$MIGRATION_STATE"
-        echo "::set-output name=state::$MIGRATION_STATE"
+        echo "state=$MIGRATION_STATE" >> $GITHUB_OUTPUT
 
     - name: Apply migration (if needed)
       if: steps.check-migration.outputs.state == 'needed'
@@ -156,7 +172,7 @@ jobs:
         const { join } = require('path');
         const { Client } = require('pg');
 
-        async function applyMigration() {
+        async function applyAllMigrations() {
           const client = new Client({
             connectionString: '${{ secrets.database_url }}'
           });
@@ -165,35 +181,50 @@ jobs:
             await client.connect();
             console.log('Connected to ${{ inputs.environment }} database');
 
-            // Read migration file
-            const migrationPath = join(process.cwd(), '../../../infra/migrations/001_init.sql');
-            const migrationSQL = readFileSync(migrationPath, 'utf-8');
-            console.log(\`Read \${migrationSQL.length} characters of migration SQL\`);
+            // Get all migration files in order
+            const migrationDir = join(process.cwd(), '../../infra/migrations');
+            const migrationFiles = readdirSync(migrationDir)
+              .filter(file => file.endsWith('.sql') && !file.includes('rollback'))
+              .sort(); // This will sort them in numeric order (001, 002, etc.)
 
-            // Split into statements and execute (skip empty lines)
-            const statements = migrationSQL.split(';').filter(stmt => stmt.trim().length > 0);
+            console.log(\`Found \${migrationFiles.length} migration files to apply\`);
 
-            console.log(\`Executing \${statements.length} SQL statements...\`);
+            for (let fileIndex = 0; fileIndex < migrationFiles.length; fileIndex++) {
+              const fileName = migrationFiles[fileIndex];
+              const migrationPath = join(migrationDir, fileName);
+              const migrationSQL = readFileSync(migrationPath, 'utf-8');
+              
+              console.log(\`\\n📄 Applying migration: \${fileName}\`);
+              console.log(\`Read \${migrationSQL.length} characters of migration SQL\`);
 
-            for (let i = 0; i < statements.length; i++) {
-              const stmt = statements[i].trim();
-              if (stmt) {
-                try {
-                  await client.query(stmt);
-                  console.log(\`✅ Statement \${i + 1}/${statements.length} executed\`);
-                } catch (stmtError) {
-                  // Check if it's a harmless duplicate error
-                  if (stmtError.code === '42P07' && stmt.includes('IF NOT EXISTS')) {
-                    console.log(\`⚠️  Statement \${i + 1} failed but may be safe to ignore (table exists)\`);
-                    console.log('   Error:', stmtError.message.split('\\n')[0]);
-                  } else {
-                    throw stmtError;
+              // Split into statements and execute (skip empty lines)
+              const statements = migrationSQL.split(';').filter(stmt => stmt.trim().length > 0);
+
+              console.log(\`Executing \${statements.length} SQL statements...\`);
+
+              for (let i = 0; i < statements.length; i++) {
+                const stmt = statements[i].trim();
+                if (stmt) {
+                  try {
+                    await client.query(stmt);
+                    console.log(\`✅ Statement \${i + 1}/\${statements.length} executed\`);
+                  } catch (stmtError) {
+                    // Check if it's a harmless duplicate error
+                    if (stmtError.code === '42P07' && stmt.includes('IF NOT EXISTS')) {
+                      console.log(\`⚠️  Statement \${i + 1} failed but may be safe to ignore (table exists)\`);
+                      console.log('   Error:', stmtError.message.split('\\n')[0]);
+                    } else {
+                      console.error(\`❌ Statement failed in \${fileName}:\`, stmtError.message);
+                      throw stmtError;
+                    }
                   }
                 }
               }
+
+              console.log(\`✅ Migration \${fileName} completed\`);
             }
 
-            console.log('✅ Migration application completed');
+            console.log('\\n✅ All migrations applied successfully');
             return true;
 
           } catch (error) {
@@ -205,7 +236,7 @@ jobs:
           }
         }
 
-        applyMigration().catch(() => process.exit(1));
+        applyAllMigrations().catch(() => process.exit(1));
         "
 
     - name: Run post-migration verification
@@ -283,11 +314,14 @@ jobs:
 
     - name: Generate deployment report
       run: |
+        # Count applied migrations
+        MIGRATION_COUNT=$(find ../../infra/migrations -name "*.sql" ! -name "*rollback*" | wc -l)
+        
         echo "# Migration Deployment Report" > migration-deploy-report.md
         echo "- **Status**: ✅ Applied and verified successfully" >> migration-deploy-report.md
         echo "- **Environment**: ${{ inputs.environment }}" >> migration-deploy-report.md
         echo "- **Timestamp**: $(date)" >> migration-deploy-report.md
-        echo "- **Migration file**: infra/migrations/001_init.sql" >> migration-deploy-report.md
+        echo "- **Migration files applied**: $MIGRATION_COUNT files from ../../infra/migrations/" >> migration-deploy-report.md
         echo "- **Tables verified**: events, recovery_cases, creator_settings, recovery_actions" >> migration-deploy-report.md
         echo "- **Result**: Ready for application deployment" >> migration-deploy-report.md
         echo "" >> migration-deploy-report.md

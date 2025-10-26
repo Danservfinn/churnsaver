@@ -31,14 +31,29 @@ export async function initDb(): Promise<void> {
   // Enable SSL for Supabase or when sslmode=require is present
   const isSupabase = env.DATABASE_URL.includes('supabase.com');
   const sslEnabled = isSupabase || env.DATABASE_URL.includes('sslmode=require');
-  logger.info('Database SSL configuration', { sslEnabled });
+  
+  // Security fix: Always validate SSL certificates in production
+  // In development, allow configurable SSL validation for local testing
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const allowInsecureSSL = isDevelopment && process.env.ALLOW_INSECURE_SSL === 'true';
+  
+  logger.info('Database SSL configuration', {
+    sslEnabled,
+    isDevelopment,
+    secureValidation: !allowInsecureSSL
+  });
 
   const pool = new Pool({
     connectionString: env.DATABASE_URL,
     max: 10, // Maximum number of clients in pool
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 2000,
-    ssl: sslEnabled ? { rejectUnauthorized: false } : undefined,
+    // Security fix: Enable proper SSL certificate validation
+    // rejectUnauthorized: true prevents man-in-the-middle attacks
+    // Only allow insecure SSL in explicit development mode with ALLOW_INSECURE_SSL=true
+    ssl: sslEnabled ? {
+      rejectUnauthorized: !allowInsecureSSL,
+    } : undefined,
   });
 
   // Test the connection

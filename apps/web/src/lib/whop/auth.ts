@@ -207,10 +207,36 @@ export class WhopAuthService {
         }
       }
 
-      // In development, skip verification only if explicitly allowed
+      // Security fix: Prevent authentication bypass in production
+      // In development, skip verification only if explicitly allowed with additional safeguards
       if (process.env.NODE_ENV === 'development' && !this.config.apiKey) {
         // Check if insecure dev mode is explicitly allowed
         const allowInsecureDev = process.env.ALLOW_INSECURE_DEV === 'true';
+        
+        // Additional security check: Never allow insecure dev mode if production indicators are present
+        const isProductionLike =
+          process.env.VERCEL_ENV === 'production' ||
+          process.env.DATABASE_URL?.includes('supabase.com') ||
+          process.env.NODE_ENV === 'production';
+        
+        if (isProductionLike) {
+          logger.security('SECURITY ALERT: Attempted to use insecure dev mode in production-like environment', {
+            category: 'security',
+            severity: 'critical',
+            environment: process.env.NODE_ENV,
+            vercelEnv: process.env.VERCEL_ENV,
+            hasApiKey: !!this.config.apiKey,
+            databaseUrl: env.DATABASE_URL ? '[REDACTED]' : 'not set'
+          });
+          
+          throw new AppError(
+            'Insecure development mode is not allowed in production environments',
+            ErrorCode.UNAUTHORIZED,
+            ErrorCategory.AUTHENTICATION,
+            ErrorSeverity.CRITICAL,
+            401
+          );
+        }
         
         if (!allowInsecureDev) {
           logger.security('Insecure development mode blocked - set ALLOW_INSECURE_DEV=true to enable', {
@@ -691,10 +717,14 @@ export class WhopAuthService {
   }
 
   /**
-   * Generate session ID
+   * Generate session ID using cryptographically secure random number generation
+   * Security fix: Replaced Math.random() with crypto.randomBytes() for secure randomness
    */
   private generateSessionId(): string {
-    return `sess_${Date.now()}_${Math.random().toString(36).substr(2, 16)}`;
+    // Use crypto.randomBytes for cryptographically secure random values
+    const randomBytes = require('crypto').randomBytes(16);
+    const randomString = randomBytes.toString('hex').substr(0, 16);
+    return `sess_${Date.now()}_${randomString}`;
   }
 
   /**

@@ -42,14 +42,29 @@ export async function initDbWithRLS(): Promise<void> {
   // Enable SSL for Supabase or when sslmode=require is present
   const isSupabase = env.DATABASE_URL.includes('supabase.com');
   const sslEnabled = isSupabase || env.DATABASE_URL.includes('sslmode=require');
-  logger.info('Database SSL configuration', { sslEnabled });
+  
+  // Security fix: Always validate SSL certificates in production
+  // In development, allow configurable SSL validation for local testing
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const allowInsecureSSL = isDevelopment && process.env.ALLOW_INSECURE_SSL === 'true';
+  
+  logger.info('Database SSL configuration', {
+    sslEnabled,
+    isDevelopment,
+    secureValidation: !allowInsecureSSL
+  });
 
   const pool = new Pool({
     connectionString: env.DATABASE_URL,
     max: 10, // Maximum number of clients in pool
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 2000,
-    ssl: sslEnabled ? { rejectUnauthorized: false } : undefined,
+    // Security fix: Enable proper SSL certificate validation
+    // rejectUnauthorized: true prevents man-in-the-middle attacks
+    // Only allow insecure SSL in explicit development mode with ALLOW_INSECURE_SSL=true
+    ssl: sslEnabled ? {
+      rejectUnauthorized: !allowInsecureSSL,
+    } : undefined,
   });
 
   // Test the connection
@@ -151,8 +166,30 @@ async function validateCompanyContext(companyId?: string): Promise<boolean> {
     return false;
   }
 
-  // Skip validation for development mode with explicit override
-  if (process.env.NODE_ENV === 'development' && process.env.ALLOW_INSECURE_DEV === 'true') {
+  // Security fix: Never skip validation in production-like environments
+  // Only allow in explicit development with additional safeguards
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const allowInsecureDev = process.env.ALLOW_INSECURE_DEV === 'true';
+  
+  // Additional security check: Never allow insecure dev mode if production indicators are present
+  const isProductionLike =
+    process.env.VERCEL_ENV === 'production' ||
+    process.env.DATABASE_URL?.includes('supabase.com') ||
+    process.env.NODE_ENV === 'production';
+  
+  if (isProductionLike && allowInsecureDev) {
+    logger.security('SECURITY ALERT: Attempted to use insecure dev mode in production-like environment', {
+      category: 'security',
+      severity: 'critical',
+      environment: process.env.NODE_ENV,
+      vercelEnv: process.env.VERCEL_ENV,
+      companyId
+    });
+    
+    throw new Error('Insecure development mode is not allowed in production environments');
+  }
+  
+  if (isDevelopment && allowInsecureDev) {
     logger.warn('Development mode: skipping company context validation', { companyId });
     return true;
   }

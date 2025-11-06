@@ -35,7 +35,9 @@ export async function middleware(request: NextRequest) {
   const isProduction = process.env.NODE_ENV === 'production';
 
   // Generate or extract correlation ID
-  const requestId = request.headers.get('x-request-id') || crypto.randomUUID();
+  // Use a simple UUID-like string generator compatible with edge runtime
+  const requestId = request.headers.get('x-request-id') || 
+    `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
   response.headers.set('x-request-id', requestId);
 
   // Enhanced CORS headers with production hardening

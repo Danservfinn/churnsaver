@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { AccessibilityUtils } from '@/lib/accessibility';
 import { getAriaAttributes } from '@/lib/accessibilityConfig';
 
-interface AccessibleNavigationProps extends HTMLAttributes<HTMLElement> {
+interface AccessibleNavigationProps extends Omit<HTMLAttributes<HTMLElement>, 'onToggle'> {
   label?: string;
   orientation?: 'horizontal' | 'vertical';
   collapsible?: boolean;
@@ -13,7 +13,7 @@ interface AccessibleNavigationProps extends HTMLAttributes<HTMLElement> {
   landmark?: boolean;
 }
 
-interface AccessibleNavItemProps extends HTMLAttributes<HTMLAnchorElement | HTMLButtonElement> {
+interface AccessibleNavItemProps extends Omit<HTMLAttributes<HTMLAnchorElement | HTMLButtonElement>, 'onToggle'> {
   href?: string;
   active?: boolean;
   disabled?: boolean;
@@ -24,7 +24,7 @@ interface AccessibleNavItemProps extends HTMLAttributes<HTMLAnchorElement | HTML
   onToggle?: (expanded: boolean) => void;
 }
 
-interface AccessibleNavGroupProps extends HTMLAttributes<HTMLDivElement> {
+interface AccessibleNavGroupProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onToggle'> {
   label: string;
   expanded?: boolean;
   onToggle?: (expanded: boolean) => void;
@@ -260,7 +260,7 @@ const AccessibleNavigation = forwardRef<HTMLElement, AccessibleNavigationProps>(
 AccessibleNavigation.displayName = 'AccessibleNavigation';
 
 // Accessible Nav Item component
-export const AccessibleNavItem = forwardRef<HTMLAnchorElement | HTMLButtonElement, AccessibleNavItemProps>(
+const AccessibleNavItem = forwardRef<HTMLAnchorElement | HTMLButtonElement, AccessibleNavItemProps>(
   ({ 
     className, 
     children, 
@@ -297,7 +297,7 @@ export const AccessibleNavItem = forwardRef<HTMLAnchorElement | HTMLButtonElemen
       'aria-haspopup': submenu ? true : undefined
     };
 
-    const handleClick = (event: React.MouseEvent) => {
+    const handleClick = (event: React.MouseEvent<HTMLAnchorElement | HTMLButtonElement>) => {
       if (disabled) {
         event.preventDefault();
         return;
@@ -414,7 +414,7 @@ export const AccessibleNavItem = forwardRef<HTMLAnchorElement | HTMLButtonElemen
 AccessibleNavItem.displayName = 'AccessibleNavItem';
 
 // Accessible Nav Group component
-export const AccessibleNavGroup = forwardRef<HTMLDivElement, AccessibleNavGroupProps>(
+const AccessibleNavGroup = forwardRef<HTMLDivElement, AccessibleNavGroupProps>(
   ({ 
     className, 
     children, 
@@ -501,7 +501,7 @@ export const AccessibleNavGroup = forwardRef<HTMLDivElement, AccessibleNavGroupP
 AccessibleNavGroup.displayName = 'AccessibleNavGroup';
 
 // Accessible Breadcrumb component
-export const AccessibleBreadcrumb = forwardRef<HTMLElement, AccessibleBreadcrumbProps>(
+const AccessibleBreadcrumb = forwardRef<HTMLElement, AccessibleBreadcrumbProps>(
   ({ className, items, ...props }, ref) => {
     const breadcrumbId = React.useId();
     

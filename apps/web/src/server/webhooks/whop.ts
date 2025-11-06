@@ -6,11 +6,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { initDb, sql } from '@/lib/db';
 import { env, additionalEnv } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { WebhookPayloadSchema, validateAndTransform } from '@/lib/validation';
 import { processWebhookEvent, ProcessedEvent } from '@/server/services/eventProcessor';
 import { whopsdk, getWebhookCompanyContext } from '@/lib/whop-sdk';
 import { jobQueue } from '@/server/services/jobQueue';
 import { encryptWebhookPayload, deriveMinimalPayload } from '@/lib/whop/dataTransformers';
 import { securityMonitor } from '@/lib/security-monitoring';
+import {
+  errorHandler,
+  ErrorCode,
+  ErrorCategory,
+  ErrorSeverity,
+  createDatabaseError,
+  createExternalApiError,
+  createBusinessLogicError,
+  AppError
+} from '@/lib/errorHandler';
 
 export interface WhopWebhookPayload {
   id?: string; // whop_event_id (may be in id or whop_event_id)
@@ -84,6 +95,15 @@ export function verifyWebhookSignature(
       validationErrors.push(timestampValidation.error || 'Invalid timestamp');
     }
 
+    // Log security warnings from timestamp validation
+    if (timestampValidation.warning) {
+      logger.warn('Webhook timestamp security warning', {
+        warning: timestampValidation.warning,
+        timestamp: timestampHeader,
+        error_category: 'security'
+      });
+    }
+
     // Parse signature header
     const provided = parseSignatureHeader(signatureHeader);
     if (!provided) {
@@ -130,7 +150,7 @@ export function verifyWebhookSignature(
 }
 
 // Separate timestamp validation to prevent timing attacks in main function
-function validateTimestamp(timestampHeader?: string | null): { valid: boolean; error?: string } {
+function validateTimestamp(timestampHeader?: string | null): { valid: boolean; error?: string; warning?: string } {
   // Require X-Whop-Timestamp in production
   if (process.env.NODE_ENV === 'production' && !timestampHeader) {
     return { valid: false, error: 'Missing X-Whop-Timestamp header in production' };
@@ -144,6 +164,21 @@ function validateTimestamp(timestampHeader?: string | null): { valid: boolean; e
     }
     const nowSec = Math.floor(Date.now() / 1000);
     const skewSec = Math.abs(nowSec - ts);
+
+    // Log security warnings for timestamps close to expiration
+    const warningThreshold = Math.floor(additionalEnv.WEBHOOK_TIMESTAMP_SKEW_SECONDS * 0.8);
+    if (skewSec > warningThreshold) {
+      const warning = `Webhook timestamp approaching expiration: ${skewSec}s skew, allowed ${additionalEnv.WEBHOOK_TIMESTAMP_SKEW_SECONDS}s`;
+      logger.warn('Webhook timestamp nearing expiration threshold', {
+        timestamp: timestampHeader,
+        skewSeconds: skewSec,
+        allowedSkewSeconds: additionalEnv.WEBHOOK_TIMESTAMP_SKEW_SECONDS,
+        warningThreshold,
+        error_category: 'security'
+      });
+      return { valid: true, warning };
+    }
+
     if (skewSec > additionalEnv.WEBHOOK_TIMESTAMP_SKEW_SECONDS) {
       return {
         valid: false,
@@ -363,43 +398,38 @@ export async function handleWhopWebhook(request: NextRequest): Promise<NextRespo
       return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 });
     }
 
-    // Validate required fields (accept both id and whop_event_id)
-    if (!payload) {
-      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
-    }
-    
-    const eventId: string = (payload.id || payload.whop_event_id)!;
-    lastEventId = eventId;
-    if (!eventId || !payload.type) {
+    // Validate webhook payload using Zod schema
+    const validation = validateAndTransform(WebhookPayloadSchema, payload);
+    if (!validation.success) {
       const clientIP = request.headers.get('x-forwarded-for') ||
                        request.headers.get('x-real-ip') ||
                        'unknown';
 
-      logger.warn('Webhook payload missing required fields', {
-        hasId: !!eventId,
-        hasType: !!payload.type,
-        payloadKeys: payload ? Object.keys(payload) : 'null',
+      logger.warn('Webhook payload validation failed', {
+        error: validation.error,
+        payloadKeys: payload ? Object.keys(payload) : [],
         error_category: 'validation'
       });
 
-      // Report to security monitoring
       await securityMonitor.processSecurityEvent({
         category: 'authentication',
         severity: 'medium',
         type: 'webhook_payload_invalid',
-        description: 'Webhook payload missing required fields',
+        description: `Webhook payload validation failed: ${validation.error}`,
         ip: clientIP,
         endpoint: '/api/webhooks/whop',
         metadata: {
-          hasId: !!eventId,
-          hasType: !!payload.type,
           payloadKeys: payload ? Object.keys(payload) : [],
-          eventType: payload.type || 'unknown'
+          error: validation.error
         }
       });
 
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+      return NextResponse.json({ error: `Invalid payload: ${validation.error}` }, { status: 400 });
     }
+
+    const validated = validation.data;
+    const eventId: string = (validated.id || validated.whop_event_id)!;
+    lastEventId = eventId;
 
     // Check idempotency - if event already processed, return OK immediately
     const existingEvent = await sql.select<{ id: string }>(

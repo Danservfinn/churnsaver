@@ -10,6 +10,7 @@ export interface RequestContext {
   companyId: string;
   userId: string;
   isAuthenticated: boolean;
+  role?: string;
 }
 
 /**

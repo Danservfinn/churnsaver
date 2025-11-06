@@ -10,7 +10,7 @@ import { gzip } from 'zlib';
 import { sql } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { encrypt, generateSecureToken } from '@/lib/encryption';
-import { 
+import type { 
   DataExportRequest, 
   DataExportFile, 
   DataExportAuditLog,
@@ -24,14 +24,8 @@ import {
   ExportValidationResult,
   ExportRateLimitInfo,
   ExportCleanupResult,
-  DataExportError,
-  ExportFormat,
-  ExportStatus,
-  ExportDataType,
   ExportAuditAction,
   ExportActorType,
-  CompressionType,
-  ExportLimits,
   ExportUserData,
   ExportCaseData,
   ExportEventData,
@@ -40,6 +34,8 @@ import {
   ExportSettingsData,
   ExportConsentRecordData
 } from '@/types/dataExport';
+import { ExportFormat, ExportStatus, ExportDataType, CompressionType } from '@/types/dataExport';
+import { ExportLimits, DataExportError } from '@/types/dataExport';
 
 // Constants for file storage
 const EXPORT_DIR = process.env.EXPORT_DIR || '/tmp/exports';
@@ -583,7 +579,7 @@ async function exportEventData(options: ExportProcessingOptions): Promise<Export
     if (!options.include_sensitive_data) {
       return events.map(event => ({
         ...event,
-        payload: '[REDACTED]'
+        payload: { redacted: true } as Record<string, any>
       }));
     }
 
@@ -970,8 +966,8 @@ async function readFile(filePath: string): Promise<Buffer> {
     const readStream = createReadStream(filePath);
     const chunks: Buffer[] = [];
 
-    readStream.on('data', (chunk) => {
-      chunks.push(chunk);
+    readStream.on('data', (chunk: string | Buffer) => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     });
 
     readStream.on('end', () => {
@@ -1089,3 +1085,10 @@ export async function cleanupExpiredExports(): Promise<ExportCleanupResult> {
     };
   }
 }
+export {
+  DataExportError,
+  ExportStatus,
+  ExportFormat,
+  ExportDataType,
+  CreateExportRequestRequest
+};

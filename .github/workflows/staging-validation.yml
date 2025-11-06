@@ -1,0 +1,103 @@
+name: Staging Deployment Validation
+
+on:
+  deployment_status:
+    types: [success]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to validate'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+
+jobs:
+  validate-staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.15.9
+
+      - name: Install dependencies
+        working-directory: apps/web
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright
+        run: |
+          pnpm exec playwright install --with-deps
+
+      - name: Run E2E tests against staging
+        run: |
+          BASE_URL=${{ secrets.STAGING_URL || 'https://staging.churnsaver.app' }} \
+          pnpm test:e2e
+        env:
+          BASE_URL: ${{ secrets.STAGING_URL || 'https://staging.churnsaver.app' }}
+          NODE_ENV: staging
+
+      - name: Run smoke tests
+        run: |
+          # Health check
+          curl -f ${{ secrets.STAGING_URL || 'https://staging.churnsaver.app' }}/api/health || exit 1
+          
+          # Database connectivity check
+          curl -f ${{ secrets.STAGING_URL || 'https://staging.churnsaver.app' }}/api/health/database || exit 1
+          
+          # Webhook endpoint check
+          curl -f ${{ secrets.STAGING_URL || 'https://staging.churnsaver.app' }}/api/health/webhooks || exit 1
+
+      - name: Validate configuration
+        run: |
+          # Check environment variables are set
+          echo "Validating staging configuration..."
+          
+          # Verify critical endpoints are accessible
+          ENDPOINTS=(
+            "/api/health"
+            "/api/dashboard/kpis"
+          )
+          
+          BASE_URL=${{ secrets.STAGING_URL || 'https://staging.churnsaver.app' }}
+          
+          for endpoint in "${ENDPOINTS[@]}"; do
+            echo "Checking $endpoint..."
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL$endpoint" || echo "000")
+            if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "401" ]; then
+              echo "❌ $endpoint returned $HTTP_CODE"
+              exit 1
+            fi
+            echo "✅ $endpoint returned $HTTP_CODE"
+          done
+
+      - name: Upload E2E test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: staging-e2e-results
+          path: |
+            playwright-report/
+            test-results/
+
+      - name: Validation summary
+        if: always()
+        run: |
+          echo "## Staging Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: Staging" >> $GITHUB_STEP_SUMMARY
+          echo "**Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**URL**: ${{ secrets.STAGING_URL || 'https://staging.churnsaver.app' }}" >> $GITHUB_STEP_SUMMARY
+

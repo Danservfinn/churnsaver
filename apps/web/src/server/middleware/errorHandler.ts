@@ -141,7 +141,7 @@ export class ErrorHandler {
       this.sanitizeError(appError) : appError;
 
     // Create and return error response
-    return apiError(sanitizedError, context, additionalContext);
+    return apiError(sanitizedError, context);
   }
 
   // Determine if error is retryable
@@ -154,10 +154,10 @@ export class ErrorHandler {
   // Determine if error is security-related
   private isSecurityError(error: AppError): boolean {
     return error.category === ErrorCategory.SECURITY ||
-           error.code === ErrorCode.SECURITY_VIOLATION ||
-           error.code === ErrorCode.SUSPICIOUS_ACTIVITY ||
-           error.code === ErrorCode.INVALID_TOKEN ||
-           error.code === ErrorCode.UNAUTHORIZED;
+           error.category === ErrorCategory.AUTHENTICATION ||
+           error.category === ErrorCategory.AUTHORIZATION ||
+           error.statusCode === 401 ||
+           error.statusCode === 403;
   }
 
   // Log successful requests
@@ -202,7 +202,7 @@ export class ErrorHandler {
       isRetryable: errorInfo.isRetryable,
       company_id: context.companyId,
       user_id: context.userId,
-      stack: error.context?.stack,
+      stack: error.stack || (error.details as any)?.stack,
       ...additionalContext
     });
 
@@ -223,7 +223,7 @@ export class ErrorHandler {
       await securityMonitor.processSecurityEvent({
         category: 'authentication',
         severity: error.severity === ErrorSeverity.CRITICAL ? 'critical' : 'high',
-        type: error.code.toLowerCase(),
+        type: String(error.code).toLowerCase(),
         description: error.message,
         ip: context.ip,
         userAgent: context.userAgent,
@@ -250,13 +250,13 @@ export class ErrorHandler {
   // Sanitize error details for client responses
   private sanitizeError(error: AppError): AppError {
     // Remove sensitive information from error details
-    const sanitizedContext = { ...error.context };
+    const sanitizedDetails = error.details ? { ...error.details } : {};
     
     // Remove potential sensitive fields
     const sensitiveFields = ['password', 'secret', 'token', 'key', 'signature', 'stack'];
     sensitiveFields.forEach(field => {
-      if (sanitizedContext && field in sanitizedContext) {
-        sanitizedContext[field] = '[REDACTED]';
+      if (sanitizedDetails && field in sanitizedDetails) {
+        sanitizedDetails[field] = '[REDACTED]';
       }
     });
 
@@ -267,9 +267,9 @@ export class ErrorHandler {
       error.category,
       error.severity,
       error.statusCode,
+      error.isOperational,
       error.retryable,
-      error.retryAfter,
-      sanitizedContext
+      sanitizedDetails
     );
   }
 }
@@ -309,11 +309,20 @@ export const handlers = {
 
   // Handler for external service errors
   externalServiceError: (service: string, message: string = 'External service error', details?: any) =>
-    new AppError(`${service}: ${message}`, ErrorCode.EXTERNAL_SERVICE_ERROR, ErrorCategory.EXTERNAL_SERVICE, ErrorSeverity.HIGH, 500, true, undefined, { service, ...details }),
+    new AppError(`${service}: ${message}`, ErrorCode.BAD_GATEWAY, ErrorCategory.EXTERNAL_SERVICE, ErrorSeverity.HIGH, 500, true, false, { service, ...details }),
 
   // Handler for rate limiting
   rateLimitError: (retryAfter: number, details?: any) =>
-    new AppError('Rate limit exceeded', ErrorCode.RATE_LIMITED, ErrorCategory.RATE_LIMIT, ErrorSeverity.MEDIUM, 422, true, retryAfter, details)
+    new AppError('Rate limit exceeded', ErrorCode.TOO_MANY_REQUESTS, ErrorCategory.RATE_LIMIT, ErrorSeverity.MEDIUM, 429, true, false, { retryAfter, ...details }),
+
+  // Handler for request size limits
+  payloadTooLargeError: (limit: string, actualSize: string, details?: any) =>
+    new AppError('Request payload too large', ErrorCode.BAD_REQUEST, ErrorCategory.VALIDATION, ErrorSeverity.MEDIUM, 413, false, undefined, {
+      limit,
+      actualSize,
+      suggestion: `Maximum allowed size is ${limit}`,
+      ...details
+    })
 };
 
 // Utility function to create standardized success responses
@@ -322,7 +331,7 @@ export function createSuccessResponse<T>(
   context: RequestContext,
   statusCode: number = 200
 ): NextResponse {
-  return apiSuccess(data, context, statusCode);
+  return apiSuccess(data, context);
 }
 
 // Utility function to create standardized error responses
@@ -335,5 +344,5 @@ export function createErrorResponse(
     const appError = new AppError(error, ErrorCode.INTERNAL_SERVER_ERROR, ErrorCategory.SYSTEM, ErrorSeverity.MEDIUM, 500, false, undefined, details);
     return apiError(appError, context);
   }
-  return apiError(error, context, details);
+  return apiError(error, context);
 }

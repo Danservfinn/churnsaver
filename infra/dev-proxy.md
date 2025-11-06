@@ -44,9 +44,12 @@ WHOP_APP_ID=app_oU8bWaXOsDs6PO
 
 ### Setup Steps
 
-1. Copy `.env.development` to `.env.local`:
+1. Copy environment template to `.env.local`:
    ```bash
-   cp .env.development .env.local
+   # From apps/web directory
+   cp env.example .env.local
+   # Or for minimal Whop template setup:
+   cp env.development.template .env.local
    ```
 
 2. Update `.env.local` with your actual Whop credentials from the dashboard
@@ -94,10 +97,14 @@ For local testing without real Whop iframe:
 ### Development Mode
 
 ```bash
-npm run dev
+# Using pnpm (recommended)
+pnpm dev
+
+# The dev script uses whop-proxy automatically:
+# "dev": "whop-proxy --command 'next dev --turbopack'"
 ```
 
-The app will start on `http://localhost:3000` and automatically reload when environment variables change.
+The app will start on `http://localhost:3000` and automatically reload when environment variables change. The `whop-proxy` command automatically configures the iframe context for local development.
 
 ### Testing in Whop Iframe
 

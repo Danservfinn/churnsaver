@@ -1,10 +1,17 @@
+import { requestSizeLimitMiddleware } from '@/middleware/requestSizeLimit';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getRequestContextSDK } from '@/lib/whop-sdk';
 import { logger } from '@/lib/logger';
 import { setRequestContext, clearRequestContext } from '@/lib/db-rls';
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
+  // Check request size limits first (before other processing)
+  const sizeCheck = await requestSizeLimitMiddleware(request);
+  if (sizeCheck) {
+    return sizeCheck; // Return early if request size exceeds limits
+  }
+
   // Only apply security headers to API routes
   if (!request.nextUrl.pathname.startsWith('/api')) {
     return NextResponse.next();
@@ -209,8 +216,5 @@ export const config = {
 
 export const runtime = 'experimental-edge';
 
-// Clear RLS context at the end of request lifecycle
-// Note: In Edge Runtime, we need to ensure cleanup happens
-process.on('beforeExit', () => {
-  clearRequestContext();
-});
+// Note: In Edge Runtime, cleanup happens automatically at the end of request
+// process.on is not available in Edge Runtime, so we rely on automatic cleanup

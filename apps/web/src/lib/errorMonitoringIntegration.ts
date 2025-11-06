@@ -139,7 +139,7 @@ export class ErrorMonitoringIntegration {
       this.severityCounts.set(severity, 0);
     });
     Object.values(ErrorCode).forEach(code => {
-      this.codeCounts.set(code, 0);
+      this.codeCounts.set(code as ErrorCode, 0);
     });
 
     // Initialize security event counters
@@ -185,7 +185,7 @@ export class ErrorMonitoringIntegration {
   private updateErrorCounts(error: AppError): void {
     this.categoryCounts.set(error.category, (this.categoryCounts.get(error.category) || 0) + 1);
     this.severityCounts.set(error.severity, (this.severityCounts.get(error.severity) || 0) + 1);
-    this.codeCounts.set(error.code, (this.codeCounts.get(error.code) || 0) + 1);
+      this.codeCounts.set(error.code as ErrorCode, (this.codeCounts.get(error.code as ErrorCode) || 0) + 1);
   }
 
   // Record error metrics
@@ -198,7 +198,7 @@ export class ErrorMonitoringIntegration {
     metrics.recordCounter(`${metricsPrefix}.errors.total`, 1, {
       category: error.category,
       severity: error.severity,
-      code: error.code,
+      code: String(error.code),
       endpoint: safeEndpoint,
       method: safeMethod
     });
@@ -207,7 +207,7 @@ export class ErrorMonitoringIntegration {
     logger.metric('error.occurred', 1, {
       error_category: error.category,
       error_severity: error.severity,
-      error_code: error.code,
+      error_code: String(error.code),
       endpoint: safeEndpoint,
       retryable: error.retryable.toString()
     });
@@ -263,7 +263,7 @@ export class ErrorMonitoringIntegration {
     // Check for specific error patterns
     if (this.shouldAlertForError(error)) {
       await this.triggerAlert('error_pattern', {
-        errorCode: error.code,
+        errorCode: String(error.code),
         errorCategory: error.category,
         severity: error.severity,
         message: error.message,
@@ -288,7 +288,7 @@ export class ErrorMonitoringIntegration {
         category: error.category === ErrorCategory.SECURITY ? 'intrusion' : 'anomaly',
         severity: error.severity === ErrorSeverity.CRITICAL ? 'critical' :
                   error.severity === ErrorSeverity.HIGH ? 'high' : 'medium',
-        type: error.code.toLowerCase(),
+        type: String(error.code).toLowerCase(),
         description: error.message,
         ip: errorContext.ip || context.ip,
         userAgent: errorContext.userAgent || context.userAgent,
@@ -297,7 +297,7 @@ export class ErrorMonitoringIntegration {
         companyId: context.companyId,
         metadata: {
           requestId: errorContext.requestId,
-          errorCode: error.code,
+          errorCode: String(error.code),
           errorCategory: error.category,
           method: context.method,
           timestamp: new Date().toISOString()
@@ -372,9 +372,7 @@ export class ErrorMonitoringIntegration {
   private isSecurityRelevant(error: AppError): boolean {
     return error.category === ErrorCategory.SECURITY ||
            error.category === ErrorCategory.AUTHENTICATION ||
-           error.category === ErrorCategory.AUTHORIZATION ||
-           error.code === ErrorCode.SECURITY_VIOLATION ||
-           error.code === ErrorCode.SUSPICIOUS_ACTIVITY;
+           error.category === ErrorCategory.AUTHORIZATION;
   }
 
   // Trigger alert

@@ -294,7 +294,7 @@ export class DebugService {
 
       // Check if log level is allowed by session
       if (!this.isLogLevelAllowed(request.level, session.debugLevel)) {
-        return; // Skip log if level not allowed
+        throw new Error('Log level not allowed for this session'); // Skip log if level not allowed
       }
 
       // Redact sensitive data

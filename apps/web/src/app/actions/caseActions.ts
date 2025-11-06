@@ -4,40 +4,44 @@ import { revalidatePath } from 'next/cache';
 import { nudgeCaseAgain, cancelRecoveryCase, terminateMembership } from '@/server/services/cases';
 import { logger } from '@/lib/logger';
 import { createActionResponse } from '@/lib/common/formatters';
+import { validateAndTransform, CaseActionSchema } from '@/lib/validation';
 
 // Server actions for case management
 
 export async function nudgeCase(formData: FormData) {
-  const caseId = formData.get('caseId') as string;
-
-  if (!caseId) {
-    logger.error('Nudge case action: missing caseId');
-    return createActionResponse(false, 'Case ID is required');
+  const rawCaseId = formData.get('caseId');
+  const validation = validateAndTransform(CaseActionSchema, { caseId: typeof rawCaseId === 'string' ? rawCaseId : '' });
+  if (!validation.success) {
+    logger.warn('Nudge case action: validation failed', { error: validation.error });
+    return createActionResponse(false, `Invalid input: ${validation.error}`);
   }
+  const { caseId } = validation.data;
 
   return handleCaseAction('nudge', caseId, () => nudgeCaseAgain(caseId, 'unknown'),
     'Nudge sent successfully', 'Failed to send nudge');
 }
 
 export async function cancelCase(formData: FormData) {
-  const caseId = formData.get('caseId') as string;
-
-  if (!caseId) {
-    logger.error('Cancel case action: missing caseId');
-    return createActionResponse(false, 'Case ID is required');
+  const rawCaseId = formData.get('caseId');
+  const validation = validateAndTransform(CaseActionSchema, { caseId: typeof rawCaseId === 'string' ? rawCaseId : '' });
+  if (!validation.success) {
+    logger.warn('Cancel case action: validation failed', { error: validation.error });
+    return createActionResponse(false, `Invalid input: ${validation.error}`);
   }
+  const { caseId } = validation.data;
 
   return handleCaseAction('cancel', caseId, () => cancelRecoveryCase(caseId, 'unknown'),
     'Case cancelled successfully', 'Failed to cancel case (may already be closed)');
 }
 
 export async function terminateCaseMembership(formData: FormData) {
-  const caseId = formData.get('caseId') as string;
-
-  if (!caseId) {
-    logger.error('Terminate membership action: missing caseId');
-    return createActionResponse(false, 'Case ID is required');
+  const rawCaseId = formData.get('caseId');
+  const validation = validateAndTransform(CaseActionSchema, { caseId: typeof rawCaseId === 'string' ? rawCaseId : '' });
+  if (!validation.success) {
+    logger.warn('Terminate membership action: validation failed', { error: validation.error });
+    return createActionResponse(false, `Invalid input: ${validation.error}`);
   }
+  const { caseId } = validation.data;
 
   return handleCaseAction('terminate', caseId, () => terminateMembership(caseId, 'unknown'),
     'Membership terminated successfully', 'Failed to terminate membership');
@@ -70,6 +74,12 @@ async function handleCaseAction(
     return createActionResponse(false, `An error occurred while ${action}ing case`);
   }
 }
+
+
+
+
+
+
 
 
 

@@ -42,13 +42,13 @@ class JobQueueService {
       await this.boss.start();
 
       // Register simplified single handlers (flattened from dual-layer approach)
-      await this.boss.work(this.WEBHOOK_PROCESSING_JOB, async (job: PgBoss.Job<JobData>) => {
+      await this.boss.work(this.WEBHOOK_PROCESSING_JOB, (async (job: PgBoss.Job<JobData>) => {
         return await this.processWebhookJob(job);
-      });
+      }) as any);
 
-      await this.boss.work(this.REMINDER_PROCESSING_JOB, async (job: PgBoss.Job<{ companyId: string }>) => {
+      await this.boss.work(this.REMINDER_PROCESSING_JOB, (async (job: PgBoss.Job<{ companyId: string }>) => {
         return await this.processReminderJob(job);
-      });
+      }) as any);
       this.initialized = true;
 
       logger.info('Job queue service initialized', {

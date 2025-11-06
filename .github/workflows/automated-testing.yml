@@ -142,10 +142,82 @@ jobs:
             test-results/
             coverage/
 
+  migration-tests:
+    runs-on: ubuntu-latest
+    name: Migration Tests
+    needs: integration-tests
+    
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: churn_saver_test
+          POSTGRES_USER: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.15.9
+
+      - name: Install dependencies
+        working-directory: apps/web
+        run: pnpm install --frozen-lockfile
+
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+
+      - name: Setup test database
+        run: |
+          psql -h localhost -p 5432 -U postgres -d postgres -c "
+            DROP DATABASE IF EXISTS test_migrations;
+            CREATE DATABASE test_migrations;
+            GRANT ALL PRIVILEGES ON DATABASE test_migrations TO postgres;
+          "
+
+      - name: Run migration tests
+        working-directory: apps/web
+        run: |
+          export NODE_ENV=test
+          export TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test_migrations"
+          pnpm test test/migrations/migration-test.ts
+        env:
+          NODE_ENV: test
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_migrations
+
+      - name: Upload migration test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: migration-test-results
+          path: |
+            test-results/
+
   e2e-tests:
     runs-on: ubuntu-latest
     name: End-to-End Tests
-    needs: integration-tests
+    needs: [integration-tests, migration-tests]
     
     steps:
       - name: Checkout repository
@@ -175,22 +247,14 @@ jobs:
         run: pnpm build
 
       - name: Run E2E tests
+        working-directory: apps/web
         run: |
-          # Start application in background
-          pnpm start &
-          APP_PID=$!
-          
-          # Wait for application to start
-          sleep 30
-          
-          # Run E2E tests
-          if [ -d "test/e2e" ]; then
-            echo "Running E2E tests"
-            pnpm test:e2e || true
-          fi
-          
-          # Kill application
-          kill $APP_PID
+          # Playwright webServer will start the app automatically
+          # Just run the tests
+          pnpm test:e2e
+        env:
+          NODE_ENV: test
+          BASE_URL: http://localhost:3000
 
       - name: Upload E2E test results
         uses: actions/upload-artifact@v4
@@ -229,32 +293,54 @@ jobs:
         run: npm install -g @lhci/cli@0.12.x
 
       - name: Build application
+        working-directory: apps/web
         run: pnpm build
 
-      - name: Run performance tests
+      - name: Start application
+        working-directory: apps/web
         run: |
-          # Start application
           pnpm start &
-          APP_PID=$!
-          
-          # Wait for application to start
-          sleep 30
-          
-          # Run Lighthouse performance tests
+          echo $! > app.pid
+        env:
+          NODE_ENV: test
+
+      - name: Wait for application
+        run: |
+          timeout 60 bash -c 'until curl -f http://localhost:3000/api/health; do sleep 2; done'
+
+      - name: Run k6 load tests
+        uses: grafana/k6-action@v0.3.0
+        with:
+          filename: apps/web/test/performance/k6-load-test.js
+          cloud: false
+          options: '--summary-export=k6-results.json'
+        env:
+          BASE_URL: http://localhost:3000
+          WHOP_WEBHOOK_SECRET: ${{ secrets.WHOP_WEBHOOK_SECRET || 'test_webhook_secret' }}
+
+      - name: Run Lighthouse performance tests
+        working-directory: apps/web
+        run: |
           lhci autorun \
             --config=.lighthouserc.js \
-            --upload.target=temporary-public-storage
-          
-          # Kill application
-          kill $APP_PID
+            --upload.target=temporary-public-storage || true
         env:
           LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
 
+      - name: Stop application
+        if: always()
+        run: |
+          if [ -f app.pid ]; then
+            kill $(cat app.pid) || true
+          fi
+
       - name: Upload performance test results
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: performance-test-results
           path: |
+            k6-results.json
             .lighthouse-ci/
 
   accessibility-tests:
@@ -325,7 +411,7 @@ jobs:
   test-coverage:
     runs-on: ubuntu-latest
     name: Test Coverage Analysis
-    needs: [unit-tests, integration-tests, e2e-tests]
+    needs: [unit-tests, integration-tests, migration-tests, e2e-tests]
     if: always()
     
     steps:
@@ -383,12 +469,12 @@ jobs:
             
             echo "Current coverage: $COVERAGE%"
             
-            # Check if coverage meets threshold (80%)
-            if (( $(echo "$COVERAGE < 80" | bc -l) )); then
-              echo "❌ Coverage below 80% threshold"
+            # Check if coverage meets threshold (85%)
+            if (( $(echo "$COVERAGE < 85" | bc -l) )); then
+              echo "❌ Coverage below 85% threshold"
               exit 1
             else
-              echo "✅ Coverage meets 80% threshold"
+              echo "✅ Coverage meets 85% threshold"
             fi
           else
             echo "⚠️ No coverage report found"
@@ -410,10 +496,10 @@ jobs:
                 let comment = `## 📊 Test Coverage Report\n\n`;
                 comment += `**Coverage**: ${coverage.toFixed(2)}%\n\n`;
                 
-                if (coverage >= 80) {
-                  comment += `✅ **Status**: PASSED - Meets 80% threshold\n\n`;
+                if (coverage >= 85) {
+                  comment += `✅ **Status**: PASSED - Meets 85% threshold\n\n`;
                 } else {
-                  comment += `❌ **Status**: FAILED - Below 80% threshold\n\n`;
+                  comment += `❌ **Status**: FAILED - Below 85% threshold\n\n`;
                   comment += `Please add more tests to improve coverage before merging.\n\n`;
                 }
                 
@@ -437,7 +523,7 @@ jobs:
   test-summary:
     runs-on: ubuntu-latest
     name: Test Summary
-    needs: [unit-tests, integration-tests, e2e-tests, performance-tests, accessibility-tests, test-coverage]
+    needs: [unit-tests, integration-tests, migration-tests, e2e-tests, performance-tests, accessibility-tests, test-coverage]
     if: always()
     
     steps:
@@ -458,6 +544,7 @@ jobs:
           # Initialize test status
           UNIT_TESTS="✅ Passed"
           INTEGRATION_TESTS="✅ Passed"
+          MIGRATION_TESTS="✅ Passed"
           E2E_TESTS="✅ Passed"
           PERFORMANCE_TESTS="✅ Passed"
           ACCESSIBILITY_TESTS="✅ Passed"
@@ -498,7 +585,7 @@ jobs:
           # Check coverage
           if [ -f "test-artifacts/combined-coverage-report/combined-coverage.json" ]; then
             COVERAGE_PERCENT=$(cat test-artifacts/combined-coverage-report/combined-coverage.json | jq -r '.total.lines.pct // 0')
-            if (( $(echo "$COVERAGE_PERCENT < 80" | bc -l) )); then
+            if (( $(echo "$COVERAGE_PERCENT < 85" | bc -l) )); then
               COVERAGE="❌ Failed"
             fi
           fi
@@ -510,6 +597,7 @@ jobs:
           echo "|-------------|--------|---------|" >> $GITHUB_STEP_SUMMARY
           echo "| Unit Tests | $UNIT_TESTS | Core functionality tests |" >> $GITHUB_STEP_SUMMARY
           echo "| Integration Tests | $INTEGRATION_TESTS | API and database tests |" >> $GITHUB_STEP_SUMMARY
+          echo "| Migration Tests | $MIGRATION_TESTS | Database migration tests |" >> $GITHUB_STEP_SUMMARY
           echo "| E2E Tests | $E2E_TESTS | End-to-end user workflows |" >> $GITHUB_STEP_SUMMARY
           echo "| Performance Tests | $PERFORMANCE_TESTS | Lighthouse performance scores |" >> $GITHUB_STEP_SUMMARY
           echo "| Accessibility Tests | $ACCESSIBILITY_TESTS | WCAG compliance tests |" >> $GITHUB_STEP_SUMMARY
@@ -517,7 +605,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           
           # Overall status
-          if [[ "$UNIT_TESTS" == "✅ Passed" && "$INTEGRATION_TESTS" == "✅ Passed" && "$E2E_TESTS" == "✅ Passed" && "$COVERAGE" == "✅ Passed" ]]; then
+          if [[ "$UNIT_TESTS" == "✅ Passed" && "$INTEGRATION_TESTS" == "✅ Passed" && "$MIGRATION_TESTS" == "✅ Passed" && "$E2E_TESTS" == "✅ Passed" && "$COVERAGE" == "✅ Passed" ]]; then
             echo "## 🎉 Overall Status: PASSED" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "All test suites are passing! Ready for merge." >> $GITHUB_STEP_SUMMARY
@@ -540,6 +628,7 @@ jobs:
             const testResults = {
               unit: false,
               integration: false,
+              migration: false,
               e2e: false,
               coverage: false
             };

@@ -16,6 +16,86 @@ Webhooks are HTTP callbacks that notify external systems when specific events oc
 - **Notification Systems**: Alert internal teams about high-priority recovery cases
 - **External Workflows**: Trigger automation workflows in tools like Zapier or Integromat
 
+## Performance Requirements
+
+### Non-Functional Requirements (NFR)
+
+Per PRD Section 6, Churn Saver has the following performance targets:
+
+- **Webhook Handler p95 < 1s**: 95th percentile response time for webhook processing must be under 1 second
+- **Idempotent Processing**: Duplicate events must be handled without side effects
+- **Retry with Backoff**: Transient errors must be retried with exponential backoff
+
+### Performance Verification
+
+#### Measuring Webhook Performance
+
+```bash
+# Using curl with timing
+curl -w "@curl-format.txt" -X POST https://your-app.com/api/webhooks/whop \
+  -H "Content-Type: application/json" \
+  -H "X-Whop-Signature: sha256=..." \
+  -d @webhook-payload.json
+
+# curl-format.txt content:
+#     time_namelookup:  %{time_namelookup}\n
+#        time_connect:  %{time_connect}\n
+#     time_appconnect:  %{time_appconnect}\n
+#    time_pretransfer:  %{time_pretransfer}\n
+#       time_redirect:  %{time_redirect}\n
+#  time_starttransfer:  %{time_starttransfer}\n
+#                     ----------\n
+#          time_total:  %{time_total}\n
+```
+
+#### Automated Performance Testing
+
+```typescript
+// performance-test.ts
+import { performance } from 'perf_hooks';
+
+async function testWebhookPerformance() {
+  const times: number[] = [];
+  
+  for (let i = 0; i < 100; i++) {
+    const start = performance.now();
+    await sendWebhook(testPayload);
+    const duration = performance.now() - start;
+    times.push(duration);
+  }
+  
+  // Calculate p95
+  times.sort((a, b) => a - b);
+  const p95Index = Math.floor(times.length * 0.95);
+  const p95 = times[p95Index];
+  
+  console.log(`p95 response time: ${p95}ms`);
+  console.log(`Target: <1000ms (1s)`);
+  console.log(`Status: ${p95 < 1000 ? '✅ PASS' : '❌ FAIL'}`);
+}
+```
+
+#### Monitoring Performance in Production
+
+Performance metrics should be monitored continuously:
+
+- **Response Time p95**: Tracked via application metrics (Prometheus, DataDog, etc.)
+- **Error Rate**: Should remain < 2%
+- **Throughput**: Measure webhooks processed per second
+- **Queue Depth**: Monitor if webhook processing is falling behind
+
+### Performance Baseline
+
+Current performance characteristics (baseline):
+
+- **Average Response Time**: [X]ms
+- **p95 Response Time**: [X]ms (Target: <1000ms)
+- **p99 Response Time**: [X]ms
+- **Error Rate**: [X]%
+- **Throughput**: [X] webhooks/second
+
+*Note: Update these values with actual production metrics*
+
 ## Setup
 
 ### Creating Webhook Endpoints

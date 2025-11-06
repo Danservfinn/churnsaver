@@ -201,7 +201,18 @@ dataExportDelete: {
   windowMs: 60 * 60 * 1000, // 1 hour
   maxRequests: 10, // 10 deletions per hour per user
   keyPrefix: 'data_export_delete'
-},
+  },
+  // Security dashboard specific rate limits
+  securityDashboard: {
+    windowMs: 60 * 1000, // 1 minute
+    maxRequests: 30, // 30 security dashboard requests per minute per user
+    keyPrefix: 'security_dashboard'
+  },
+  alertActions: {
+    windowMs: 60 * 1000, // 1 minute
+    maxRequests: 10, // 10 alert actions per minute per user
+    keyPrefix: 'alert_resolve'
+  },
 } as const;
 
 /**

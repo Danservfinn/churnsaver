@@ -290,6 +290,49 @@ describe('Webhook Signature Validation', () => {
       expect(result.valid).toBe(false);
       expect(result.error).toContain('malformed timestamp');
     });
+
+    it('should accept timestamp exactly at tolerance boundary', () => {
+      const now = Math.floor(Date.now() / 1000);
+      const timestamp = (now - 300).toString(); // Exactly 300 seconds ago
+      
+      const result = validateTimestamp(timestamp, 300);
+      
+      expect(result.valid).toBe(true);
+    });
+
+    it('should reject timestamp just outside tolerance boundary', () => {
+      const now = Math.floor(Date.now() / 1000);
+      const timestamp = (now - 301).toString(); // 301 seconds ago
+      
+      const result = validateTimestamp(timestamp, 300);
+      
+      expect(result.valid).toBe(false);
+    });
+
+    it('should accept future timestamp within tolerance', () => {
+      const now = Math.floor(Date.now() / 1000);
+      const timestamp = (now + 100).toString(); // 100 seconds in future
+      
+      const result = validateTimestamp(timestamp, 300);
+      
+      expect(result.valid).toBe(true);
+    });
+
+    it('should reject future timestamp outside tolerance', () => {
+      const now = Math.floor(Date.now() / 1000);
+      const timestamp = (now + 400).toString(); // 400 seconds in future
+      
+      const result = validateTimestamp(timestamp, 300);
+      
+      expect(result.valid).toBe(false);
+    });
+
+    it('should handle Infinity timestamp', () => {
+      const result = validateTimestamp('Infinity');
+      
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('malformed timestamp');
+    });
   });
 
   describe('validateEventType', () => {

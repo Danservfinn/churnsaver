@@ -43,7 +43,9 @@ interface CasesTableProps {
   page: number;
   limit: number;
   totalPages: number;
-/**
+  onPageChange?: (page: number) => void;
+}
+
 /**
  * CasesTable Component
  *
@@ -51,15 +53,6 @@ interface CasesTableProps {
  * @param props - Component props
  * @returns JSX element
  */
- * CasesTable Component
- *
- * Displays recovery cases in a tabular format with filtering and pagination
- * @param cases - Array of recovery cases to display
- * @param onCaseAction - Callback for case actions (cancel, terminate)
- * @param loading - Loading state indicator
- */
-  onPageChange?: (page: number) => void;
-}
 
 export function CasesTable({
   cases,
@@ -328,7 +321,7 @@ export function CasesTable({
           pagination={{
             currentPage: page,
             totalPages,
-            onPageChange: onPageChange
+            onPageChange: onPageChange || (() => {})
           }}
         >
           <thead>

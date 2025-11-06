@@ -184,7 +184,8 @@ export async function processReminderBatch<T>(
 
       // Wait for current batch to complete before starting next
       const batchResults = await Promise.all(batchPromises);
-      results.push(...batchResults.filter((result): result is T => result !== null));
+      const filteredResults = batchResults.filter((result): result is Awaited<T> => result !== null);
+      results.push(...filteredResults as T[]);
     }
 
     return {

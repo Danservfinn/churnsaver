@@ -269,7 +269,7 @@ describe('WhopAuthService', () => {
       expect(session.userId).toBe(userId);
       expect(session.companyId).toBe(companyId);
       expect(session.isActive).toBe(true);
-      expect(session.expiresAt).toBeGreaterThan(Date.now()));
+      expect(session.expiresAt).toBeGreaterThan(Date.now());
       expect(mockStorage.set).toHaveBeenCalledWith(
         expect.stringContaining('session:'),
         expect.any(String),

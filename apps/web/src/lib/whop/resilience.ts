@@ -607,11 +607,4 @@ export async function executeResiliently<T>(
   return service.execute(operation, context);
 }
 
-// Export types for external use
-export type {
-  ResilienceConfig,
-  RetryPolicy,
-  CircuitBreakerConfig,
-  CircuitBreakerMetrics,
-  RequestContext
-};
+// Types are already exported as interfaces above, no need to re-export

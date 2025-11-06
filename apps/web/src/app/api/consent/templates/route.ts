@@ -3,11 +3,11 @@ import { initDb } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { errorResponses, apiSuccess } from '@/lib/apiResponse';
-import ConsentManagementService from '@/server/services/consentManagement';
-import { 
-  CreateConsentTemplateRequest, 
+import ConsentManagementService, { ConsentValidationError } from '@/server/services/consentManagement';
+import type {
+  CreateConsentTemplateRequest,
   UpdateConsentTemplateRequest,
-  ConsentValidationError 
+  ConsentValidationError as ConsentValidationErrorDetail
 } from '@/types/consentManagement';
 
 export interface ConsentTemplatesResponse {
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const companyId = request.headers.get('x-company-id');
     const userId = request.headers.get('x-user-id');
     const isAuthenticated = request.headers.get('x-authenticated') === 'true';
-    const requestId = request.headers.get('x-request-id');
+    const requestId = request.headers.get('x-request-id') ?? undefined;
 
     // Enforce authentication for template access (but allow anonymous for public templates)
     if (process.env.NODE_ENV === 'production' && !isAuthenticated) {
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     // Apply rate limiting for template reads (120/min per IP/user)
-    const rateLimitKey = isAuthenticated ? `template_read:${userId}` : `template_read:${request.ip}`;
+    const rateLimitKey = isAuthenticated ? `template_read:${userId}` : `template_read:${request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'}`;
     const rateLimitResult = await checkRateLimit(
       rateLimitKey,
       RATE_LIMIT_CONFIGS.apiRead
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // Get templates from service
     const templates = await ConsentManagementService.getConsentTemplates(
       companyId || undefined,
-      { requestId }
+      { requestId: requestId || undefined }
     );
 
     // Filter templates based on query parameters
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const companyId = request.headers.get('x-company-id');
     const userId = request.headers.get('x-user-id');
     const isAuthenticated = request.headers.get('x-authenticated') === 'true';
-    const requestId = request.headers.get('x-request-id');
+    const requestId = request.headers.get('x-request-id') ?? undefined;
     const ipAddress = request.headers.get('x-forwarded-for') || 
                    request.headers.get('x-real-ip') || 
                    'unknown';
@@ -184,7 +184,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Create template through service
     const newTemplate = await ConsentManagementService.createConsentTemplate(
       body,
-      { requestId, createdBy: userId }
+      { requestId, createdBy: userId ?? undefined }
     );
 
     if (!newTemplate) {
@@ -203,14 +203,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return apiSuccess(newTemplate);
 
   } catch (error) {
+    const requestId = request.headers.get('x-request-id') ?? undefined;
+    const message = error instanceof Error ? error.message : String(error);
+
     logger.error('Failed to create consent template', {
-      error: error instanceof Error ? error.message : String(error),
+      error: message,
       processingTimeMs: Date.now() - startTime,
-      requestId: request.headers.get('x-request-id')
+      requestId
     });
 
     if (error instanceof ConsentValidationError) {
-      return errorResponses.badRequestResponse(error.message, error.details);
+      return errorResponses.badRequestResponse(
+        error.message,
+        (error.details ?? []) as ConsentValidationErrorDetail[]
+      );
     }
 
     if (error instanceof SyntaxError) {
@@ -235,7 +241,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     const companyId = request.headers.get('x-company-id');
     const userId = request.headers.get('x-user-id');
     const isAuthenticated = request.headers.get('x-authenticated') === 'true';
-    const requestId = request.headers.get('x-request-id');
+    const requestId = request.headers.get('x-request-id') ?? undefined;
 
     // Enforce authentication for template updates
     if (!isAuthenticated) {
@@ -290,7 +296,18 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     });
 
     // Process operations (template updates would need to be implemented in service)
-    const results = await Promise.allSettled(
+    type OperationResult = {
+      success: boolean;
+      data?: {
+        template_id: string;
+        updated: boolean;
+        update_data: unknown;
+      };
+      error?: string;
+      index: number;
+    };
+
+    const results = await Promise.allSettled<OperationResult>(
       operations.map(async (operation: any, index: number) => {
         try {
           // Validate operation structure
@@ -330,17 +347,31 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     );
 
     // Separate successful and failed operations
-    const successful = results.filter(r => r.status === 'fulfilled' && (r.value as any).success);
-    const failed = results.filter(r => r.status === 'rejected' || !(r.value as any).success);
+    const successful: OperationResult[] = [];
+    const failed: OperationResult[] = [];
+
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        if (result.value.success) {
+          successful.push(result.value);
+        } else {
+          failed.push(result.value);
+        }
+      } else {
+        failed.push({
+          success: false,
+          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+          index: -1
+        });
+      }
+    }
 
     const response = {
-      successful_operations: successful.map(r => (r.value as any).data),
-      failed_operations: failed.map(r => {
-        if (r.status === 'rejected') {
-          return { index: -1, error: r.reason };
-        }
-        return r.value;
-      }),
+      successful_operations: successful.map(operation => operation.data),
+      failed_operations: failed.map(operation => ({
+        index: operation.index,
+        error: operation.error
+      })),
       total_processed: operations.length,
       success_count: successful.length,
       failure_count: failed.length,
@@ -360,14 +391,20 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     return apiSuccess(response);
 
   } catch (error) {
+    const requestId = request.headers.get('x-request-id') ?? undefined;
+    const message = error instanceof Error ? error.message : String(error);
+
     logger.error('Failed to process batch template update', {
-      error: error instanceof Error ? error.message : String(error),
+      error: message,
       processingTimeMs: Date.now() - startTime,
-      requestId: request.headers.get('x-request-id')
+      requestId
     });
 
     if (error instanceof ConsentValidationError) {
-      return errorResponses.badRequestResponse(error.message, error.details);
+      return errorResponses.badRequestResponse(
+        error.message,
+        (error.details ?? []) as ConsentValidationErrorDetail[]
+      );
     }
 
     if (error instanceof SyntaxError) {

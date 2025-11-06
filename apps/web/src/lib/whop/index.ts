@@ -43,14 +43,16 @@ export {
   extractPermissions,
   hasPermission as hasTokenPermission,
   hasAnyPermission as hasAnyTokenPermission,
-  sanitizeTokenForLogging,
-  generateTokenFingerprint
+  sanitizeTokenForLogging
 } from './tokenUtils';
 
 // Type exports
 export type {
   WhopSdkConfig,
-  ConfigValidationResult,
+  ConfigValidationResult
+} from './sdkConfig';
+
+export type {
   ApiRequestOptions,
   ApiResponse,
   ApiMiddleware,
@@ -80,9 +82,4 @@ export type {
 export * from './resilience';
 // Observability exports
 export * from './observability';
-// Re-export commonly used combinations
-export { createWhopApiClient, whopApiClient, middleware } from './client';
-export { whopConfig } from './sdkConfig';
-export { whopAuthService } from './auth';
-export { tokenUtils } from './tokenUtils';
 export { resilienceService, executeResiliently } from './resilience';

@@ -92,19 +92,19 @@ export async function GET(
       });
 
       // Map error codes to appropriate API errors
-      let apiError;
+      let errorObj;
       switch (error.code) {
         case 'NOT_FOUND':
-          apiError = errors.notFound(error.message, error.details);
+          errorObj = errors.notFound(error.message, error.details);
           break;
         case 'GET_FAILED':
-          apiError = errors.internalServerError(error.message, error.details);
+          errorObj = errors.internalServerError(error.message, error.details);
           break;
         default:
-          apiError = errors.internalServerError('Failed to get export request', error.details);
+          errorObj = errors.internalServerError('Failed to get export request', error.details);
       }
 
-      return apiError(apiError, context);
+      return apiError(errorObj, context);
     }
 
     logger.error('Unexpected error in getting export request', {
@@ -222,16 +222,16 @@ export async function DELETE(
       });
 
       // Map error codes to appropriate API errors
-      let apiError;
+      let errorObj;
       switch (error.code) {
         case 'DELETE_FAILED':
-          apiError = errors.internalServerError(error.message, error.details);
+          errorObj = errors.internalServerError(error.message, error.details);
           break;
         default:
-          apiError = errors.internalServerError('Failed to delete export request', error.details);
+          errorObj = errors.internalServerError('Failed to delete export request', error.details);
       }
 
-      return apiError(apiError, context);
+      return apiError(errorObj, context);
     }
 
     logger.error('Unexpected error in deleting export request', {

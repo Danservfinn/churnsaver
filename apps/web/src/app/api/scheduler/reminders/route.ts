@@ -8,17 +8,21 @@ import { scheduler } from '@/server/services/scheduler';
 import { getRequestContextSDK } from '@/lib/whop-sdk';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { withErrorHandler, createSuccessResponse } from '@/server/middleware/errorHandler';
+import { createRequestContext } from '@/lib/apiResponse';
 import { errors, errorResponses } from '@/lib/apiResponse';
 import { categorizeAndLogError } from '@/lib/errorCategorization';
 import { executeWithRecovery } from '@/lib/errorRecovery';
 
-export const POST = withErrorHandler(
-  async (request: NextRequest, context) => {
+export async function POST(request: NextRequest) {
+    // Create request context for logging and error handling
+    const context = createRequestContext(request);
+    
     // Check rate limit before processing
     const rateLimitResult = await checkRateLimit('scheduler:control', RATE_LIMIT_CONFIGS.scheduler);
 
     if (!rateLimitResult.allowed) {
-      throw errors.rateLimited(rateLimitResult.retryAfter || 60, {
+      throw errors.rateLimited('Rate limit exceeded', {
+        retryAfter: rateLimitResult.retryAfter || 60,
         resetAt: rateLimitResult.resetAt?.toISOString(),
         endpoint: 'scheduler/reminders',
         method: 'POST'
@@ -190,11 +194,12 @@ export const POST = withErrorHandler(
         }, context);
     }
   }
-);
 
 // GET endpoint for health checking the scheduler
-export const GET = withErrorHandler(
-  async (request: NextRequest, context) => {
+export async function GET(request: NextRequest) {
+    // Create request context for logging and error handling
+    const context = createRequestContext(request);
+    
     // Initialize database connection with recovery
     await executeWithRecovery(
       () => initDb(),
@@ -222,4 +227,3 @@ export const GET = withErrorHandler(
 
     return createSuccessResponse(status, context);
   }
-);

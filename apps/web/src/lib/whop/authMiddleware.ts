@@ -145,8 +145,8 @@ export function createAuthMiddleware(config: AuthMiddlewareConfig = {}) {
       }
 
       // Default error handling
-      if (error instanceof errors.unauthorized().constructor) {
-        return apiError(error, requestContext);
+      if (error instanceof Error && 'code' in error && (error as any).code === 'UNAUTHORIZED') {
+        return apiError(error as any, requestContext);
       }
 
       return apiError(
@@ -233,11 +233,11 @@ export function withAuth<T = any>(
     
     // If middleware returned a response (error case), return it
     if (context instanceof NextResponse) {
-      return context;
+      return context as NextResponse<T>;
     }
     
     // Otherwise, call the handler with the context
-    return await handler(request, context as MiddlewareAuthContext);
+    return await handler(request, context as MiddlewareAuthContext) as NextResponse<T>;
   };
 }
 

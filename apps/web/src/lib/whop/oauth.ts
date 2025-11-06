@@ -743,14 +743,4 @@ export const whopOAuthService = (() => {
   }
 })();
 
-// Export types for external use
-export type {
-  OAuthConfig,
-  OAuthTokenResponse,
-  OAuthAuthRequest,
-  OAuthTokenExchangeRequest,
-  OAuthRefreshRequest,
-  OAuthSession,
-  OAuthState,
-  OAuthStorage
-};
+// Types are already exported as interfaces above, no need to re-export

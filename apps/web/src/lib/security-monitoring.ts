@@ -3,6 +3,29 @@
 
 import { logger } from '@/lib/logger';
 import { sql } from '@/lib/db';
+import { env } from '@/lib/env';
+// Lazy import whopAuthService to avoid Edge Runtime crypto issues
+// Only import when actually needed (in Node.js runtime contexts)
+// Check if we're in Edge Runtime before importing
+const isEdgeRuntime = typeof (globalThis as any).EdgeRuntime !== 'undefined' || process.env.NEXT_RUNTIME === 'edge';
+let whopAuthService: any;
+async function getWhopAuthService() {
+  // Skip loading in Edge Runtime
+  if (isEdgeRuntime) {
+    logger.warn('whopAuthService not available in Edge Runtime, skipping session invalidation');
+    return null;
+  }
+  if (!whopAuthService) {
+    try {
+      const authModule = await import('@/lib/whop/auth');
+      whopAuthService = authModule.whopAuthService;
+    } catch (error) {
+      logger.error('Failed to load whopAuthService', { error });
+      return null;
+    }
+  }
+  return whopAuthService;
+}
 
 export interface SecurityEvent {
   id: string;
@@ -27,12 +50,23 @@ export interface SecurityMetrics {
   eventsBySeverity: Record<string, number>;
   topOffenders: Array<{ ip: string; eventCount: number }>;
   unusualPatterns: Array<{ pattern: string; count: number; description: string }>;
+  sessionInvalidations: {
+    total: number;
+    byReason: Record<string, number>;
+    byUser: Record<string, number>;
+  };
 }
 
 export class SecurityMonitor {
   private activeAlerts = new Map<string, SecurityEvent>();
   private eventHistory: SecurityEvent[] = [];
   private readonly MAX_HISTORY_SIZE = 10000;
+  private sessionInvalidations = new Map<string, {
+    userId?: string;
+    ip?: string;
+    reason: string;
+    timestamp: Date;
+  }>();
   private readonly ALERT_THRESHOLDS = {
     // Authentication failures per IP per hour
     authFailuresPerIp: { threshold: 10, window: '1h' },
@@ -44,6 +78,36 @@ export class SecurityMonitor {
     concurrentFailuresPerIp: { threshold: 5, window: '5m' },
     // Unusual user agent patterns
     unusualUserAgents: { threshold: 3, window: '1h' }
+  };
+  private readonly SESSION_INVALIDATION_THRESHOLDS = {
+    // Invalid authentication attempts (>5 failed logins per IP in 5 minutes)
+    invalidAuthAttempts: {
+      threshold: parseInt(process.env.SESSION_INVALIDATION_INVALID_AUTH_ATTEMPTS_THRESHOLD || '5'),
+      window: '5m',
+      enabled: process.env.SESSION_INVALIDATION_ENABLED !== 'false'
+    },
+    // Rate limit violations (excessive requests)
+    rateLimitViolations: {
+      threshold: parseInt(process.env.SESSION_INVALIDATION_RATE_LIMIT_THRESHOLD || '10'),
+      window: '1h',
+      enabled: process.env.SESSION_INVALIDATION_ENABLED !== 'false'
+    },
+    // Suspicious user agent patterns detected
+    suspiciousUserAgents: {
+      threshold: parseInt(process.env.SESSION_INVALIDATION_USER_AGENT_THRESHOLD || '3'),
+      window: '1h',
+      enabled: process.env.SESSION_INVALIDATION_ENABLED !== 'false'
+    },
+    // Geographic anomalies (user logging in from unusual locations)
+    geographicAnomalies: {
+      threshold: parseInt(process.env.SESSION_INVALIDATION_GEO_ANOMALY_THRESHOLD || '5'),
+      window: '24h',
+      enabled: process.env.SESSION_INVALIDATION_ENABLED !== 'false'
+    },
+    // Critical security alerts from other monitoring systems
+    criticalSecurityAlerts: {
+      enabled: process.env.SESSION_INVALIDATION_CRITICAL_ALERTS_ENABLED !== 'false'
+    }
   };
 
   // Process and analyze security events
@@ -306,10 +370,95 @@ export class SecurityMonitor {
       this.checkAuthFailureThreshold(event),
       this.checkRateLimitThreshold(event),
       this.checkUnusualUserAgent(event),
-      this.checkGeographicAnomalies(event)
+      this.checkGeographicAnomalies(event),
+      this.checkSessionInvalidationTriggers(event)
     ];
 
     await Promise.all(conditions);
+  }
+
+  // Check if session invalidation should be triggered based on security events
+  private async checkSessionInvalidationTriggers(event: SecurityEvent): Promise<void> {
+    // Check invalid authentication attempts (>5 failed logins per IP in 5 minutes)
+    if (this.SESSION_INVALIDATION_THRESHOLDS.invalidAuthAttempts.enabled &&
+        event.category === 'authentication' &&
+        event.severity === 'high' &&
+        event.ip) {
+
+      const recentFailures = this.eventHistory.filter(e =>
+        e.ip === event.ip &&
+        e.category === 'authentication' &&
+        e.severity === 'high' &&
+        (Date.now() - e.timestamp.getTime()) < 5 * 60 * 1000 // 5 minutes
+      );
+
+      if (recentFailures.length >= this.SESSION_INVALIDATION_THRESHOLDS.invalidAuthAttempts.threshold) {
+        // Find users associated with these failures and invalidate their sessions
+        const affectedUsers = new Set(recentFailures.map(e => e.userId).filter(Boolean) as string[]);
+
+        for (const userId of affectedUsers) {
+          await this.invalidateUserSessions(userId, 'invalid_auth_attempts_threshold');
+        }
+
+        // Also invalidate based on IP
+        await this.invalidateSessionsByIp(event.ip, 'invalid_auth_attempts_threshold');
+      }
+    }
+
+    // Check rate limit violations (excessive requests)
+    if (this.SESSION_INVALIDATION_THRESHOLDS.rateLimitViolations.enabled &&
+        event.category === 'rate_limit' &&
+        event.ip) {
+
+      const recentViolations = this.eventHistory.filter(e =>
+        e.ip === event.ip &&
+        e.category === 'rate_limit' &&
+        (Date.now() - e.timestamp.getTime()) < 60 * 60 * 1000 // 1 hour
+      );
+
+      if (recentViolations.length >= this.SESSION_INVALIDATION_THRESHOLDS.rateLimitViolations.threshold) {
+        await this.invalidateSessionsByIp(event.ip, 'rate_limit_violations_threshold');
+      }
+    }
+
+    // Check suspicious user agent patterns
+    if (this.SESSION_INVALIDATION_THRESHOLDS.suspiciousUserAgents.enabled &&
+        event.type === 'suspicious_user_agent' &&
+        event.userId) {
+
+      const recentSuspiciousAgents = this.eventHistory.filter(e =>
+        e.type === 'suspicious_user_agent' &&
+        (e.userId === event.userId || e.ip === event.ip) &&
+        (Date.now() - e.timestamp.getTime()) < 60 * 60 * 1000 // 1 hour
+      );
+
+      if (recentSuspiciousAgents.length >= this.SESSION_INVALIDATION_THRESHOLDS.suspiciousUserAgents.threshold) {
+        if (event.userId) {
+          await this.invalidateUserSessions(event.userId, 'suspicious_user_agent_pattern');
+        }
+      }
+    }
+
+    // Check geographic anomalies (user logging in from unusual locations)
+    if (this.SESSION_INVALIDATION_THRESHOLDS.geographicAnomalies.enabled &&
+        event.type === 'geographic_anomaly' &&
+        event.userId) {
+
+      await this.invalidateUserSessions(event.userId, 'geographic_anomaly');
+    }
+
+    // Check critical security alerts from other monitoring systems
+    if (this.SESSION_INVALIDATION_THRESHOLDS.criticalSecurityAlerts.enabled &&
+        event.severity === 'critical') {
+
+      if (event.userId) {
+        await this.invalidateUserSessions(event.userId, 'critical_security_alert');
+      }
+
+      if (event.ip) {
+        await this.invalidateSessionsByIp(event.ip, 'critical_security_alert');
+      }
+    }
   }
 
   // Check authentication failure thresholds
@@ -432,7 +581,7 @@ export class SecurityMonitor {
 
   // Update security metrics
   private updateSecurityMetrics(event: SecurityEvent): void {
-    logger.securityMetric('security.events.total', 1, {
+    logger.metric('security.events.total', 1, {
       category: event.category,
       severity: event.severity,
       type: event.type
@@ -483,6 +632,7 @@ export class SecurityMonitor {
       .map(([ip, eventCount]) => ({ ip, eventCount }));
 
     const unusualPatterns = this.detectUnusualPatterns(eventsInWindow);
+    const sessionInvalidations = this.getSessionInvalidationMetrics(timeWindow);
 
     return {
       timeWindow,
@@ -490,7 +640,8 @@ export class SecurityMonitor {
       eventsByCategory,
       eventsBySeverity,
       topOffenders,
-      unusualPatterns
+      unusualPatterns,
+      sessionInvalidations
     };
   }
 
@@ -539,6 +690,45 @@ export class SecurityMonitor {
     return patterns;
   }
 
+  // Get session invalidation metrics for dashboard
+  private getSessionInvalidationMetrics(timeWindow: '1h' | '24h' | '7d'): SecurityMetrics['sessionInvalidations'] {
+    const now = new Date();
+    let windowStart: Date;
+
+    switch (timeWindow) {
+      case '1h':
+        windowStart = new Date(now.getTime() - 60 * 60 * 1000);
+        break;
+      case '7d':
+        windowStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      default: // 24h
+        windowStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    }
+
+    const invalidationsInWindow = Array.from(this.sessionInvalidations.values())
+      .filter(invalidation => invalidation.timestamp >= windowStart);
+
+    const byReason = invalidationsInWindow.reduce((acc, invalidation) => {
+      acc[invalidation.reason] = (acc[invalidation.reason] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const byUser = invalidationsInWindow
+      .filter(invalidation => invalidation.userId)
+      .reduce((acc, invalidation) => {
+        const userId = invalidation.userId!;
+        acc[userId] = (acc[userId] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+    return {
+      total: invalidationsInWindow.length,
+      byReason,
+      byUser
+    };
+  }
+
   // Get active alerts
   getActiveAlerts(): SecurityEvent[] {
     return Array.from(this.activeAlerts.values());
@@ -555,7 +745,7 @@ export class SecurityMonitor {
     // Update database
     try {
       await sql.execute(`
-        UPDATE security_alerts 
+        UPDATE security_alerts
         SET resolved = true, resolved_at = NOW(), resolved_by = $1
         WHERE id = $2
       `, [resolvedBy, alertId]);
@@ -573,6 +763,104 @@ export class SecurityMonitor {
       alertId,
       resolvedBy
     });
+  }
+
+  // Invalidate sessions for a user when security events are detected
+  async invalidateUserSessions(userId: string, reason: string): Promise<void> {
+    try {
+      const authService = await getWhopAuthService();
+      if (!authService) {
+        logger.warn('Cannot invalidate sessions in Edge Runtime', { userId, reason });
+        return;
+      }
+      await authService.revokeAllUserSessions(userId);
+
+      // Track session invalidation
+      this.sessionInvalidations.set(userId, {
+        userId,
+        reason,
+        timestamp: new Date()
+      });
+
+      logger.security('User sessions invalidated due to security event', {
+        category: 'security',
+        severity: 'high',
+        operation: 'session_invalidation',
+        userId,
+        reason,
+        invalidationType: 'user_sessions'
+      });
+
+      logger.metric('security.session_invalidations', 1, {
+        reason,
+        invalidationType: 'user_sessions',
+        userId
+      });
+
+    } catch (error) {
+      logger.error('Failed to invalidate user sessions', {
+        error: error instanceof Error ? error.message : String(error),
+        userId,
+        reason
+      });
+    }
+  }
+
+  // Invalidate sessions for a specific IP address
+  async invalidateSessionsByIp(ip: string, reason: string): Promise<void> {
+    try {
+      // Find all users with sessions from this IP and invalidate their sessions
+      // This is a simplified approach - in practice, you'd need to track IP-to-session mappings
+      const usersWithIpSessions = new Set<string>();
+
+      // For now, we'll invalidate sessions based on recent events from this IP
+      const recentEventsFromIp = this.eventHistory.filter(event =>
+        event.ip === ip &&
+        event.userId &&
+        (Date.now() - event.timestamp.getTime()) < 24 * 60 * 60 * 1000 // Last 24 hours
+      );
+
+      for (const event of recentEventsFromIp) {
+        if (event.userId) {
+          usersWithIpSessions.add(event.userId);
+        }
+      }
+
+      // Invalidate sessions for each user found
+      for (const userId of usersWithIpSessions) {
+        await this.invalidateUserSessions(userId, `${reason}_ip_based`);
+      }
+
+      // Track IP-based session invalidation
+      this.sessionInvalidations.set(`ip_${ip}`, {
+        ip,
+        reason,
+        timestamp: new Date()
+      });
+
+      logger.security('Sessions invalidated for IP address due to security event', {
+        category: 'security',
+        severity: 'high',
+        operation: 'session_invalidation',
+        ip,
+        reason,
+        invalidationType: 'ip_based',
+        affectedUsersCount: usersWithIpSessions.size
+      });
+
+      logger.metric('security.session_invalidations', usersWithIpSessions.size, {
+        reason,
+        invalidationType: 'ip_based',
+        ip
+      });
+
+    } catch (error) {
+      logger.error('Failed to invalidate sessions by IP', {
+        error: error instanceof Error ? error.message : String(error),
+        ip,
+        reason
+      });
+    }
   }
 }
 

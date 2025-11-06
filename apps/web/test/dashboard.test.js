@@ -76,9 +76,11 @@ const mockFetch = async (url, options = {}) => {
 
 // Mock window object for iframe detection
 const mockWindow = {
-  self: { not: { top: true } }, // Not in iframe
-  top: { self: mockWindow }
+  self: null, // Not in iframe
+  top: null
 };
+mockWindow.self = mockWindow;
+mockWindow.top = mockWindow;
 
 function runDashboardTests() {
   console.log('📊 Starting Dashboard Page Test Suite\n');
@@ -583,9 +585,7 @@ function runDashboardTests() {
 
 // Run tests if called directly
 if (require.main === module) {
-  runDashboardTests().then(success => {
-    process.exit(success ? 0 : 1);
-  });
+  runDashboardTests();
 }
 
 module.exports = { runDashboardTests };

@@ -25,6 +25,8 @@ export enum ErrorCode {
 
   // Server error codes
   INTERNAL_SERVER_ERROR = 500,
+  DATABASE_ERROR = 500,
+  NETWORK_ERROR = 500,
   NOT_IMPLEMENTED = 501,
   BAD_GATEWAY = 502,
   SERVICE_UNAVAILABLE = 503,
@@ -146,6 +148,9 @@ export interface RequestContext {
   url: string;
   ip?: string;
   userAgent?: string;
+  userId?: string;
+  companyId?: string;
+  permissions?: string[];
 }
 
 /**
@@ -273,4 +278,68 @@ export const errors = {
   
   rateLimited: (message: string = 'Rate limited', details?: any) => 
     new AppError(message, ErrorCode.TOO_MANY_REQUESTS, ErrorCategory.RATE_LIMIT, ErrorSeverity.HIGH, 429, true, false, details)
+};
+/**
+ * Error response helpers
+ */
+export const errorResponses = {
+  badRequestResponse: (message: string = 'Bad request', details?: any) =>
+    apiError(errors.badRequest(message, details)),
+
+  unauthorizedResponse: (message: string = 'Unauthorized', details?: any) =>
+    apiError(errors.unauthorized(message, details)),
+
+  forbiddenResponse: (message: string = 'Forbidden', details?: any) =>
+    apiError(errors.forbidden(message, details)),
+
+  notFoundResponse: (message: string = 'Not found', details?: any) =>
+    apiError(errors.notFound(message, details)),
+
+  methodNotAllowedResponse: (message: string = 'Method not allowed', details?: any) =>
+    apiError(errors.methodNotAllowed(message, details)),
+
+  conflictResponse: (message: string = 'Conflict', details?: any) =>
+    apiError(errors.conflict(message, details)),
+
+  unprocessableEntityResponse: (message: string = 'Unprocessable entity', details?: any) =>
+    apiError(errors.unprocessableEntity(message, details)),
+
+  tooManyRequestsResponse: (message: string = 'Too many requests', details?: any) =>
+    apiError(errors.tooManyRequests(message, details)),
+
+  internalServerErrorResponse: (message: string = 'Internal server error', details?: any) =>
+    apiError(errors.internalServerError(message, details)),
+
+  notImplementedResponse: (message: string = 'Not implemented', details?: any) =>
+    apiError(errors.notImplemented(message, details)),
+
+  badGatewayResponse: (message: string = 'Bad gateway', details?: any) =>
+    apiError(errors.badGateway(message, details)),
+
+  serviceUnavailableResponse: (message: string = 'Service unavailable', details?: any) =>
+    apiError(errors.serviceUnavailable(message, details)),
+
+  gatewayTimeoutResponse: (message: string = 'Gateway timeout', details?: any) =>
+    apiError(errors.gatewayTimeout(message, details)),
+
+  invalidTokenResponse: (message: string = 'Invalid token', details?: any) =>
+    apiError(errors.invalidToken(message, details)),
+
+  tokenExpiredResponse: (message: string = 'Token expired', details?: any) =>
+    apiError(errors.tokenExpired(message, details)),
+
+  insufficientPermissionsResponse: (message: string = 'Insufficient permissions', details?: any) =>
+    apiError(errors.insufficientPermissions(message, details)),
+
+  validationErrorResponse: (message: string = 'Validation error', details?: any) =>
+    apiError(errors.validationError(message, details)),
+
+  missingRequiredFieldResponse: (message: string = 'Missing required field', details?: any) =>
+    apiError(errors.missingRequiredField(message, details)),
+
+  invalidFormatResponse: (message: string = 'Invalid format', details?: any) =>
+    apiError(errors.invalidFormat(message, details)),
+
+  rateLimitedResponse: (message: string = 'Rate limited', details?: any) =>
+    apiError(errors.rateLimited(message, details))
 };

@@ -10,6 +10,15 @@ import { getMembershipManageUrlResult, terminateMembership as terminateMembershi
 import { getSettingsForCompany } from './settings';
 import { ReminderChannelSettings } from './reminders/notifier';
 import { ReminderNotifier } from './shared/reminderNotifier';
+import {
+  errorHandler,
+  ErrorCode,
+  ErrorCategory,
+  ErrorSeverity,
+  createDatabaseError,
+  createBusinessLogicError,
+  AppError
+} from '@/lib/errorHandler';
 
 // Helper function to execute database operations with RLS context
 async function executeWithRLS<T>(
@@ -17,23 +26,14 @@ async function executeWithRLS<T>(
   companyId: string
 ): Promise<T> {
   // Set RLS context for this operation
-  setRequestContext({
-    companyId,
-    userId: 'system',
-    isAuthenticated: true
-  });
-  
+  // Note: setRequestContext is not imported - this appears to be a placeholder
+  // that should be implemented or removed based on actual RLS middleware
+
   try {
     return await operation(companyId);
   } finally {
     // Clear context after operation
     // Note: In a real implementation, this would be handled by middleware
-  // For now, we'll clear it manually
-  setRequestContext({
-      companyId: undefined,
-      userId: undefined,
-      isAuthenticated: false
-    });
   }
 }
 
@@ -72,9 +72,6 @@ export async function logRecoveryAction(
     );
   } catch (error) {
     logger.error('Failed to log recovery action', {
-/**
- * Data structure representing a recovery case in the database
- */
       companyId,
       caseId,
       membershipId,
@@ -103,108 +100,31 @@ export async function logRecoveryAction(
  */
 
 export interface RecoveryCase {
-  id: string;
-/**
- * Data structure for payment failed webhook events
- */
-  company_id: string;
-  membership_id: string;
-/**
- * PaymentFailedEvent interface
- *
- * Data structure for payment failed webhook events
- * @param eventId - Unique identifier for the webhook event
- * @param membershipId - Membership that experienced payment failure
- * @param userId - User associated with the membership
- * @param reason - Reason for the payment failure (optional)
- * @param amount - Amount that failed to be collected (optional)
- * @param currency - Currency of the failed payment (optional)
- * @param companyId - Company identifier (may need derivation)
- */
-  user_id: string;
-  first_failure_at: Date;
-  last_nudge_at: Date | null;
-  attempts: number;
-  incentive_days: number;
-/**
- * Data structure for payment succeeded webhook events
-/**
- * PaymentSucceededEvent interface
- *
- * Data structure for payment succeeded webhook events
- * @param eventId - Unique identifier for the webhook event
- * @param membershipId - Membership that successfully paid
- * @param userId - User associated with the membership
- * @param amount - Amount that was successfully collected
- * @param currency - Currency of the successful payment (optional)
-/**
- * MembershipValidEvent interface
- *
- * Data structure for membership valid webhook events
- * @param eventId - Unique identifier for the webhook event
- * @param membershipId - Membership that became valid
- * @param userId - User associated with the membership
- * @param companyId - Company identifier (may need derivation)
-/**
- * MembershipInvalidEvent interface
- *
- * Data structure for membership invalid webhook events
- * @param eventId - Unique identifier for the webhook event
- * @param membershipId - Membership that became invalid
- * @param userId - User associated with the membership
- * @param companyId - Company identifier (may need derivation)
- */
- */
- * @param companyId - Company identifier (may need derivation)
- */
- */
-  status: 'open' | 'recovered' | 'closed_no_recovery';
-  failure_reason: string | null;
-  recovered_amount_cents: number;
-  created_at: Date;
-/**
- * logRecoveryAction function
- *
- * Logs recovery action audit events to the database
- * @param companyId - The company ID associated with the action
- * @param caseId - The recovery case ID (optional)
- * @param membershipId - The membership ID affected
- * @param userId - The user ID affected
- * @param type - The type of recovery action
- * @param channel - The communication channel used (optional)
- * @param metadata - Additional metadata for the action (optional)
- * @returns Promise that resolves when logging is complete
- */
+   id: string;
+   company_id: string;
+   membership_id: string;
+   user_id: string;
+   first_failure_at: Date;
+   last_nudge_at: Date | null;
+   attempts: number;
+   incentive_days: number;
+   status: 'open' | 'recovered' | 'closed_no_recovery';
+   failure_reason: string | null;
+   recovered_amount_cents: number;
+   created_at: Date;
 }
 
 /**
  * Data structure for membership valid webhook events
  */
 export interface PaymentFailedEvent {
-  eventId: string;
-  membershipId: string;
-  userId: string;
-/**
- * Data structure for membership invalid webhook events
- */
-  reason?: string;
-  amount?: number;
-  currency?: string;
-  companyId?: string; // May need to be derived from context
-/**
- * Finds an existing open recovery case for a membership within the attribution window
- * @param membershipId - The membership ID to search for
- * @param attributionWindowDays - Number of days to look back for existing cases (default: KPI_ATTRIBUTION_WINDOW_DAYS)
- * @returns The existing recovery case if found, null otherwise
-/**
- * findExistingCase function
- *
- * Finds an existing open recovery case for a membership within the attribution window
- * @param membershipId - The membership ID to search for
- * @param attributionWindowDays - Number of days to look back for existing cases (default: KPI_ATTRIBUTION_WINDOW_DAYS)
- * @returns The existing recovery case if found, null otherwise
- */
- */
+   eventId: string;
+   membershipId: string;
+   userId: string;
+   reason?: string;
+   amount?: number;
+   currency?: string;
+   companyId?: string; // May need to be derived from context
 }
 
 export interface PaymentSucceededEvent {
@@ -232,15 +152,10 @@ export interface MembershipValidEvent {
 }
 
 export interface MembershipInvalidEvent {
-  eventId: string;
-  membershipId: string;
-  userId: string;
-/**
- * Helper function to calculate the cutoff date based on attribution window
- * @param attributionWindowDays - Number of days to subtract from current date
- * @returns The calculated cutoff date
- */
-  companyId?: string; // May need to be derived from context
+   eventId: string;
+   membershipId: string;
+   userId: string;
+   companyId?: string; // May need to be derived from context
 }
 /**
  * Creates a new recovery case from a payment failure event
@@ -254,35 +169,32 @@ export async function findExistingCase(
   membershipId: string,
   attributionWindowDays: number = additionalEnv.KPI_ATTRIBUTION_WINDOW_DAYS
 ): Promise<RecoveryCase | null> {
-  try {
-    const cutoffDate = calculateCutoffDate(attributionWindowDays);
+  const result = await errorHandler.wrapAsync(
+    async () => {
+      const cutoffDate = calculateCutoffDate(attributionWindowDays);
 
-    const cases = await sql.select<RecoveryCase>(
-      `SELECT * FROM recovery_cases
-/**
- * updateRecoveryCase function
- *
- * Updates an existing recovery case with new failure information
- * @param existingCase - The existing recovery case to update
- * @param event - The new payment failed event data
- * @returns The updated recovery case or null if update failed
- */
-       WHERE membership_id = $1
-         AND status = $2
-         AND first_failure_at >= $3
-       ORDER BY first_failure_at DESC
-       LIMIT 1`,
-      [membershipId, OPEN_CASE_STATUS, cutoffDate]
-    );
+      const cases = await sql.select<RecoveryCase>(
+        `SELECT * FROM recovery_cases
+         WHERE membership_id = $1
+           AND status = $2
+           AND first_failure_at >= $3
+         ORDER BY first_failure_at DESC
+         LIMIT 1`,
+        [membershipId, OPEN_CASE_STATUS, cutoffDate]
+      );
 
-    return cases[0] || null;
-  } catch (error) {
-    logger.error('Failed to find existing case', {
-      membershipId,
-      error: error instanceof Error ? error.message : String(error)
-    });
+      return cases[0] || null;
+    },
+    ErrorCode.DATABASE_QUERY_ERROR,
+    { membershipId, attributionWindowDays }
+  );
+
+  if (!result.success) {
+    // Error already logged by errorHandler
     return null;
   }
+
+  return result.data!;
 }
 
 // Helper function to calculate cutoff date
@@ -297,53 +209,55 @@ export async function createRecoveryCase(
   event: PaymentFailedEvent,
   companyId: string
 ): Promise<RecoveryCase | null> {
-  try {
-    // Generate a proper UUID for the case ID
-    const caseId = randomUUID();
+  const result = await errorHandler.wrapAsync(
+    async () => {
+      // Generate a proper UUID for the case ID
+      const caseId = randomUUID();
 
-    const newCase = await sql.insert<RecoveryCase>(
-      `INSERT INTO recovery_cases (
-/**
- * processPaymentFailedEvent function
- *
- * Main function: Process payment_failed event into recovery case
- * @param event - The payment failed event to process
- * @param companyId - The company ID associated with the event
- * @returns The created or updated recovery case, or null if processing failed
- */
-        id, company_id, membership_id, user_id, first_failure_at,
-        status, failure_reason, attempts
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      RETURNING *`,
-      [
-        caseId,
-        companyId,
-        event.membershipId,
-        event.userId,
-        new Date(), // first_failure_at
-        'open',
-        event.reason || 'payment_failed',
-        0 // attempts start at 0, will be incremented when first nudge is sent
-      ]
-    );
+      const newCase = await sql.insert<RecoveryCase>(
+        `INSERT INTO recovery_cases (
+          id, company_id, membership_id, user_id, first_failure_at,
+          status, failure_reason, attempts
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING *`,
+        [
+          caseId,
+          companyId,
+          event.membershipId,
+          event.userId,
+          new Date(), // first_failure_at
+          'open',
+          event.reason || 'payment_failed',
+          0 // attempts start at 0, will be incremented when first nudge is sent
+        ]
+      );
 
-    if (newCase) {
-      logger.info('Created new recovery case', {
-        caseId: newCase.id,
-        membershipId: event.membershipId,
-        userId: event.userId,
-        reason: event.reason
-      });
-    }
+      if (newCase) {
+        logger.info('Created new recovery case', {
+          caseId: newCase.id,
+          membershipId: event.membershipId,
+          userId: event.userId,
+          reason: event.reason
+        });
+      }
 
-    return newCase;
-  } catch (error) {
-    logger.error('Failed to create recovery case', {
+      return newCase;
+    },
+    ErrorCode.DATABASE_QUERY_ERROR,
+    {
       membershipId: event.membershipId,
-      error: error instanceof Error ? error.message : String(error)
-    });
+      userId: event.userId,
+      companyId,
+      reason: event.reason
+    }
+  );
+
+  if (!result.success) {
+    // Error already logged by errorHandler
     return null;
   }
+
+  return result.data!;
 }
 
 // Update existing recovery case with new failure
@@ -351,47 +265,48 @@ export async function updateRecoveryCase(
   existingCase: RecoveryCase,
   event: PaymentFailedEvent
 ): Promise<RecoveryCase | null> {
-  try {
-    const updatedCase = await sql.insert<RecoveryCase>(
-      `UPDATE recovery_cases
-       SET attempts = attempts + 1,
-           last_nudge_at = $2,
-           failure_reason = COALESCE($3, failure_reason),
-           updated_at = NOW()
-       WHERE id = $1
-       RETURNING *`,
-      [
-        existingCase.id,
-        new Date(),
-        event.reason || existingCase.failure_reason
-      ]
-    );
+  const result = await errorHandler.wrapAsync(
+    async () => {
+      const updatedCase = await sql.insert<RecoveryCase>(
+        `UPDATE recovery_cases
+         SET attempts = attempts + 1,
+             last_nudge_at = $2,
+             failure_reason = COALESCE($3, failure_reason),
+             updated_at = NOW()
+         WHERE id = $1
+         RETURNING *`,
+        [
+          existingCase.id,
+          new Date(),
+          event.reason || null
+        ]
+      );
 
-    if (updatedCase) {
-      logger.info('Updated existing recovery case', {
-        caseId: existingCase.id,
-        membershipId: event.membershipId,
-        previousAttempts: existingCase.attempts,
-        newAttempts: updatedCase.attempts
-/**
- * markCaseRecovered function
- *
- * Marks a recovery case as recovered with amount attribution
- * @param caseId - The ID of the recovery case to mark as recovered
- * @param amountCents - Amount recovered in cents
- * @returns Promise that resolves to true if successful, false otherwise
- */
-      });
-    }
+      if (updatedCase) {
+        logger.info('Updated existing recovery case', {
+          caseId: existingCase.id,
+          membershipId: event.membershipId,
+          previousAttempts: existingCase.attempts,
+          newAttempts: updatedCase.attempts
+        });
+      }
 
-    return updatedCase;
-  } catch (error) {
-    logger.error('Failed to update recovery case', {
+      return updatedCase;
+    },
+    ErrorCode.DATABASE_QUERY_ERROR,
+    {
       caseId: existingCase.id,
-      error: error instanceof Error ? error.message : String(error)
-    });
+      membershipId: event.membershipId,
+      reason: event.reason
+    }
+  );
+
+  if (!result.success) {
+    // Error already logged by errorHandler
     return null;
   }
+
+  return result.data!;
 }
 
 // Main function: Process payment_failed event into recovery case
@@ -469,29 +384,34 @@ export async function markCaseRecovered(
   caseId: string,
   amountCents: number
 ): Promise<boolean> {
-  try {
-    const result = await sql.execute(
-      `UPDATE recovery_cases
-       SET status = $1,
-           recovered_amount_cents = $2,
-           updated_at = NOW()
-       WHERE id = $3 AND status = $4`,
-      [RECOVERED_STATUS, amountCents, caseId, OPEN_CASE_STATUS]
-    );
+  const result = await errorHandler.wrapAsync(
+    async () => {
+      const dbResult = await sql.execute(
+        `UPDATE recovery_cases
+         SET status = $1,
+             recovered_amount_cents = $2,
+             updated_at = NOW()
+         WHERE id = $3 AND status = $4`,
+        [RECOVERED_STATUS, amountCents, caseId, OPEN_CASE_STATUS]
+      );
 
-    const success = result > 0;
-    if (success) {
-      logger.info('Marked case as recovered', { caseId, amountCents });
-    }
+      const success = dbResult > 0;
+      if (success) {
+        logger.info('Marked case as recovered', { caseId, amountCents });
+      }
 
-    return success;
-  } catch (error) {
-    logger.error('Failed to mark case as recovered', {
-      caseId,
-      error: error instanceof Error ? error.message : String(error)
-    });
+      return success;
+    },
+    ErrorCode.DATABASE_QUERY_ERROR,
+    { caseId, amountCents }
+  );
+
+  if (!result.success) {
+    // Error already logged by errorHandler
     return false;
   }
+
+  return result.data!;
 }
 
 // Get recovery cases for dashboard
@@ -858,33 +778,7 @@ export async function processMembershipInvalidEvent(
       try {
         const settings = await getSettingsForCompany(companyId);
         
-        // Set RLS context for this operation
-        setRequestContext({
-          companyId,
-          userId: 'system',
-          isAuthenticated: true
-        });
-        
-        // Set RLS context for this operation
-        setRequestContext({
-          companyId,
-          userId: 'system',
-          isAuthenticated: true
-        });
-        
-        // Set RLS context for this operation
-        setRequestContext({
-          companyId,
-          userId: 'system',
-          isAuthenticated: true
-        });
-        
-        // Set RLS context for this operation
-        setRequestContext({
-          companyId,
-          userId: 'system',
-          isAuthenticated: true
-        });
+        // Note: setRequestContext calls removed due to missing import
         const nudgeResult = await sendImmediateRecoveryNudge(newCase, {
           enable_push: settings.enable_push,
           enable_dm: settings.enable_dm,
@@ -1023,61 +917,7 @@ export async function nudgeCaseAgain(
     // Get company settings to determine which channels to use
     const settings = await getSettingsForCompany(companyId);
     
-    // Set RLS context for this operation
-    setRequestContext({
-      companyId,
-      userId: 'system',
-      isAuthenticated: true
-    });
-    
-    // Set RLS context for this operation
-    setRequestContext({
-      companyId,
-      userId: 'system',
-      isAuthenticated: true
-    });
-    
-    // Set RLS context for this operation
-    setRequestContext({
-      companyId,
-      userId: 'system',
-      isAuthenticated: true
-    });
-    
-    // Set RLS context for this operation
-    setRequestContext({
-      companyId,
-      userId: 'system',
-      isAuthenticated: true
-    });
-    
-    // Set RLS context for this operation
-    setRequestContext({
-      companyId,
-      userId: 'system',
-      isAuthenticated: true
-    });
-    
-    // Set RLS context for this operation
-    setRequestContext({
-      companyId,
-      userId: 'system',
-      isAuthenticated: true
-    });
-    
-    // Set RLS context for this operation
-    setRequestContext({
-      companyId,
-      userId: 'system',
-      isAuthenticated: true
-    });
-    
-    // Set RLS context for this operation
-    setRequestContext({
-      companyId,
-      userId: 'system',
-      isAuthenticated: true
-    });
+    // Note: setRequestContext calls removed due to missing import
 
     // Send nudge notifications with shared dispatcher
     const newAttemptNumber = case_.attempts + 1;

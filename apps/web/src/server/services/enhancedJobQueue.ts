@@ -179,13 +179,13 @@ export class EnhancedJobQueueService {
       await this.boss.start();
 
       // Register enhanced job handlers
-      await this.boss.work(this.WEBHOOK_PROCESSING_JOB, async (job: PgBoss.Job<JobData>) => {
+      await this.boss.work(this.WEBHOOK_PROCESSING_JOB, (async (job: PgBoss.Job<JobData>) => {
         return await this.processEnhancedWebhookJob(job);
-      });
+      }) as any);
 
-      await this.boss.work(this.REMINDER_PROCESSING_JOB, async (job: PgBoss.Job<{ companyId: string }>) => {
+      await this.boss.work(this.REMINDER_PROCESSING_JOB, (async (job: PgBoss.Job<{ companyId: string }>) => {
         return await this.processEnhancedReminderJob(job);
-      });
+      }) as any);
 
       // Initialize circuit breakers
       if (this.config.circuitBreaker.enabled) {
@@ -237,7 +237,7 @@ export class EnhancedJobQueueService {
 
       // Record enqueue metrics
       if (this.config.metrics.enabled) {
-        await this.metricsService.recordJobEnqueued(jobId, this.WEBHOOK_PROCESSING_JOB, data.companyId);
+        await this.metricsService.recordJobEnqueued(jobId || '', this.WEBHOOK_PROCESSING_JOB, data.companyId);
       }
 
       logger.info('Enhanced webhook job enqueued', {
@@ -250,7 +250,7 @@ export class EnhancedJobQueueService {
         priority: 1
       });
 
-      return jobId;
+      return jobId || '';
     } catch (error) {
       const categorizedError = this.categorizeError(error as Error, 'enqueue_webhook', {
         eventId: data.eventId,
@@ -284,7 +284,7 @@ export class EnhancedJobQueueService {
 
       // Record enqueue metrics
       if (this.config.metrics.enabled) {
-        await this.metricsService.recordJobEnqueued(jobId, this.REMINDER_PROCESSING_JOB, companyId);
+        await this.metricsService.recordJobEnqueued(jobId || '', this.REMINDER_PROCESSING_JOB, companyId);
       }
 
       logger.info('Enhanced reminder job enqueued', {
@@ -295,7 +295,7 @@ export class EnhancedJobQueueService {
         priority: 0
       });
 
-      return jobId;
+      return jobId || '';
     } catch (error) {
       const categorizedError = this.categorizeError(error as Error, 'enqueue_reminder', {
         companyId
@@ -318,7 +318,7 @@ export class EnhancedJobQueueService {
       type: this.WEBHOOK_PROCESSING_JOB,
       payload: data,
       priority: 1,
-      attempts: job.data.attempts || 0,
+      attempts: (job as any).attempts || 0,
       maxAttempts: this.config.retry.maxAttempts[this.WEBHOOK_PROCESSING_JOB] || 3,
       status: 'processing',
       createdAt: new Date().toISOString(),
@@ -354,7 +354,7 @@ export class EnhancedJobQueueService {
           // Schedule job for later processing
           throw new AppError(
             'High memory pressure - job rescheduled',
-            ErrorCode.RESOURCE_EXHAUSTED,
+            ErrorCode.SERVICE_UNAVAILABLE,
             ErrorCategory.SYSTEM,
             ErrorSeverity.MEDIUM,
             503,
@@ -467,7 +467,7 @@ export class EnhancedJobQueueService {
       type: this.REMINDER_PROCESSING_JOB,
       payload: data,
       priority: 0,
-      attempts: job.data.attempts || 0,
+      attempts: (job as any).attempts || 0,
       maxAttempts: this.config.retry.maxAttempts[this.REMINDER_PROCESSING_JOB] || 2,
       status: 'processing',
       createdAt: new Date().toISOString(),
@@ -699,7 +699,6 @@ export class EnhancedJobQueueService {
     jobType: string
   ): Promise<void> {
     await errorMonitoringIntegration.processError(error, {
-      operation: 'job_enqueue',
       endpoint: jobType,
       companyId: jobData.companyId
     });
@@ -720,7 +719,6 @@ export class EnhancedJobQueueService {
     duration: number
   ): Promise<void> {
     await errorMonitoringIntegration.processError(error, {
-      operation: 'job_processing',
       endpoint: job.type,
       companyId: job.companyId,
       responseTime: duration
@@ -812,7 +810,7 @@ export class EnhancedJobQueueService {
         duration,
         attempts: job.attempts,
         errorCategory: error?.category,
-        errorCode: error?.code,
+        errorCode: error?.code ? String(error.code) : undefined,
         errorMessage: error?.message,
         memoryUsage: this.getMemoryUsage(),
         queueDepth: this.activeJobs.size,

@@ -8,7 +8,17 @@ import { WhopApiClient } from './client';
 import { logger } from '@/lib/logger';
 import { AppError, ErrorCategory, ErrorSeverity, ErrorCode } from '@/lib/apiResponse';
 import { encrypt, decrypt } from '@/lib/encryption';
-import { createHash } from 'crypto';
+// Conditionally import crypto for Edge Runtime compatibility
+let createHash: (algorithm: string) => any;
+try {
+  const crypto = require('crypto');
+  createHash = crypto.createHash;
+} catch {
+  // In Edge Runtime, crypto.createHash may not be available
+  // We'll use a fallback or make hash functions conditional
+  createHash = undefined as any;
+}
+import { isProductionLikeEnvironment, env } from '@/lib/env';
 
 /**
  * Token information interface
@@ -115,6 +125,8 @@ export class WhopAuthService {
   private tokenStorage: TokenStorage;
   private sessionTimeout: number;
   private tokenCache = new Map<string, TokenInfo>();
+  private tokenToSessionMap = new Map<string, string>(); // Maps token hash to session ID
+  private sessionToTokensMap = new Map<string, Set<string>>(); // Maps session ID to set of token hashes
 
   constructor(
     config?: WhopSdkConfig,
@@ -207,34 +219,87 @@ export class WhopAuthService {
         }
       }
 
-      // Security fix: Prevent authentication bypass in production
-      // In development, skip verification only if explicitly allowed with additional safeguards
+      // Security fix: Enhanced production environment detection to prevent authentication bypass
+      // This prevents insecure dev mode from being enabled in any production-like environment
       if (process.env.NODE_ENV === 'development' && !this.config.apiKey) {
         // Check if insecure dev mode is explicitly allowed
         const allowInsecureDev = process.env.ALLOW_INSECURE_DEV === 'true';
         
-        // Additional security check: Never allow insecure dev mode if production indicators are present
-        const isProductionLike =
-          process.env.VERCEL_ENV === 'production' ||
-          process.env.DATABASE_URL?.includes('supabase.com') ||
-          process.env.NODE_ENV === 'production';
+        // Enhanced production environment detection with multiple indicators
+        const isProductionLike = isProductionLikeEnvironment();
+        const hasProductionDatabase = env.DATABASE_URL?.includes('supabase.com') ||
+                                 env.DATABASE_URL?.includes('aws') ||
+                                 env.DATABASE_URL?.includes('rds') ||
+                                 env.DATABASE_URL?.includes('postgres');
+        const isProductionHost = process.env.VERCEL_ENV === 'production' ||
+                               process.env.VERCEL_ENV === 'preview' ||
+                               process.env.HEROKU_ENV === 'production' ||
+                               process.env.RAILWAY_ENV === 'production' ||
+                               process.env.RENDER_ENV === 'production';
+        const hasProductionDomain = process.env.NEXT_PUBLIC_APP_URL?.includes('.com') ||
+                                  process.env.NEXT_PUBLIC_APP_URL?.includes('app') ||
+                                  process.env.NEXT_PUBLIC_APP_URL?.includes('prod');
+        const hasProductionVars = (process.env.WHOP_API_KEY?.length ?? 0) > 20 ||
+                                (process.env.ENCRYPTION_KEY?.length ?? 0) > 20;
         
-        if (isProductionLike) {
-          logger.security('SECURITY ALERT: Attempted to use insecure dev mode in production-like environment', {
+        // Combine all production indicators - if ANY are true, treat as production
+        const isStrictlyProduction = isProductionLike ||
+                                  hasProductionDatabase ||
+                                  isProductionHost ||
+                                  hasProductionDomain ||
+                                  hasProductionVars;
+        
+        // Enhanced security logging for all production-like environments
+        if (isStrictlyProduction) {
+          // Create comprehensive security alert
+          const securityContext = {
             category: 'security',
             severity: 'critical',
             environment: process.env.NODE_ENV,
             vercelEnv: process.env.VERCEL_ENV,
             hasApiKey: !!this.config.apiKey,
-            databaseUrl: env.DATABASE_URL ? '[REDACTED]' : 'not set'
+            databaseUrl: env.DATABASE_URL ? '[REDACTED]' : 'not set',
+            appUrl: process.env.NEXT_PUBLIC_APP_URL || 'not set',
+            hasWhopApiKey: !!process.env.WHOP_API_KEY,
+            hasEncryptionKey: !!process.env.ENCRYPTION_KEY,
+            allowInsecureDev: allowInsecureDev,
+            productionIndicators: {
+              isProductionLike,
+              hasProductionDatabase,
+              isProductionHost,
+              hasProductionDomain,
+              hasProductionVars
+            },
+            timestamp: new Date().toISOString(),
+            requestId: `auth_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+          };
+          
+          logger.security('CRITICAL SECURITY ALERT: Authentication bypass attempted in production-like environment', securityContext);
+          
+          // Additional security monitoring - alert to multiple channels
+          logger.error('PRODUCTION SECURITY VIOLATION: Insecure dev mode detected in production environment', {
+            ...securityContext,
+            alertType: 'AUTHENTICATION_BYPASS_ATTEMPT',
+            requiresImmediateAction: true
           });
           
           throw new AppError(
-            'Insecure development mode is not allowed in production environments',
+            'SECURITY CONFIGURATION ERROR: Insecure development mode cannot be enabled in production environments. ' +
+            'This is a critical security vulnerability. ' +
+            'Immediate action required: Remove ALLOW_INSECURE_DEV=true from all production deployments. ' +
+            'Production deployments require valid API key configuration.',
             ErrorCode.UNAUTHORIZED,
-            ErrorCategory.AUTHENTICATION,
+            ErrorCategory.SECURITY,
             ErrorSeverity.CRITICAL,
-            401
+            401,
+            false,
+            false,
+            {
+              securityIssue: 'AUTHENTICATION_BYPASS',
+              environmentType: 'PRODUCTION_LIKE',
+              requiredAction: 'REMOVE_INSECURE_DEV_FLAG',
+              configurationError: true
+            }
           );
         }
         
@@ -243,26 +308,50 @@ export class WhopAuthService {
             category: 'configuration',
             severity: 'high',
             environment: process.env.NODE_ENV,
-            hasApiKey: !!this.config.apiKey
+            hasApiKey: !!this.config.apiKey,
+            isProductionLike,
+            productionIndicators: {
+              hasProductionDatabase,
+              isProductionHost,
+              hasProductionDomain,
+              hasProductionVars
+            }
           });
           
           throw new AppError(
-            'Development mode requires ALLOW_INSECURE_DEV=true environment variable or valid API key configuration',
+            'SECURITY CONFIGURATION: Development mode requires ALLOW_INSECURE_DEV=true environment variable or valid API key configuration. ' +
+            'For production use, configure proper API keys instead of using development mode.',
             ErrorCode.UNAUTHORIZED,
             ErrorCategory.AUTHENTICATION,
             ErrorSeverity.HIGH,
-            401
+            401,
+            false,
+            false,
+            {
+              configurationIssue: 'MISSING_DEV_FLAG_OR_API_KEY',
+              suggestedFix: 'Set ALLOW_INSECURE_DEV=true for development or configure API keys for production'
+            }
           );
         }
         
-        // Log security warning when insecure dev mode is active
-        logger.security('WARNING: Insecure development mode is active - authentication bypassed', {
+        // Enhanced security warning when insecure dev mode is active
+        const devModeContext = {
           category: 'security',
           severity: 'medium',
           environment: process.env.NODE_ENV,
           hasApiKey: !!this.config.apiKey,
-          allowInsecureDev: true
-        });
+          allowInsecureDev: true,
+          warning: 'Insecure development mode is active - authentication bypassed',
+          securityImplications: [
+            'All authentication checks are bypassed',
+            'Tokens are not validated',
+            'User identities are mocked',
+            'This should NEVER be used in production'
+          ],
+          timestamp: new Date().toISOString()
+        };
+        
+        logger.security('SECURITY WARNING: Insecure development mode active - authentication bypassed', devModeContext);
         
         const mockTokenInfo: TokenInfo = {
           token,
@@ -270,7 +359,12 @@ export class WhopAuthService {
           expiresAt: Date.now() + 3600000, // 1 hour
           issuedAt: Date.now(),
           userId: 'dev-user',
-          companyId: this.config.appId
+          companyId: this.config.appId,
+          metadata: {
+            developmentMode: true,
+            authenticationBypassed: true,
+            securityWarning: 'This token is only valid in development mode'
+          }
         };
         
         this.tokenCache.set(cacheKey, mockTokenInfo);
@@ -313,7 +407,7 @@ export class WhopAuthService {
         metadata: payload.metadata as Record<string, any> || {}
       };
 
-      // Cache the verified token
+      // Cache the verified token and track token-to-session mapping
       if (!this.config.debugMode) {
         this.tokenCache.set(cacheKey, tokenInfo);
       }
@@ -545,6 +639,66 @@ export class WhopAuthService {
   }
 
   /**
+   * Invalidate token cache entries
+   */
+  private async invalidateTokenCache(tokenHashes: string[], reason: string, context?: any): Promise<void> {
+    try {
+      let invalidatedCount = 0;
+      
+      for (const tokenHash of tokenHashes) {
+        if (this.tokenCache.has(tokenHash)) {
+          const tokenInfo = this.tokenCache.get(tokenHash);
+          this.tokenCache.delete(tokenHash);
+          invalidatedCount++;
+          
+          // Remove from token-to-session mapping
+          const sessionId = this.tokenToSessionMap.get(tokenHash);
+          if (sessionId) {
+            this.tokenToSessionMap.delete(tokenHash);
+            
+            // Remove from session-to-tokens mapping
+            const sessionTokens = this.sessionToTokensMap.get(sessionId);
+            if (sessionTokens) {
+              sessionTokens.delete(tokenHash);
+              if (sessionTokens.size === 0) {
+                this.sessionToTokensMap.delete(sessionId);
+              }
+            }
+          }
+          
+          logger.security('Token invalidated', {
+            category: 'security',
+            severity: 'medium',
+            reason,
+            tokenHash: tokenHash.substring(0, 8) + '...', // Log partial hash for security
+            userId: tokenInfo?.userId,
+            companyId: tokenInfo?.companyId,
+            invalidatedAt: new Date().toISOString(),
+            ...context
+          });
+        }
+      }
+      
+      if (invalidatedCount > 0) {
+        logger.security('Token cache invalidation completed', {
+          category: 'security',
+          severity: 'medium',
+          reason,
+          invalidatedCount,
+          totalRequested: tokenHashes.length,
+          ...context
+        });
+      }
+    } catch (error) {
+      logger.error('Token cache invalidation failed', {
+        error: error instanceof Error ? error.message : String(error),
+        tokenHashCount: tokenHashes.length,
+        reason
+      });
+    }
+  }
+
+  /**
    * Revoke session
    */
   async revokeSession(sessionId: string): Promise<void> {
@@ -553,8 +707,23 @@ export class WhopAuthService {
       const sessionData = await this.tokenStorage.get(sessionKey);
       
       if (sessionData) {
-        const decryptedData = decrypt(sessionData);
+        const decryptedData = await decrypt(sessionData);
         const sessionInfo: SessionInfo = JSON.parse(decryptedData);
+        
+        // Invalidate all tokens associated with this session
+        const sessionTokens = this.sessionToTokensMap.get(sessionId);
+        if (sessionTokens && sessionTokens.size > 0) {
+          await this.invalidateTokenCache(
+            Array.from(sessionTokens),
+            'session_revoked',
+            {
+              sessionId,
+              userId: sessionInfo.userId,
+              companyId: sessionInfo.companyId,
+              revokedBy: 'revokeSession'
+            }
+          );
+        }
         
         // Remove session
         await this.tokenStorage.delete(sessionKey);
@@ -576,7 +745,8 @@ export class WhopAuthService {
         logger.info('Session revoked', {
           sessionId,
           userId: sessionInfo.userId,
-          companyId: sessionInfo.companyId
+          companyId: sessionInfo.companyId,
+          tokensInvalidated: sessionTokens ? sessionTokens.size : 0
         });
       }
 
@@ -601,14 +771,43 @@ export class WhopAuthService {
   async revokeAllUserSessions(userId: string): Promise<void> {
     try {
       const sessions = await this.getUserSessions(userId);
+      let totalTokensInvalidated = 0;
       
+      // First, collect all tokens from all sessions to invalidate them efficiently
+      const allTokenHashes: string[] = [];
+      for (const sessionId of sessions) {
+        const sessionTokens = this.sessionToTokensMap.get(sessionId);
+        if (sessionTokens) {
+          allTokenHashes.push(...Array.from(sessionTokens));
+        }
+      }
+      
+      // Invalidate all tokens at once
+      if (allTokenHashes.length > 0) {
+        await this.invalidateTokenCache(
+          allTokenHashes,
+          'all_user_sessions_revoked',
+          {
+            userId,
+            sessionCount: sessions.length,
+            revokedBy: 'revokeAllUserSessions'
+          }
+        );
+        totalTokensInvalidated = allTokenHashes.length;
+      }
+      
+      // Then revoke each session
       for (const sessionId of sessions) {
         await this.revokeSession(sessionId);
       }
 
-      logger.info('All user sessions revoked', {
+      logger.security('All user sessions revoked', {
+        category: 'security',
+        severity: 'medium',
         userId,
-        sessionCount: sessions.length
+        sessionCount: sessions.length,
+        tokensInvalidated: totalTokensInvalidated,
+        revokedBy: 'revokeAllUserSessions'
       });
 
     } catch (error) {
@@ -640,6 +839,21 @@ export class WhopAuthService {
       // Use Whop SDK to refresh token
       const result = await this.sdk.verifyUserToken(headers);
       
+      // Hash the old token to find it in cache
+      const oldTokenHash = this.hashToken(refreshToken);
+      
+      // Invalidate old token before issuing new one
+      await this.invalidateTokenCache(
+        [oldTokenHash],
+        'token_refresh',
+        {
+          oldTokenHash: oldTokenHash.substring(0, 8) + '...',
+          userId: result.userId,
+          companyId: (result as any).companyId || this.config.appId,
+          refreshedBy: 'refreshToken'
+        }
+      );
+      
       const newTokenInfo: TokenInfo = {
         token: refreshToken, // In real implementation, this would be a new token
         payload: {
@@ -652,9 +866,13 @@ export class WhopAuthService {
         companyId: (result as any).companyId || this.config.appId
       };
 
-      logger.info('Token refreshed successfully', {
+      logger.security('Token refreshed successfully', {
+        category: 'security',
+        severity: 'medium',
         userId: newTokenInfo.userId,
-        companyId: newTokenInfo.companyId
+        companyId: newTokenInfo.companyId,
+        oldTokenInvalidated: true,
+        oldTokenHash: oldTokenHash.substring(0, 8) + '...'
       });
 
       return newTokenInfo;
@@ -706,12 +924,59 @@ export class WhopAuthService {
   }
 
   /**
+   * Invalidate all tokens for a specific user
+   */
+  async invalidateUserTokens(userId: string, reason: string = 'manual_invalidation'): Promise<void> {
+    try {
+      // Find all sessions for this user
+      const userSessions = await this.getUserSessions(userId);
+      const allTokenHashes: string[] = [];
+      
+      // Collect all tokens from all user sessions
+      for (const sessionId of userSessions) {
+        const sessionTokens = this.sessionToTokensMap.get(sessionId);
+        if (sessionTokens) {
+          allTokenHashes.push(...Array.from(sessionTokens));
+        }
+      }
+      
+      // Invalidate all tokens at once
+      if (allTokenHashes.length > 0) {
+        await this.invalidateTokenCache(
+          allTokenHashes,
+          reason,
+          {
+            userId,
+            sessionCount: userSessions.length,
+            invalidatedBy: 'invalidateUserTokens'
+          }
+        );
+      }
+      
+      logger.security('All user tokens invalidated', {
+        category: 'security',
+        severity: 'medium',
+        userId,
+        sessionCount: userSessions.length,
+        tokensInvalidated: allTokenHashes.length,
+        reason
+      });
+
+    } catch (error) {
+      logger.error('Failed to invalidate user tokens', {
+        userId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  /**
    * Check permissions
    */
   private checkPermissions(userPermissions: string[], requiredPermissions: string[]): boolean {
-    return requiredPermissions.every(permission => 
-      userPermissions.includes(permission) || 
-      userPermissions.includes('*') || 
+    return requiredPermissions.every(permission =>
+      userPermissions.includes(permission) ||
+      userPermissions.includes('*') ||
       userPermissions.includes('admin')
     );
   }
@@ -732,6 +997,11 @@ export class WhopAuthService {
    */
   private hashToken(token: string): string {
     // Use cryptographically secure SHA-256 for cache key
+    if (!createHash) {
+      // Fallback for Edge Runtime - use a simple hash if crypto is not available
+      // In production, this should not happen as auth runs in Node.js runtime
+      throw new Error('createHash not available in Edge Runtime');
+    }
     return createHash('sha256').update(token).digest('hex');
   }
 
@@ -745,10 +1015,43 @@ export class WhopAuthService {
       
       logger.info('Starting expired session cleanup');
       
-      // Implementation would depend on storage backend
+      let expiredSessionsCount = 0;
+      let expiredTokensCount = 0;
+      const now = Date.now();
+      
+      // Clean up expired tokens from cache
+      for (const [tokenHash, tokenInfo] of this.tokenCache.entries()) {
+        if (tokenInfo.expiresAt <= now) {
+          this.tokenCache.delete(tokenHash);
+          
+          // Clean up mappings
+          const sessionId = this.tokenToSessionMap.get(tokenHash);
+          if (sessionId) {
+            this.tokenToSessionMap.delete(tokenHash);
+            
+            const sessionTokens = this.sessionToTokensMap.get(sessionId);
+            if (sessionTokens) {
+              sessionTokens.delete(tokenHash);
+              if (sessionTokens.size === 0) {
+                this.sessionToTokensMap.delete(sessionId);
+              }
+            }
+          }
+          
+          expiredTokensCount++;
+        }
+      }
+      
+      // Implementation would depend on storage backend for session cleanup
       // For memory storage, we can iterate and clean up
       
-      logger.info('Expired session cleanup completed');
+      logger.security('Expired session cleanup completed', {
+        category: 'security',
+        severity: 'low',
+        expiredTokensCount,
+        expiredSessionsCount,
+        cleanupTime: new Date().toISOString()
+      });
       
     } catch (error) {
       logger.error('Session cleanup failed', {

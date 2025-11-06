@@ -102,7 +102,7 @@ export async function GET(
     });
 
     // Return file as download
-    return new NextResponse(exportFile.file_data, {
+    return new NextResponse(exportFile.file_data as BodyInit, {
       status: 200,
       headers: {
         'Content-Type': exportFile.mime_type,
@@ -131,29 +131,29 @@ export async function GET(
       });
 
       // Map error codes to appropriate API errors
-      let apiError;
+      let apiErrorResponse;
       switch (error.code) {
         case 'NOT_FOUND':
         case 'FILE_NOT_FOUND':
-          apiError = errors.notFound(error.message, error.details);
+          apiErrorResponse = errors.notFound(error.message, error.details);
           break;
         case 'NOT_COMPLETED':
-          apiError = errors.badRequest(error.message, error.details);
+          apiErrorResponse = errors.badRequest(error.message, error.details);
           break;
         case 'EXPIRED':
-          apiError = errors.badRequest(error.message, error.details);
+          apiErrorResponse = errors.badRequest(error.message, error.details);
           break;
         case 'DOWNLOAD_LIMIT_EXCEEDED':
-          apiError = errors.badRequest(error.message, error.details);
+          apiErrorResponse = errors.badRequest(error.message, error.details);
           break;
         case 'DOWNLOAD_FAILED':
-          apiError = errors.internalServerError(error.message, error.details);
+          apiErrorResponse = errors.internalServerError(error.message, error.details);
           break;
         default:
-          apiError = errors.internalServerError('Failed to download export file', error.details);
+          apiErrorResponse = errors.internalServerError('Failed to download export file', error.details);
       }
 
-      return apiError(apiError, context);
+      return apiError(apiErrorResponse, context);
     }
 
     logger.error('Unexpected error in downloading export file', {

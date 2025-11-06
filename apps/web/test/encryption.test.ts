@@ -13,7 +13,7 @@ import {
   isCorrectKeyLength,
   deriveKey
 } from '../src/lib/encryption';
-import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 describe('Encryption Module', () => {
   let testKey: string;

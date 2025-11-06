@@ -108,6 +108,29 @@ interface DashboardData {
   };
 }
 
+// Status utility functions - defined outside component for use in render functions
+const STATUS_COLORS = {
+  healthy: 'text-green-600 bg-green-100',
+  degraded: 'text-yellow-600 bg-yellow-100',
+  unhealthy: 'text-red-600 bg-red-100',
+  default: 'text-gray-600 bg-gray-100'
+} as const;
+
+const STATUS_ICONS = {
+  healthy: <CheckCircle className="w-4 h-4" />,
+  degraded: <AlertCircle className="w-4 h-4" />,
+  unhealthy: <AlertCircle className="w-4 h-4" />,
+  default: <Activity className="w-4 h-4" />
+} as const;
+
+function getStatusColor(status: string): string {
+  return STATUS_COLORS[status as keyof typeof STATUS_COLORS] || STATUS_COLORS.default;
+}
+
+function getStatusIcon(status: string) {
+  return STATUS_ICONS[status as keyof typeof STATUS_ICONS] || STATUS_ICONS.default;
+}
+
 // Component rendering functions for better organization
 function renderOverviewCards(data: DashboardData) {
   return (
@@ -374,26 +397,7 @@ export default function MonitoringDashboard() {
     }
   }, [autoRefresh]);
 
-  // Status utilities
-  const getStatusColor = (status: string): string => STATUS_COLORS[status as keyof typeof STATUS_COLORS] || STATUS_COLORS.default;
-  const getStatusIcon = (status: string) => STATUS_ICONS[status as keyof typeof STATUS_ICONS] || STATUS_ICONS.default;
-  const getSeverityColor = (severity: string): string => SEVERITY_COLORS[severity as keyof typeof SEVERITY_COLORS] || SEVERITY_COLORS.default;
-
-  // Constants for better maintainability
-  const STATUS_COLORS = {
-    healthy: 'text-green-600 bg-green-100',
-    degraded: 'text-yellow-600 bg-yellow-100',
-    unhealthy: 'text-red-600 bg-red-100',
-    default: 'text-gray-600 bg-gray-100'
-  } as const;
-
-  const STATUS_ICONS = {
-    healthy: <CheckCircle className="w-4 h-4" />,
-    degraded: <AlertCircle className="w-4 h-4" />,
-    unhealthy: <AlertCircle className="w-4 h-4" />,
-    default: <Activity className="w-4 h-4" />
-  } as const;
-
+  // Severity colors (component-specific)
   const SEVERITY_COLORS = {
     P0: 'bg-red-100 text-red-800 border-red-200',
     P1: 'bg-orange-100 text-orange-800 border-orange-200',
@@ -401,6 +405,8 @@ export default function MonitoringDashboard() {
     P3: 'bg-blue-100 text-blue-800 border-blue-200',
     default: 'bg-gray-100 text-gray-800 border-gray-200'
   } as const;
+
+  const getSeverityColor = (severity: string): string => SEVERITY_COLORS[severity as keyof typeof SEVERITY_COLORS] || SEVERITY_COLORS.default;
 
   if (loading) {
     return (

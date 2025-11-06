@@ -481,15 +481,13 @@ function runProtectedApiTests() {
     // Restore original environment
     process.env = originalEnv;
 
-    return results.failed === 0;
+    process.exit(results.failed === 0 ? 0 : 1);
   }, 1000);
 }
 
 // Run tests if called directly
 if (require.main === module) {
-  runProtectedApiTests().then(success => {
-    process.exit(success ? 0 : 1);
-  });
+  runProtectedApiTests();
 }
 
 module.exports = { runProtectedApiTests };

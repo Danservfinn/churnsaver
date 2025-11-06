@@ -122,12 +122,12 @@ export class EnhancedCircuitBreaker {
             ErrorSeverity.MEDIUM,
             503,
             false,
-            Math.ceil((this.metrics.nextAttemptTime! - Date.now()) / 1000),
+            undefined,
             {
               circuitName: this.config.name,
               state: this.state,
               failureCount: this.metrics.failures,
-              nextAttemptIn: this.metrics.nextAttemptTime! - Date.now()
+              nextAttemptIn: Math.ceil((this.metrics.nextAttemptTime! - Date.now()) / 1000)
             }
           );
         }

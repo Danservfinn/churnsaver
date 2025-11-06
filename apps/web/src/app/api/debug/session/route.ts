@@ -2,9 +2,9 @@
 // Provides endpoints for managing debug sessions
 
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticatedRoute } from '@/lib/whop/authMiddleware';
+import { authenticatedRoute, type MiddlewareAuthContext } from '@/lib/whop/authMiddleware';
 import { apiSuccess, apiError, errors, createRequestContext } from '@/lib/apiResponse';
-import { withRateLimit } from '@/server/middleware/rateLimit';
+import { checkRateLimit } from '@/server/middleware/rateLimit';
 import { debugService } from '@/server/services/debugService';
 import { 
   CreateDebugSessionRequest, 
@@ -17,6 +17,7 @@ import {
 } from '@/types/debugging';
 import { logger } from '@/lib/logger';
 
+
 // Rate limit configuration for debug session operations
 const DEBUG_SESSION_RATE_LIMIT = {
   windowMs: 60 * 1000, // 1 minute
@@ -27,7 +28,24 @@ const DEBUG_SESSION_RATE_LIMIT = {
 /**
  * POST /api/debug/session - Create new debug session
  */
-async function createSessionHandler(request: NextRequest, context: any) {
+async function createSessionHandler(request: NextRequest, context: MiddlewareAuthContext): Promise<NextResponse<any>> {
+  // Check rate limit
+  const userId = context.userId || 'anonymous';
+  const rateLimitResult = await checkRateLimit(
+    `${DEBUG_SESSION_RATE_LIMIT.keyPrefix}:${userId}`,
+    DEBUG_SESSION_RATE_LIMIT
+  );
+
+  if (!rateLimitResult.allowed) {
+    return apiError(
+      errors.tooManyRequests('Rate limit exceeded', {
+        retryAfter: rateLimitResult.retryAfter,
+        resetAt: rateLimitResult.resetAt.toISOString()
+      }),
+      createRequestContext(request)
+    );
+  }
+
   try {
     const body = await request.json() as CreateDebugSessionRequest;
 
@@ -57,8 +75,8 @@ async function createSessionHandler(request: NextRequest, context: any) {
 
     // Create debug context
     const debugContext: DebugContext = {
-      userId: context.userId,
-      companyId: context.companyId,
+      userId: context.userId || '',
+      companyId: context.companyId || '',
       requestId: context.requestId,
       environment: body.environment || DebugEnvironment.DEVELOPMENT,
       ipAddress: context.ip,
@@ -71,8 +89,8 @@ async function createSessionHandler(request: NextRequest, context: any) {
 
     logger.info('Debug session created via API', {
       sessionId: session.sessionId,
-      userId: context.userId,
-      companyId: context.companyId,
+      userId: context.userId || '',
+      companyId: context.companyId || '',
       debugLevel: body.debugLevel
     });
 
@@ -94,7 +112,24 @@ async function createSessionHandler(request: NextRequest, context: any) {
 /**
  * GET /api/debug/session - Get debug sessions with pagination and filtering
  */
-async function getSessionsHandler(request: NextRequest, context: any) {
+async function getSessionsHandler(request: NextRequest, context: MiddlewareAuthContext): Promise<NextResponse<any>> {
+  // Check rate limit
+  const userId = context.userId || 'anonymous';
+  const rateLimitResult = await checkRateLimit(
+    `${DEBUG_SESSION_RATE_LIMIT.keyPrefix}:${userId}`,
+    DEBUG_SESSION_RATE_LIMIT
+  );
+
+  if (!rateLimitResult.allowed) {
+    return apiError(
+      errors.tooManyRequests('Rate limit exceeded', {
+        retryAfter: rateLimitResult.retryAfter,
+        resetAt: rateLimitResult.resetAt.toISOString()
+      }),
+      createRequestContext(request)
+    );
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     
@@ -113,8 +148,8 @@ async function getSessionsHandler(request: NextRequest, context: any) {
 
     // Create debug context
     const debugContext: DebugContext = {
-      userId: context.userId,
-      companyId: context.companyId,
+      userId: context.userId || '',
+      companyId: context.companyId || '',
       requestId: context.requestId,
       environment: DebugEnvironment.DEVELOPMENT,
       ipAddress: context.ip,
@@ -126,8 +161,8 @@ async function getSessionsHandler(request: NextRequest, context: any) {
     const result = await debugService.getSessions(query, debugContext);
 
     logger.info('Debug sessions retrieved via API', {
-      userId: context.userId,
-      companyId: context.companyId,
+      userId: context.userId || '',
+      companyId: context.companyId || '',
       sessionCount: result.sessions.length,
       totalSessions: result.total
     });
@@ -150,7 +185,23 @@ async function getSessionsHandler(request: NextRequest, context: any) {
 /**
  * PUT /api/debug/session - Update debug session
  */
-async function updateSessionHandler(request: NextRequest, context: any) {
+async function updateSessionHandler(request: NextRequest, context: MiddlewareAuthContext): Promise<NextResponse<any>> {
+  // Check rate limit
+  const userId = context.userId || 'anonymous';
+  const rateLimitResult = await checkRateLimit(
+    `${DEBUG_SESSION_RATE_LIMIT.keyPrefix}:${userId}`,
+    DEBUG_SESSION_RATE_LIMIT
+  );
+
+  if (!rateLimitResult.allowed) {
+    return apiError(
+      errors.tooManyRequests('Rate limit exceeded', {
+        retryAfter: rateLimitResult.retryAfter,
+        resetAt: rateLimitResult.resetAt.toISOString()
+      }),
+      createRequestContext(request)
+    );
+  }
   try {
     const body = await request.json() as UpdateDebugSessionRequest & { sessionId: string };
 
@@ -179,8 +230,8 @@ async function updateSessionHandler(request: NextRequest, context: any) {
 
     // Create debug context
     const debugContext: DebugContext = {
-      userId: context.userId,
-      companyId: context.companyId,
+      userId: context.userId || '',
+      companyId: context.companyId || '',
       requestId: context.requestId,
       environment: DebugEnvironment.DEVELOPMENT,
       ipAddress: context.ip,
@@ -234,7 +285,23 @@ async function updateSessionHandler(request: NextRequest, context: any) {
 /**
  * DELETE /api/debug/session - End debug session
  */
-async function endSessionHandler(request: NextRequest, context: any) {
+async function endSessionHandler(request: NextRequest, context: MiddlewareAuthContext): Promise<NextResponse<any>> {
+  // Check rate limit
+  const userId = context.userId || 'anonymous';
+  const rateLimitResult = await checkRateLimit(
+    `${DEBUG_SESSION_RATE_LIMIT.keyPrefix}:${userId}`,
+    DEBUG_SESSION_RATE_LIMIT
+  );
+
+  if (!rateLimitResult.allowed) {
+    return apiError(
+      errors.tooManyRequests('Rate limit exceeded', {
+        retryAfter: rateLimitResult.retryAfter,
+        resetAt: rateLimitResult.resetAt.toISOString()
+      }),
+      createRequestContext(request)
+    );
+  }
   try {
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get('sessionId');
@@ -248,8 +315,8 @@ async function endSessionHandler(request: NextRequest, context: any) {
 
     // Create debug context
     const debugContext: DebugContext = {
-      userId: context.userId,
-      companyId: context.companyId,
+      userId: context.userId || '',
+      companyId: context.companyId || '',
       requestId: context.requestId,
       environment: DebugEnvironment.DEVELOPMENT,
       ipAddress: context.ip,
@@ -291,7 +358,24 @@ async function endSessionHandler(request: NextRequest, context: any) {
 /**
  * GET /api/debug/session/:sessionId - Get specific debug session
  */
-async function getSessionHandler(request: NextRequest, context: any) {
+async function getSessionHandler(request: NextRequest, context: MiddlewareAuthContext): Promise<NextResponse<any>> {
+  // Check rate limit
+  const userId = context.userId || 'anonymous';
+  const rateLimitResult = await checkRateLimit(
+    `${DEBUG_SESSION_RATE_LIMIT.keyPrefix}:${userId}`,
+    DEBUG_SESSION_RATE_LIMIT
+  );
+
+  if (!rateLimitResult.allowed) {
+    return apiError(
+      errors.tooManyRequests('Rate limit exceeded', {
+        retryAfter: rateLimitResult.retryAfter,
+        resetAt: rateLimitResult.resetAt.toISOString()
+      }),
+      createRequestContext(request)
+    );
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get('sessionId');
@@ -305,8 +389,8 @@ async function getSessionHandler(request: NextRequest, context: any) {
 
     // Create debug context
     const debugContext: DebugContext = {
-      userId: context.userId,
-      companyId: context.companyId,
+      userId: context.userId || '',
+      companyId: context.companyId || '',
       requestId: context.requestId,
       environment: DebugEnvironment.DEVELOPMENT,
       ipAddress: context.ip,
@@ -345,57 +429,34 @@ async function getSessionHandler(request: NextRequest, context: any) {
   }
 }
 
-// Apply rate limiting and authentication to all handlers
-const createSessionWithRateLimit = withRateLimit(
-  authenticatedRoute(createSessionHandler),
-  DEBUG_SESSION_RATE_LIMIT,
-  (request) => `${DEBUG_SESSION_RATE_LIMIT.keyPrefix}:${request.headers.get('x-user-id') || 'anonymous'}`
-);
-
-const getSessionsWithRateLimit = withRateLimit(
-  authenticatedRoute(getSessionsHandler),
-  DEBUG_SESSION_RATE_LIMIT,
-  (request) => `${DEBUG_SESSION_RATE_LIMIT.keyPrefix}:${request.headers.get('x-user-id') || 'anonymous'}`
-);
-
-const updateSessionWithRateLimit = withRateLimit(
-  authenticatedRoute(updateSessionHandler),
-  DEBUG_SESSION_RATE_LIMIT,
-  (request) => `${DEBUG_SESSION_RATE_LIMIT.keyPrefix}:${request.headers.get('x-user-id') || 'anonymous'}`
-);
-
-const endSessionWithRateLimit = withRateLimit(
-  authenticatedRoute(endSessionHandler),
-  DEBUG_SESSION_RATE_LIMIT,
-  (request) => `${DEBUG_SESSION_RATE_LIMIT.keyPrefix}:${request.headers.get('x-user-id') || 'anonymous'}`
-);
-
-const getSessionWithRateLimit = withRateLimit(
-  authenticatedRoute(getSessionHandler),
-  DEBUG_SESSION_RATE_LIMIT,
-  (request) => `${DEBUG_SESSION_RATE_LIMIT.keyPrefix}:${request.headers.get('x-user-id') || 'anonymous'}`
-);
-
 // Main handler function
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  
-  // Route based on query parameters
-  if (searchParams.get('sessionId')) {
-    return getSessionWithRateLimit(request);
-  } else {
-    return getSessionsWithRateLimit(request);
-  }
+export async function GET(
+  request: NextRequest
+): Promise<NextResponse> {
+  const handler = async (req: NextRequest, context: MiddlewareAuthContext): Promise<NextResponse<any>> => {
+    const { searchParams } = new URL(req.url);
+    if (searchParams.get('sessionId')) {
+      return await getSessionHandler(req, context);
+    }
+    return await getSessionsHandler(req, context);
+  };
+  return authenticatedRoute(handler as any)(request);
 }
 
-export async function POST(request: NextRequest) {
-  return createSessionWithRateLimit(request);
+export async function POST(
+  request: NextRequest
+): Promise<NextResponse> {
+  return authenticatedRoute(createSessionHandler as any)(request);
 }
 
-export async function PUT(request: NextRequest) {
-  return updateSessionWithRateLimit(request);
+export async function PUT(
+  request: NextRequest
+): Promise<NextResponse> {
+  return authenticatedRoute(updateSessionHandler as any)(request);
 }
 
-export async function DELETE(request: NextRequest) {
-  return endSessionWithRateLimit(request);
+export async function DELETE(
+  request: NextRequest
+): Promise<NextResponse> {
+  return authenticatedRoute(endSessionHandler as any)(request);
 }

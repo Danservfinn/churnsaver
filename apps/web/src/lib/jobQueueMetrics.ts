@@ -316,7 +316,7 @@ export class JobQueueMetricsService {
         GROUP BY error_category
       `, params);
 
-      const row = result.rows[0];
+      const row = result.rows[0] as any;
       const totalJobs = parseInt(row.total_jobs);
       const completedJobs = parseInt(row.completed_jobs);
       const failedJobs = parseInt(row.failed_jobs);
@@ -324,17 +324,17 @@ export class JobQueueMetricsService {
       const averageProcessingTime = parseFloat(row.average_processing_time) || 0;
 
       const jobsByType: Record<string, number> = {};
-      jobsByTypeResult.rows.forEach(r => {
+      jobsByTypeResult.rows.forEach((r: any) => {
         jobsByType[r.job_type] = parseInt(r.count);
       });
 
       const jobsByStatus: Record<string, number> = {};
-      jobsByStatusResult.rows.forEach(r => {
+      jobsByStatusResult.rows.forEach((r: any) => {
         jobsByStatus[r.status] = parseInt(r.count);
       });
 
       const errorsByCategory: Record<string, number> = {};
-      errorsByCategoryResult.rows.forEach(r => {
+      errorsByCategoryResult.rows.forEach((r: any) => {
         errorsByCategory[r.error_category] = parseInt(r.count);
       });
 
@@ -400,7 +400,7 @@ export class JobQueueMetricsService {
         ORDER BY timestamp ASC
       `);
 
-      return result.rows.map(row => ({
+      return result.rows.map((row: any) => ({
         timestamp: row.timestamp,
         throughput: parseInt(row.throughput),
         averageProcessingTime: parseFloat(row.average_processing_time) || 0,
@@ -595,7 +595,7 @@ export class JobQueueMetricsService {
         AND created_at >= NOW() - INTERVAL '1 hour'
       `);
       
-      return parseInt(result.rows[0]?.count || '0');
+      return parseInt((result.rows[0] as any)?.count || '0');
     } catch (error) {
       logger.error('Failed to get current queue depth', {
         error: error instanceof Error ? error.message : String(error)
@@ -618,7 +618,7 @@ export class JobQueueMetricsService {
         AND status IN ('completed', 'failed')
       `);
       
-      return parseInt(result.rows[0]?.count || '0');
+      return parseInt((result.rows[0] as any)?.count || '0');
     } catch (error) {
       logger.error('Failed to get throughput', {
         error: error instanceof Error ? error.message : String(error),

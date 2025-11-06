@@ -4,11 +4,13 @@ import { logger } from '@/lib/logger';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { errorResponses, apiSuccess } from '@/lib/apiResponse';
 import ConsentManagementService from '@/server/services/consentManagement';
-import { 
-  CreateConsentRequest, 
+import {
+  CreateConsentRequest,
   ConsentSearchFilters,
-  ConsentValidationError 
+  ConsentValidationError,
+  ConsentType
 } from '@/types/consentManagement';
+import { ConsentValidationError as ConsentValidationErrorClass } from '@/server/services/consentManagement';
 
 export interface ConsentResponse {
   consents: any[];
@@ -37,10 +39,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     await initDb();
 
     // Get context from middleware headers (set by authentication middleware)
-    const companyId = request.headers.get('x-company-id');
-    const userId = request.headers.get('x-user-id');
+    const companyId = request.headers.get('x-company-id') || undefined;
+    const userId = request.headers.get('x-user-id') || undefined;
     const isAuthenticated = request.headers.get('x-authenticated') === 'true';
-    const requestId = request.headers.get('x-request-id');
+    const requestId = request.headers.get('x-request-id') || undefined;
 
     // Validate required context
     if (!companyId || !userId) {
@@ -77,7 +79,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const filters: ConsentSearchFilters = {
       page,
       limit,
-      consent_type: searchParams.get('consent_type') || undefined,
+      consent_type: searchParams.get('consent_type') as ConsentType || undefined,
       status: searchParams.get('status') as any || undefined,
       granted_after: searchParams.get('granted_after') ? new Date(searchParams.get('granted_after')!) : undefined,
       granted_before: searchParams.get('granted_before') ? new Date(searchParams.get('granted_before')!) : undefined,
@@ -91,7 +93,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       page,
       limit,
       filters,
-      requestId
+      requestId: requestId || undefined
     });
 
     // Get consents from service
@@ -140,7 +142,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       requestId: request.headers.get('x-request-id')
     });
 
-    if (error instanceof ConsentValidationError) {
+    if (error instanceof ConsentValidationErrorClass) {
       return errorResponses.badRequestResponse(error.message, error.details);
     }
 
@@ -159,12 +161,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     await initDb();
 
     // Get context from middleware headers
-    const companyId = request.headers.get('x-company-id');
-    const userId = request.headers.get('x-user-id');
+    const companyId = request.headers.get('x-company-id') || undefined;
+    const userId = request.headers.get('x-user-id') || undefined;
     const isAuthenticated = request.headers.get('x-authenticated') === 'true';
-    const requestId = request.headers.get('x-request-id');
-    const ipAddress = request.headers.get('x-forwarded-for') || 
-                   request.headers.get('x-real-ip') || 
+    const requestId = request.headers.get('x-request-id') || undefined;
+    const ipAddress = request.headers.get('x-forwarded-for') ||
+                   request.headers.get('x-real-ip') ||
                    'unknown';
     const userAgent = request.headers.get('user-agent') || 'unknown';
 
@@ -207,7 +209,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       templateId: body.template_id,
       consentType: body.consent_type,
       ipAddress,
-      requestId
+      requestId: requestId || undefined
     });
 
     // Create consent through service
@@ -240,7 +242,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       requestId: request.headers.get('x-request-id')
     });
 
-    if (error instanceof ConsentValidationError) {
+    if (error instanceof ConsentValidationErrorClass) {
       return errorResponses.badRequestResponse(error.message, error.details);
     }
 
@@ -263,12 +265,12 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     await initDb();
 
     // Get context from middleware headers
-    const companyId = request.headers.get('x-company-id');
-    const userId = request.headers.get('x-user-id');
+    const companyId = request.headers.get('x-company-id') || undefined;
+    const userId = request.headers.get('x-user-id') || undefined;
     const isAuthenticated = request.headers.get('x-authenticated') === 'true';
-    const requestId = request.headers.get('x-request-id');
-    const ipAddress = request.headers.get('x-forwarded-for') || 
-                   request.headers.get('x-real-ip') || 
+    const requestId = request.headers.get('x-request-id') || undefined;
+    const ipAddress = request.headers.get('x-forwarded-for') ||
+                   request.headers.get('x-real-ip') ||
                    'unknown';
     const userAgent = request.headers.get('user-agent') || 'unknown';
 
@@ -343,7 +345,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
                 userId,
                 companyId,
                 { reason: operation.reason },
-                { ipAddress, userAgent, requestId }
+                { ipAddress, userAgent, requestId: requestId || undefined }
               );
               break;
             
@@ -353,7 +355,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
                 userId,
                 companyId,
                 { status: 'active' },
-                { ipAddress, userAgent, requestId }
+                { ipAddress, userAgent, requestId: requestId || undefined }
               );
               break;
             
@@ -372,21 +374,26 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
       })
     );
 
-    // Separate successful and failed operations
-    const successful = results.filter(r => r.status === 'fulfilled' && (r.value as any).success);
-    const failed = results.filter(r => r.status === 'rejected' || !(r.value as any).success);
+    // Separate successful and failed operations without accessing value on rejected results
+    const fulfilledResults = results.filter(
+      (r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled'
+    );
+    const rejectedResults = results.filter(
+      (r): r is PromiseRejectedResult => r.status === 'rejected'
+    );
+
+    const successful = fulfilledResults.filter((r) => (r.value as any).success);
+    const failedFulfilled = fulfilledResults.filter((r) => !(r.value as any).success);
 
     const response = {
-      successful_operations: successful.map(r => (r.value as any).data),
-      failed_operations: failed.map(r => {
-        if (r.status === 'rejected') {
-          return { index: -1, error: r.reason };
-        }
-        return r.value;
-      }),
+      successful_operations: successful.map((r) => (r.value as any).data),
+      failed_operations: [
+        ...rejectedResults.map((r) => ({ index: -1, error: r.reason })),
+        ...failedFulfilled.map((r) => r.value)
+      ],
       total_processed: operations.length,
       success_count: successful.length,
-      failure_count: failed.length
+      failure_count: rejectedResults.length + failedFulfilled.length
     };
 
     logger.info('Batch consent update completed', {
@@ -394,7 +401,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
       companyId,
       totalProcessed: operations.length,
       successCount: successful.length,
-      failureCount: failed.length,
+      failureCount: rejectedResults.length + failedFulfilled.length,
       processingTimeMs: Date.now() - startTime,
       requestId
     });
@@ -405,10 +412,10 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     logger.error('Failed to process batch consent update', {
       error: error instanceof Error ? error.message : String(error),
       processingTimeMs: Date.now() - startTime,
-      requestId: request.headers.get('x-request-id')
+      requestId: request.headers.get('x-request-id') || undefined
     });
 
-    if (error instanceof ConsentValidationError) {
+    if (error instanceof ConsentValidationErrorClass) {
       return errorResponses.badRequestResponse(error.message, error.details);
     }
 

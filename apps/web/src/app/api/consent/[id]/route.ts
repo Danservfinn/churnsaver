@@ -3,11 +3,10 @@ import { initDb } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { errorResponses, apiSuccess } from '@/lib/apiResponse';
-import ConsentManagementService from '@/server/services/consentManagement';
-import { 
-  UpdateConsentRequest, 
-  WithdrawConsentRequest,
-  ConsentValidationError 
+import ConsentManagementService, { ConsentValidationError } from '@/server/services/consentManagement';
+import {
+  UpdateConsentRequest,
+  WithdrawConsentRequest
 } from '@/types/consentManagement';
 
 interface ConsentDetailResponse {
@@ -20,15 +19,20 @@ interface ConsentDetailResponse {
  * GET /api/consent/[id] - Get specific consent by ID
  */
 export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
+   request: NextRequest,
+   { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
-  const startTime = Date.now();
-  const { id } = params;
+   const startTime = Date.now();
+   const { id } = await params;
 
   try {
     // Initialize database connection
     await initDb();
+
+        // Validate consent ID first
+    if (!id || typeof id !== 'string') {
+      return errorResponses.badRequestResponse('Valid consent ID is required');
+    }
 
     // Get context from middleware headers
     const companyId = request.headers.get('x-company-id');
@@ -46,11 +50,6 @@ export async function GET(
     if (!isAuthenticated) {
       logger.warn('Unauthorized request to consent detail', { requestId });
       return errorResponses.unauthorizedResponse('Authentication required');
-    }
-
-    // Validate consent ID
-    if (!id || typeof id !== 'string') {
-      return errorResponses.badRequestResponse('Valid consent ID is required');
     }
 
     // Apply rate limiting for consent reads (120/min per user)
@@ -83,11 +82,11 @@ export async function GET(
 
     // Get consent and audit log in parallel
     const [consent, auditResult] = await Promise.all([
-      ConsentManagementService.getConsentById(id, userId, companyId, { requestId }),
+      ConsentManagementService.getConsentById(id, userId, companyId, { requestId: requestId || undefined }),
       ConsentManagementService.getConsentAuditLog(id, userId, companyId, {
         page: auditPage,
         limit: auditLimit
-      }, { requestId })
+      }, { requestId: requestId || undefined })
     ]);
 
     if (!consent) {
@@ -131,11 +130,11 @@ export async function GET(
  * PUT /api/consent/[id] - Update specific consent
  */
 export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
+   request: NextRequest,
+   { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
-  const startTime = Date.now();
-  const { id } = params;
+   const startTime = Date.now();
+   const { id } = await params;
 
   try {
     // Initialize database connection
@@ -204,7 +203,7 @@ export async function PUT(
       userId,
       companyId,
       body,
-      { ipAddress, userAgent, requestId }
+      { ipAddress, userAgent, requestId: requestId || undefined }
     );
 
     if (!updatedConsent) {
@@ -246,11 +245,11 @@ export async function PUT(
  * DELETE /api/consent/[id] - Withdraw specific consent
  */
 export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
+   request: NextRequest,
+   { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
-  const startTime = Date.now();
-  const { id } = params;
+   const startTime = Date.now();
+   const { id } = await params;
 
   try {
     // Initialize database connection
@@ -321,7 +320,7 @@ export async function DELETE(
       userId,
       companyId,
       withdrawalData,
-      { ipAddress, userAgent, requestId }
+      { ipAddress, userAgent, requestId: requestId || undefined }
     );
 
     if (!withdrawnConsent) {

@@ -210,7 +210,7 @@ export function withSystemRLSContext(
     try {
       // Set system context
       const systemContext = {
-        companyId: context?.companyId || process.env.NEXT_PUBLIC_WHOP_COMPANY_ID || process.env.WHOP_APP_ID,
+        companyId: context?.companyId || process.env.NEXT_PUBLIC_WHOP_APP_ID || process.env.WHOP_APP_ID,
         userId: context?.userId || 'system',
         isAuthenticated: true
       };

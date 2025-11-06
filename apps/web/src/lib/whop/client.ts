@@ -378,7 +378,8 @@ export class WhopApiClient {
       return response;
     } catch (error) {
       // Execute error middleware
-      const finalError = await this.executeErrorMiddleware(error, options, context);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      const finalError = await this.executeErrorMiddleware(errorObj, options, context);
       throw finalError;
     }
   }

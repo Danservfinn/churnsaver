@@ -3,6 +3,7 @@
 
 import { sql } from '@/lib/db';
 import { logger } from '@/lib/logger';
+import { monitoredSelect, monitoredQuery } from '@/lib/queryMonitor';
 import {
   processPaymentFailedEvent,
   PaymentFailedEvent,

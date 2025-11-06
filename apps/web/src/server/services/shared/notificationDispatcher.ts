@@ -1,7 +1,7 @@
 // Shared NotificationDispatcher with pluggable channel providers
 // Consolidates push/DM delivery scaffolding with retry/backoff policy and metrics
 
-import { env } from '@/lib/env';
+import { env, additionalEnv } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { NotificationMetrics, shouldSampleForDetailedLogging, classifyNotificationError } from './metrics';
 import { sendWhopPushNotification, PushNotificationPayload as WhopPushPayload } from '../notifications/whop';
@@ -332,7 +332,7 @@ export class NotificationDispatcher {
 
   // Send push notification with retry logic
   async sendPush(payload: PushNotificationPayload): Promise<NotificationResult> {
-    if (!env.ENABLE_PUSH) {
+    if (!additionalEnv.ENABLE_PUSH) {
       logger.info('Push notifications disabled', { userId: payload.userId });
       return { success: true, messageId: 'disabled' };
     }
@@ -343,7 +343,7 @@ export class NotificationDispatcher {
 
   // Send direct message with retry logic
   async sendDM(payload: DirectMessagePayload): Promise<NotificationResult> {
-    if (!env.ENABLE_DM) {
+    if (!additionalEnv.ENABLE_DM) {
       logger.info('Direct messages disabled', { userId: payload.userId });
       return { success: true, messageId: 'disabled' };
     }

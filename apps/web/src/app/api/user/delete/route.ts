@@ -2,9 +2,9 @@
 // Implements GDPR "right to be forgotten" functionality
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/whop/authMiddleware';
+import { requireAuth, type MiddlewareAuthContext } from '@/lib/whop/authMiddleware';
 import { apiSuccess, apiError, createRequestContext, errors } from '@/lib/apiResponse';
-import { withRateLimit } from '@/server/middleware/rateLimit';
+import { checkRateLimit } from '@/server/middleware/rateLimit';
 import { logger } from '@/lib/logger';
 import { userDeletionService } from '@/server/services/userDeletion';
 import {
@@ -31,8 +31,8 @@ const USER_DELETION_RATE_LIMIT = {
  */
 async function handleDeleteRequest(
   request: NextRequest,
-  context: any
-): Promise<NextResponse<DeleteUserResponse>> {
+  context: MiddlewareAuthContext
+): Promise<NextResponse> {
   const requestContext = createRequestContext(request);
   
   try {
@@ -49,7 +49,7 @@ async function handleDeleteRequest(
     }
 
     // Extract user information from auth context
-    const { userId, companyId } = context.auth;
+    const { userId, companyId } = context;
 
     if (!userId || !companyId) {
       return apiError(
@@ -120,8 +120,8 @@ async function handleDeleteRequest(
         category: 'user_deletion',
         severity: 'medium',
         requestId: requestContext.requestId,
-        userId: context.auth?.userId,
-        companyId: context.auth?.companyId,
+        userId: context.userId,
+        companyId: context.companyId,
         errorType: userError.type,
         errorMessage: userError.message,
         details: userError.details
@@ -164,8 +164,8 @@ async function handleDeleteRequest(
     // Handle unexpected errors
     logger.error('Unexpected error in user deletion request', {
       requestId: requestContext.requestId,
-      userId: context.auth?.userId,
-      companyId: context.auth?.companyId,
+      userId: context.userId,
+      companyId: context.companyId,
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined
     });
@@ -182,13 +182,13 @@ async function handleDeleteRequest(
  */
 async function handleGetStatus(
   request: NextRequest,
-  context: any
-): Promise<NextResponse<GetDeletionStatusResponse>> {
+  context: MiddlewareAuthContext
+): Promise<NextResponse> {
   const requestContext = createRequestContext(request);
   
   try {
     // Extract user information from auth context
-    const { userId, companyId } = context.auth;
+    const { userId, companyId } = context;
 
     if (!userId || !companyId) {
       return apiError(
@@ -269,8 +269,8 @@ async function handleGetStatus(
   } catch (error) {
     logger.error('Error getting deletion request status', {
       requestId: requestContext.requestId,
-      userId: context.auth?.userId,
-      companyId: context.auth?.companyId,
+      userId: context.userId,
+      companyId: context.companyId,
       error: error instanceof Error ? error.message : String(error)
     });
 
@@ -309,20 +309,64 @@ function validateDeleteRequest(body: DeleteUserRequest): { valid: boolean; error
 }
 
 /**
- * Rate limit middleware for user deletion
- * Uses user ID as identifier for per-user rate limiting
+ * Build rate limit identifier for the authenticated user.
  */
-function withUserDeletionRateLimit(handler: (request: NextRequest, context: any) => Promise<NextResponse>) {
-  return withRateLimit(handler, USER_DELETION_RATE_LIMIT, (request: NextRequest) => {
-    // Extract user ID from request headers (set by auth middleware)
-    const userId = request.headers.get('x-user-id');
-    return userId ? `user_deletion:${userId}` : 'user_deletion:anonymous';
-  });
+function getRateLimitKey(context: MiddlewareAuthContext): string {
+  return context.userId
+    ? `${USER_DELETION_RATE_LIMIT.keyPrefix}:${context.userId}`
+    : `${USER_DELETION_RATE_LIMIT.keyPrefix}:anonymous`;
 }
 
+type RouteParams = { params: Promise<Record<string, never>> };
+
 // Export route handlers with authentication and rate limiting
-export const POST = withUserDeletionRateLimit(requireAuth(handleDeleteRequest));
-export const GET = requireAuth(handleGetStatus);
+export async function POST(
+  request: NextRequest,
+  { params }: RouteParams
+): Promise<NextResponse> {
+  await params;
+
+  const authOutcome = await requireAuth(request);
+  if (!authOutcome || authOutcome instanceof NextResponse) {
+    return authOutcome ?? apiError(errors.unauthorized('Authentication required'), createRequestContext(request));
+  }
+  if (!authOutcome.userId) {
+    const requestContext = createRequestContext(request);
+    return apiError(errors.unauthorized('Authentication required'), requestContext);
+  }
+
+  const rateLimitResult = await checkRateLimit(getRateLimitKey(authOutcome), USER_DELETION_RATE_LIMIT);
+  if (!rateLimitResult.allowed) {
+    const requestContext = createRequestContext(request);
+    return apiError(
+      errors.tooManyRequests('Rate limit exceeded', {
+        retryAfter: rateLimitResult.retryAfter,
+        resetAt: rateLimitResult.resetAt.toISOString()
+      }),
+      requestContext
+    );
+  }
+
+  return handleDeleteRequest(request, authOutcome);
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: RouteParams
+): Promise<NextResponse> {
+  await params;
+
+  const authOutcome = await requireAuth(request);
+  if (!authOutcome || authOutcome instanceof NextResponse) {
+    return authOutcome ?? apiError(errors.unauthorized('Authentication required'), createRequestContext(request));
+  }
+  if (!authOutcome.userId) {
+    const requestContext = createRequestContext(request);
+    return apiError(errors.unauthorized('Authentication required'), requestContext);
+  }
+
+  return handleGetStatus(request, authOutcome);
+}
 
 // Method not allowed for other HTTP methods
 export async function PUT(): Promise<NextResponse> {

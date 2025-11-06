@@ -209,7 +209,7 @@ export class TokenUtils {
       // Audience validation
       if (opts.checkAudience && opts.allowedAudiences && opts.allowedAudiences.length > 0) {
         const audiences = Array.isArray(metadata.audience) ? metadata.audience : [metadata.audience];
-        const hasValidAudience = audiences.some(aud => opts.allowedAudiences!.includes(aud));
+        const hasValidAudience = audiences.some((aud: any) => opts.allowedAudiences!.includes(aud));
         
         if (!hasValidAudience) {
           errors.push(`Invalid audience: ${JSON.stringify(metadata.audience)}`);
@@ -543,11 +543,11 @@ export class TokenUtils {
   extractPermissions(token: string): string[] {
     try {
       const decoded = decodeJwt(token);
-      const permissions = decoded.permissions as string[] || [];
+      const permissions = decoded.permissions;
       
       // Handle different permission formats
       if (typeof permissions === 'string') {
-        return (typeof permissions === 'string' ? permissions.split(',') : (permissions as string[])).map(p => p.trim());
+        return permissions.split(',').map((p: string) => p.trim());
       }
       
       return Array.isArray(permissions) ? permissions : [];

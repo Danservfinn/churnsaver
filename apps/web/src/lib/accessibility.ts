@@ -248,9 +248,9 @@ export class AccessibilityUtils {
     const roleMap: Record<string, string> = {
       'button': 'button',
       'a': 'link',
-      'input': element.type === 'checkbox' ? 'checkbox' : 
-               element.type === 'radio' ? 'radio' : 
-               element.type === 'text' || element.type === 'email' || element.type === 'password' ? 'textbox' : 
+      'input': (element instanceof HTMLInputElement && element.type === 'checkbox') ? 'checkbox' : 
+               (element instanceof HTMLInputElement && element.type === 'radio') ? 'radio' : 
+               (element instanceof HTMLInputElement && ['text', 'email', 'password'].includes(element.type)) ? 'textbox' : 
                'textbox',
       'textarea': 'textbox',
       'select': 'combobox',

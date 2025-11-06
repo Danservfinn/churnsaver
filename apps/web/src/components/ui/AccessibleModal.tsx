@@ -115,8 +115,15 @@ const AccessibleModal = forwardRef<HTMLDivElement, AccessibleModalProps>(
       }
     };
 
-    // Handle backdrop click
+    // Handle backdrop click (for document event listener)
     const handleBackdropClick = (event: MouseEvent) => {
+      if (event.target === overlayRef.current && closeOnBackdrop && !preventClose) {
+        onClose();
+      }
+    };
+
+    // Handle backdrop click (for React onClick handler)
+    const handleBackdropClickReact = (event: React.MouseEvent<HTMLDivElement>) => {
       if (event.target === overlayRef.current && closeOnBackdrop && !preventClose) {
         onClose();
       }
@@ -213,7 +220,7 @@ const AccessibleModal = forwardRef<HTMLDivElement, AccessibleModalProps>(
         ref={overlayRef}
         className={baseClasses}
         role="presentation"
-        onClick={handleBackdropClick}
+        onClick={handleBackdropClickReact}
       >
         <div className="flex min-h-full items-center justify-center p-4">
           <div
@@ -256,7 +263,7 @@ const AccessibleModal = forwardRef<HTMLDivElement, AccessibleModalProps>(
 AccessibleModal.displayName = 'AccessibleModal';
 
 // Accessible Modal Header component
-export const AccessibleModalHeader = forwardRef<HTMLDivElement, AccessibleModalHeaderProps>(
+const AccessibleModalHeader = forwardRef<HTMLDivElement, AccessibleModalHeaderProps>(
   ({ 
     className, 
     children, 
@@ -316,7 +323,7 @@ export const AccessibleModalHeader = forwardRef<HTMLDivElement, AccessibleModalH
 AccessibleModalHeader.displayName = 'AccessibleModalHeader';
 
 // Accessible Modal Footer component
-export const AccessibleModalFooter = forwardRef<HTMLDivElement, AccessibleModalFooterProps>(
+const AccessibleModalFooter = forwardRef<HTMLDivElement, AccessibleModalFooterProps>(
   ({ 
     className, 
     children, 
@@ -348,7 +355,7 @@ export const AccessibleModalFooter = forwardRef<HTMLDivElement, AccessibleModalF
 AccessibleModalFooter.displayName = 'AccessibleModalFooter';
 
 // Modal Content component for better structure
-export const AccessibleModalContent = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
+const AccessibleModalContent = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ({ className, children, ...props }, ref) => {
     const baseClasses = 'space-y-4';
     const classes = cn(baseClasses, className);
@@ -369,7 +376,7 @@ export const AccessibleModalContent = forwardRef<HTMLDivElement, HTMLAttributes<
 AccessibleModalContent.displayName = 'AccessibleModalContent';
 
 // Modal Trigger component
-export const AccessibleModalTrigger = forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & {
+const AccessibleModalTrigger = forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & {
   modalId: string;
   openLabel?: string;
 }>(

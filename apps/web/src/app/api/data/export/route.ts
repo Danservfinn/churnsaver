@@ -139,22 +139,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       });
 
       // Map error codes to appropriate API errors
-      let apiError;
+      let errorObj;
       switch (error.code) {
         case 'INVALID_REQUEST':
-        apiError = errors.validationError(error.message, error.details);
+        errorObj = errors.validationError(error.message, error.details);
           break;
         case 'RATE_LIMIT_EXCEEDED':
-          apiError = errors.tooManyRequests(error.message, error.details);
+          errorObj = errors.tooManyRequests(error.message, error.details);
           break;
         case 'CREATION_FAILED':
-          apiError = errors.internalServerError(error.message, error.details);
+          errorObj = errors.internalServerError(error.message, error.details);
           break;
         default:
-          apiError = errors.internalServerError('Failed to create export request', error.details);
+          errorObj = errors.internalServerError('Failed to create export request', error.details);
       }
 
-      return apiError(apiError, context);
+      return apiError(errorObj, context);
     }
 
     logger.error('Unexpected error in data export request', {
@@ -244,16 +244,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       });
 
       // Map error codes to appropriate API errors
-      let apiError;
+      let errorObj;
       switch (error.code) {
         case 'LIST_FAILED':
-          apiError = errors.internalServerError(error.message, error.details);
+          errorObj = errors.internalServerError(error.message, error.details);
           break;
         default:
-          apiError = errors.internalServerError('Failed to list export requests', error.details);
+          errorObj = errors.internalServerError('Failed to list export requests', error.details);
       }
 
-      return apiError(apiError, context);
+      return apiError(errorObj, context);
     }
 
     logger.error('Unexpected error in listing export requests', {

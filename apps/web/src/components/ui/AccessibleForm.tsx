@@ -91,7 +91,9 @@ const AccessibleForm = forwardRef<HTMLFormElement, AccessibleFormProps>(
         // Skip buttons and controls that are not required
         const isRequired = control.hasAttribute('required') || control.hasAttribute('aria-required');
         const isButton = control.tagName.toLowerCase() === 'button';
-        const isSubmitButton = control.type === 'submit';
+        const isSubmitButton = 
+          (control instanceof HTMLButtonElement && control.type === 'submit') ||
+          (control instanceof HTMLInputElement && control.type === 'submit');
         
         if (!isRequired && !isSubmitButton) return;
         
@@ -139,7 +141,11 @@ const AccessibleForm = forwardRef<HTMLFormElement, AccessibleFormProps>(
         }
         
         // Custom validation for required fields without browser validation
-        if (isRequired && !control.value && !('validity' in control)) {
+        const hasValue = 
+          (control instanceof HTMLInputElement && control.value) ||
+          (control instanceof HTMLTextAreaElement && control.value) ||
+          (control instanceof HTMLSelectElement && control.value);
+        if (isRequired && !hasValue && !('validity' in control)) {
           fieldErrors.push('This field is required');
         }
         
@@ -165,7 +171,7 @@ const AccessibleForm = forwardRef<HTMLFormElement, AccessibleFormProps>(
     };
 
     // Announce errors to screen readers
-    const announceErrors = (formErrors: FormError[]) => {
+    const announceFormErrors = (formErrors: FormError[]) => {
       if (formErrors.length === 0) return;
       
       const errorMessages = formErrors.map(error => `${error.field}: ${error.message}`);
@@ -197,7 +203,7 @@ const AccessibleForm = forwardRef<HTMLFormElement, AccessibleFormProps>(
       if (formErrors.length > 0) {
         // Announce errors
         if (announceErrors) {
-          announceErrors(formErrors);
+          announceFormErrors(formErrors);
         }
         
         // Focus first error field
@@ -236,7 +242,7 @@ const AccessibleForm = forwardRef<HTMLFormElement, AccessibleFormProps>(
         }
       };
       
-      const form = ref?.current;
+      const form = ref && 'current' in ref ? ref.current : null;
       if (form) {
         const inputs = form.querySelectorAll('input, select, textarea');
         inputs.forEach(input => {

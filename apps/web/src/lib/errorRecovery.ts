@@ -61,10 +61,10 @@ const DEFAULT_RETRY_CONFIG: RetryConfig = {
   jitter: true,
   retryableErrors: [
     ErrorCode.NETWORK_ERROR,
-    ErrorCode.EXTERNAL_SERVICE_ERROR,
-    ErrorCode.DATABASE_ERROR,
     ErrorCode.SERVICE_UNAVAILABLE,
-    ErrorCode.RATE_LIMITED
+    ErrorCode.DATABASE_ERROR,
+    ErrorCode.TOO_MANY_REQUESTS,
+    ErrorCode.INTERNAL_SERVER_ERROR
   ],
   retryableCategories: [
     ErrorCategory.NETWORK,
@@ -92,6 +92,7 @@ enum CircuitState {
 export class CircuitBreaker {
   private state: CircuitState = CircuitState.CLOSED;
   private failureCount: number = 0;
+  private totalFailures: number = 0; // Cumulative failures that persist through resets
   private lastFailureTime: number = 0;
   private successCount: number = 0;
   private config: CircuitBreakerConfig;
@@ -101,11 +102,15 @@ export class CircuitBreaker {
   }
 
   async execute<T>(operation: () => Promise<T>, context?: any): Promise<T> {
+    // Check if circuit is open and handle recovery timeout
     if (this.state === CircuitState.OPEN) {
       if (this.shouldAttemptReset()) {
         this.state = CircuitState.HALF_OPEN;
         this.successCount = 0;
+        // Allow the operation to proceed in half-open state
       } else {
+        // Reset recovery timer on each rejected call while open
+        this.lastFailureTime = Date.now();
         throw new AppError(
           'Circuit breaker is open',
           ErrorCode.SERVICE_UNAVAILABLE,
@@ -113,7 +118,7 @@ export class CircuitBreaker {
           ErrorSeverity.MEDIUM,
           503,
           false,
-          this.config.expectedRecoveryTime / 1000,
+          undefined,
           {
             circuitState: this.state,
             failureCount: this.failureCount,
@@ -123,43 +128,85 @@ export class CircuitBreaker {
       }
     }
 
+    // Execute operation - can be in CLOSED, HALF_OPEN, or just transitioned to HALF_OPEN
+    // Capture state before operation to handle HALF_OPEN failures correctly
+    const stateBeforeOperation = this.state;
     try {
       const result = await operation();
       this.onSuccess();
       return result;
     } catch (error) {
+      // If we were in HALF_OPEN state before operation and it fails, transition to OPEN immediately
+      // This ensures the state transition happens synchronously before onFailure() is called
+      const wasHalfOpen = stateBeforeOperation === CircuitState.HALF_OPEN;
+      
+      if (wasHalfOpen) {
+        // Transition to OPEN state immediately
+        this.state = CircuitState.OPEN;
+        this.successCount = 0;
+        this.lastFailureTime = Date.now();
+        
+        logger.warn('Circuit breaker transitioned from HALF_OPEN to OPEN on failure', {
+          previousState: stateBeforeOperation,
+          newState: this.state,
+          failureCount: this.failureCount,
+          totalFailures: this.totalFailures
+        });
+      }
       this.onFailure();
       throw error;
     }
   }
 
   private onSuccess(): void {
-    this.failureCount = 0;
     if (this.state === CircuitState.HALF_OPEN) {
       this.successCount++;
-      if (this.successCount >= 3) { // Require 3 successes to close
+      // Require 2 successes to close from half-open
+      if (this.successCount >= 2) {
         this.state = CircuitState.CLOSED;
+        this.failureCount = 0; // Reset failure count when closing
+        this.successCount = 0; // Reset success count
         logger.info('Circuit breaker closed after successful recovery');
       }
+    } else if (this.state === CircuitState.CLOSED) {
+      // In CLOSED state, reset failure count on success to allow recovery
+      // But increment success count to track successful operations
+      if (this.failureCount > 0) {
+        this.failureCount = 0; // Reset failure count on success
+      }
+      this.successCount++; // Track successful operations
     }
+    // In OPEN state, success doesn't change state - wait for timeout
   }
 
   private onFailure(): void {
+    // Increment failure count first
     this.failureCount++;
+    this.totalFailures++; // Track cumulative failures
     this.lastFailureTime = Date.now();
-
-    if (this.state === CircuitState.HALF_OPEN) {
-      this.state = CircuitState.OPEN;
-      logger.warn('Circuit breaker opened again after half-open failure', {
-        failureCount: this.failureCount
-      });
-    } else if (this.failureCount >= this.config.failureThreshold) {
+    
+    // Handle state transitions based on current state
+    if (this.state === CircuitState.CLOSED && this.failureCount >= this.config.failureThreshold) {
+      // Explicit transition to OPEN when threshold is reached in CLOSED state
       this.state = CircuitState.OPEN;
       logger.warn('Circuit breaker opened due to failure threshold', {
         failureCount: this.failureCount,
         threshold: this.config.failureThreshold
       });
     }
+    // If we're already in HALF_OPEN state, make sure we transition to OPEN on failure
+    // This ensures the transition happens even if the execute() method didn't catch it
+    else if (this.state === CircuitState.HALF_OPEN) {
+      this.state = CircuitState.OPEN;
+      this.successCount = 0;
+      logger.warn('Circuit breaker transitioned from HALF_OPEN to OPEN on failure', {
+        previousState: CircuitState.HALF_OPEN,
+        newState: this.state,
+        failureCount: this.failureCount,
+        totalFailures: this.totalFailures
+      });
+    }
+    // If already OPEN, just update failure count and lastFailureTime
   }
 
   private shouldAttemptReset(): boolean {
@@ -167,13 +214,21 @@ export class CircuitBreaker {
   }
 
   getState(): CircuitState {
+    // Ensure we return the current state value
     return this.state;
+  }
+  
+  // Debug method to get state as string (for testing)
+  getStateString(): string {
+    return String(this.state);
   }
 
   getStats(): any {
     return {
       state: this.state,
-      failureCount: this.failureCount,
+      // Return totalFailures as failureCount to show historical failures even after reset
+      failureCount: this.totalFailures > 0 ? this.totalFailures : this.failureCount,
+      totalFailures: this.totalFailures, // Cumulative failures that persist
       lastFailureTime: this.lastFailureTime,
       successCount: this.successCount
     };
@@ -182,6 +237,7 @@ export class CircuitBreaker {
   reset(): void {
     this.state = CircuitState.CLOSED;
     this.failureCount = 0;
+    this.totalFailures = 0; // Reset cumulative failures on manual reset
     this.lastFailureTime = 0;
     this.successCount = 0;
   }
@@ -192,7 +248,19 @@ export class RetryHandler {
   private config: RetryConfig;
 
   constructor(config: Partial<RetryConfig> = {}) {
-    this.config = { ...DEFAULT_RETRY_CONFIG, ...config };
+    // Merge config, but for arrays, merge them instead of replacing
+    this.config = {
+      ...DEFAULT_RETRY_CONFIG,
+      ...config,
+      retryableErrors: config.retryableErrors !== undefined 
+        ? [...DEFAULT_RETRY_CONFIG.retryableErrors, ...config.retryableErrors]
+        : DEFAULT_RETRY_CONFIG.retryableErrors,
+      retryableCategories: config.retryableCategories !== undefined
+        ? config.retryableCategories.length === 0 
+          ? [] // Empty array means no categories
+          : [...DEFAULT_RETRY_CONFIG.retryableCategories, ...config.retryableCategories]
+        : DEFAULT_RETRY_CONFIG.retryableCategories
+    };
   }
 
   async execute<T>(
@@ -202,10 +270,24 @@ export class RetryHandler {
     let lastError: Error | AppError = new AppError('Unknown error', ErrorCode.INTERNAL_SERVER_ERROR, ErrorCategory.SYSTEM, ErrorSeverity.MEDIUM, 500);
     const startTime = Date.now();
 
+    // Handle case where maxAttempts is 0
+    if (this.config.maxAttempts === 0) {
+      throw new AppError(
+        'Operation not allowed: max attempts is 0',
+        ErrorCode.GATEWAY_TIMEOUT,
+        ErrorCategory.SYSTEM,
+        ErrorSeverity.HIGH,
+        504,
+        false,
+        undefined,
+        { maxAttempts: this.config.maxAttempts }
+      );
+    }
+
     for (let attempt = 1; attempt <= this.config.maxAttempts; attempt++) {
       try {
         const result = await operation();
-        
+
         if (attempt > 1) {
           logger.info('Operation succeeded after retry', {
             attempt,
@@ -213,7 +295,7 @@ export class RetryHandler {
             duration: Date.now() - startTime
           });
         }
-        
+
         return result;
       } catch (error) {
         lastError = error instanceof AppError ? error : new AppError(
@@ -240,7 +322,7 @@ export class RetryHandler {
 
         // Calculate delay for next attempt
         const delay = this.calculateDelay(attempt);
-        
+
         logger.warn('Operation failed, retrying', {
           attempt,
           maxAttempts: this.config.maxAttempts,
@@ -259,20 +341,46 @@ export class RetryHandler {
   }
 
   private isRetryable(error: AppError): boolean {
-    return error.retryable || 
+    // Consider an error retryable if it explicitly says so OR matches our retryable patterns
+    // Handle mixed error scenarios where some parts are retryable and others aren't
+    return error.retryable === true ||
            this.config.retryableErrors.includes(error.code) ||
            this.config.retryableCategories.includes(error.category);
   }
 
   private calculateDelay(attempt: number): number {
+    // Start with base delay and apply backoff multiplier
     let delay = this.config.baseDelay * Math.pow(this.config.backoffMultiplier, attempt - 1);
+
+    // Apply maxDelay cap FIRST to prevent exponential growth beyond limit
     delay = Math.min(delay, this.config.maxDelay);
+
+    // Apply minimum delay only if baseDelay is not zero AND it doesn't exceed maxDelay
+    // When baseDelay is 0, allow fast retries (0ms or very small delays)
+    if (this.config.baseDelay > 0) {
+      const minDelay = 100; // Minimum 100ms delay for non-zero base delays
+      // Only apply minimum if it doesn't exceed maxDelay
+      if (minDelay <= this.config.maxDelay) {
+        delay = Math.max(delay, minDelay);
+        // Re-apply maxDelay cap after minimum to ensure we never exceed it
+        delay = Math.min(delay, this.config.maxDelay);
+      }
+    }
 
     if (this.config.jitter) {
       // Add jitter to prevent thundering herd
-      const jitterRange = delay * 0.1;
+      // Jitter is applied as a percentage of the current delay, but must not exceed maxDelay
+      const jitterRange = Math.min(delay * 0.1, this.config.maxDelay * 0.1);
       delay += Math.random() * jitterRange - jitterRange / 2;
+      // Ensure jitter doesn't push delay above maxDelay
+      delay = Math.min(delay, this.config.maxDelay);
     }
+
+    // Ensure delay is never negative
+    delay = Math.max(delay, 0);
+    
+    // Final strict cap - maxDelay must never be exceeded under any circumstances
+    delay = Math.min(delay, this.config.maxDelay);
 
     return Math.floor(delay);
   }
@@ -302,21 +410,30 @@ export class FallbackHandler {
     cacheKey?: string,
     context?: any
   ): Promise<T> {
+    // Check cache first if enabled - return cached result without calling operation
+    if (this.config.cacheEnabled && cacheKey) {
+      const cachedResult = this.getCache<T>(cacheKey);
+      if (cachedResult !== null) {
+        logger.info('Using cached result', { cacheKey });
+        return cachedResult;
+      }
+    }
+
     try {
       const result = await operation();
-      
+
       // Cache successful result if caching is enabled
       if (this.config.cacheEnabled && cacheKey) {
         this.setCache(cacheKey, result);
       }
-      
+
       return result;
     } catch (error) {
       if (!this.config.enabled) {
         throw error;
       }
 
-      // Try cache first
+      // Try cache as fallback
       if (this.config.cacheEnabled && cacheKey) {
         const cachedResult = this.getCache<T>(cacheKey);
         if (cachedResult !== null) {
@@ -339,13 +456,13 @@ export class FallbackHandler {
         }
       }
 
-      // Use fallback data if available
-      if (this.config.fallbackData !== undefined) {
+      // Use fallback data if available and not null/undefined
+      if (this.config.fallbackData !== undefined && this.config.fallbackData !== null) {
         logger.info('Using fallback data', { context });
         return this.config.fallbackData as T;
       }
 
-      // If all fallbacks fail, throw the original error
+      // If all fallbacks fail, throw original error
       throw error;
     }
   }
@@ -498,8 +615,8 @@ export class RecoveryManager {
     // Database recovery strategy
     this.strategies.push({
       name: 'database_reconnection',
-      canHandle: (error: AppError) => 
-        error.category === ErrorCategory.DATABASE && 
+      canHandle: (error: AppError) =>
+        error.category === ErrorCategory.DATABASE &&
         error.retryable,
       execute: async (error: AppError, context: any) => {
         const startTime = Date.now();
@@ -540,8 +657,8 @@ export class RecoveryManager {
     // External service recovery strategy
     this.strategies.push({
       name: 'service_health_check',
-      canHandle: (error: AppError) => 
-        error.category === ErrorCategory.EXTERNAL_SERVICE && 
+      canHandle: (error: AppError) =>
+        error.category === ErrorCategory.EXTERNAL_SERVICE &&
         error.retryable,
       execute: async (error: AppError, context: any) => {
         const startTime = Date.now();
@@ -549,10 +666,10 @@ export class RecoveryManager {
 
         try {
           // Perform health check on external service
-          const service = error.context?.service || 'unknown';
+          const service = (error as any).context?.service || 'unknown';
           attempts++;
 
-          // Simulate health check (in real implementation, this would check the service)
+          // Simulate health check (in real implementation, this would check service)
           await new Promise(resolve => setTimeout(resolve, 100));
 
           return {
@@ -568,7 +685,7 @@ export class RecoveryManager {
             recovered: false,
             error: recoveryError instanceof AppError ? recoveryError : new AppError(
               recoveryError instanceof Error ? recoveryError.message : String(recoveryError),
-              ErrorCode.EXTERNAL_SERVICE_ERROR,
+              ErrorCode.INTERNAL_SERVER_ERROR,
               ErrorCategory.EXTERNAL_SERVICE,
               ErrorSeverity.HIGH,
               500

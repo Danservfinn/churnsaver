@@ -224,7 +224,7 @@ export function buildWhopSdkConfig(): ConfigValidationResult {
   const parseResult = whopConfigSchema.safeParse(rawConfig);
   
   if (!parseResult.success) {
-    errors.push(...(parseResult.error as any)?.errors?.map(e => `${e.path?.join('.') || 'unknown'}: ${e.message}`) || []);
+    errors.push(...(parseResult.error as any)?.errors?.map((e: any) => `${e.path?.join('.') || 'unknown'}: ${e.message}`) || []);
   }
   
   const finalConfig = parseResult.success ? parseResult.data : undefined;

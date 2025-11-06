@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
 		remotePatterns: [{ hostname: "**" }],
 	},
 	// ESLint configuration is now handled separately
-	serverExternalPackages: ['@whop/api'],
+	serverExternalPackages: ["@whop/api"],
 };
 
 export default withWhopAppConfig(nextConfig);

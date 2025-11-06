@@ -71,3 +71,52 @@ export function validateAndTransform<T>(
     return { success: false, error: formatValidationErrors(result.error) };
   }
 }
+
+//
+// Case actions validation
+export const CaseActionSchema = z.object({
+  caseId: z.string()
+    .min(1, 'caseId cannot be empty')
+    .max(36, 'caseId cannot exceed 36 characters')
+    .regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/, {
+      message: 'caseId must be a valid UUID format'
+    })
+    .refine(val => typeof val === 'string', 'caseId must be a string')
+}).strict();
+
+export type CaseActionInput = z.infer<typeof CaseActionSchema>;
+
+// Webhook payload validation
+export const WebhookPayloadSchema = z.object({
+  id: z.string()
+    .min(1, 'Event ID cannot be empty')
+    .max(255, 'Event ID cannot exceed 255 characters')
+    .optional(),
+  whop_event_id: z.string()
+    .min(1, 'Whop event ID cannot be empty')
+    .max(255, 'Whop event ID cannot exceed 255 characters')
+    .optional(),
+  type: z.string()
+    .min(1, 'Event type cannot be empty')
+    .max(100, 'Event type cannot exceed 100 characters')
+    .regex(/^[a-zA-Z][a-zA-Z0-9._-]*$/, 'Event type must contain only alphanumeric characters, dots, underscores, and hyphens')
+    .refine(val => typeof val === 'string', 'Event type must be a string'),
+  data: z.union([
+    z.record(z.string(), z.unknown()), // Allow flexible data object
+    z.any() // Allow any data type for backward compatibility
+  ]).optional(),
+  created_at: z.string()
+    .refine(val => {
+      if (val) {
+        const date = new Date(val);
+        return !isNaN(date.getTime());
+      }
+      return true;
+    }, 'created_at must be a valid ISO date string')
+    .optional()
+}).strict() // No additional properties allowed
+.refine(payload => payload.id || payload.whop_event_id, {
+  message: 'Either id or whop_event_id must be provided'
+});
+
+export type WebhookPayloadInput = z.infer<typeof WebhookPayloadSchema>;

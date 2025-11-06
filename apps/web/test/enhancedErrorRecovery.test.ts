@@ -1,6 +1,19 @@
 // Enhanced Error Recovery Test Suite
 // Comprehensive tests for circuit breaker, dead letter queue, and enhanced error recovery
 
+// Environment variable setup for tests
+process.env.WHOP_API_KEY = 'X-Y-nTi5c2M8Yp8MpqsSdyF2w67WpI2Sr8YcLufQqnA';
+process.env.NEXT_PUBLIC_WHOP_APP_ID = 'app_oU8bWaXOsDs6PO';
+process.env.WHOP_APP_ID = 'app_oU8bWaXOsDs6PO';
+process.env.WHOP_WEBHOOK_SECRET = 'ws_f93eb504266e162946b5af532dd72c25cd72039486394e498cc5dced1b9c9b8e';
+process.env.DATABASE_URL = 'postgresql://postgres.bhiiqapevietyvepvhpq:0BoDyCmM%26PWhUM@aws-1-us-east-1.pooler.supabase.com:6543/postgres?sslmode=no-verify&pgbouncer=true&options=project%3Dbhiiqapevietyvepvhpq';
+process.env.NODE_ENV = 'test';
+process.env.ENCRYPTION_KEY = 'test-encryption-key';
+process.env.ENABLE_PUSH = 'true';
+
+// Mock @whop/sdk to prevent actual API calls
+jest.mock('@whop/sdk');
+
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { EnhancedCircuitBreaker, getCircuitBreaker, CircuitState } from '@/lib/circuitBreaker';
 import { DeadLetterQueueService, addToDeadLetterQueue } from '@/lib/deadLetterQueue';

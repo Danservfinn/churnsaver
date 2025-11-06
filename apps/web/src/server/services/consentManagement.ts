@@ -16,7 +16,6 @@ import {
   UpdateConsentTemplateRequest,
   ConsentSearchFilters,
   ConsentAuditSearchFilters,
-  ConsentValidationError,
   ConsentExpirationReminder,
   ConsentWithdrawalConfirmation,
   BatchConsentOperation,
@@ -35,9 +34,9 @@ const AUDIT_LOG_LIMIT = 100;
  * Validation errors for consent operations
  */
 export class ConsentValidationError extends Error {
-  public details: ConsentValidationError[];
+  public details: Array<{ field: string; message: string; code: string }>;
 
-  constructor(message: string, details: ConsentValidationError[] = []) {
+  constructor(message: string, details: Array<{ field: string; message: string; code: string }> = []) {
     super(message);
     this.name = 'ConsentValidationError';
     this.details = details;
@@ -799,7 +798,7 @@ export class ConsentManagementService {
     companyId: string,
     consentData: CreateConsentRequest
   ): Promise<void> {
-    const errors: ConsentValidationError[] = [];
+    const errors: Array<{ field: string; message: string; code: string }> = [];
 
     if (!consentData.template_id) {
       errors.push({ field: 'template_id', message: 'Template ID is required', code: 'REQUIRED' });
@@ -825,7 +824,7 @@ export class ConsentManagementService {
   private static async validateConsentTemplate(
     templateData: CreateConsentTemplateRequest
   ): Promise<void> {
-    const errors: ConsentValidationError[] = [];
+    const errors: Array<{ field: string; message: string; code: string }> = [];
 
     if (!templateData.name) {
       errors.push({ field: 'name', message: 'Name is required', code: 'REQUIRED' });

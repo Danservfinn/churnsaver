@@ -28,11 +28,6 @@ const skipDirectories = [
   '__mocks__'
 ];
 
-</search>
-</search_and_replace></search>
-</search_and_replace></search>
-</search_and_replace>
-
 interface CoverageStats {
   totalExports: number;
   documentedExports: number;
@@ -47,10 +42,6 @@ interface FileCoverage {
   documented: number;
   coverage: number;
   undocumentedExports: string[];
-
-</search>
-</search_and_replace></search>
-</search_and_replace>
 }
 
 class JSDocCoverageChecker {
@@ -63,10 +54,12 @@ class JSDocCoverageChecker {
   };
 
   private fileResults: FileCoverage[] = [];
-
-</search>
-</search_and_replace></search>
-</search_and_replace>
+  /**
+   * Get coverage statistics (public accessor for stats)
+   */
+  public getCoverageStats(): CoverageStats {
+    return { ...this.stats };
+  }
 
   /**
    * Main entry point for checking JSDoc coverage
@@ -96,10 +89,6 @@ class JSDocCoverageChecker {
   private findTypeScriptFiles(directory: string): string[] {
     const files: string[] = [];
 
-</search>
-</search_and_replace></search>
-</search_and_replace>
-
     const traverse = (dir: string) => {
       const items = fs.readdirSync(dir);
 
@@ -117,10 +106,7 @@ class JSDocCoverageChecker {
 
     traverse(directory);
     return files;
-  }</search>
-</search_and_replace></search>
-</search_and_replace></search>
-</search_and_replace>
+  }
 
   /**
    * Check if directory should be skipped
@@ -137,9 +123,6 @@ class JSDocCoverageChecker {
       '__mocks__'
     ];
 
-</search>
-</search_and_replace></search>
-</search_and_replace>
     return skipDirs.includes(dirname);
   }
 
@@ -202,10 +185,6 @@ class JSDocCoverageChecker {
   private findExports(sourceFile: ts.SourceFile): ts.Node[] {
     const exports: ts.Node[] = [];
 
-</search>
-</search_and_replace></search>
-</search_and_replace>
-
     function visit(node: ts.Node) {
       // Check for export declarations
       if (ts.isExportDeclaration(node) ||
@@ -228,7 +207,7 @@ class JSDocCoverageChecker {
               ts.isInterfaceDeclaration(node) ||
               ts.isTypeAliasDeclaration(node) ||
               ts.isEnumDeclaration(node) ||
-              ts.isVariableDeclaration(node) && ts.isVariableStatement(node.parent)) {
+              (ts.isVariableDeclaration(node) && node.parent && ts.isVariableStatement(node.parent))) {
             exports.push(node);
           }
         }

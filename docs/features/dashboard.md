@@ -2,6 +2,104 @@
 
 The Churn Saver dashboard provides real-time insights into customer retention performance, recovery campaigns, and business impact analytics.
 
+## Performance Requirements
+
+### Non-Functional Requirements (NFR)
+
+Per PRD Section 6, Churn Saver has the following performance targets:
+
+- **Dashboard p95 < 2s on 4G**: 95th percentile load time for dashboard must be under 2 seconds on 4G networks
+- **Fast Initial Render**: Critical content should be visible within 1 second
+- **Smooth Interactions**: UI interactions should respond within 100ms
+
+### Performance Verification
+
+#### Measuring Dashboard Performance
+
+**Using Browser DevTools:**
+
+1. Open Chrome DevTools (F12)
+2. Navigate to Network tab
+3. Throttle to "Fast 3G" or "Slow 4G" simulation
+4. Reload dashboard page
+5. Check load time in Performance tab
+
+**Using Lighthouse:**
+
+```bash
+# Install Lighthouse CLI
+npm install -g lighthouse
+
+# Run performance audit
+lighthouse https://your-app.com/dashboard/[companyId] \
+  --preset=desktop \
+  --only-categories=performance \
+  --throttling-method=simulate \
+  --throttling.cpuSlowdownMultiplier=4 \
+  --throttling.throughputKbps=1600
+
+# 4G network: ~1600 Kbps down, ~750 Kbps up
+```
+
+**Automated Performance Testing:**
+
+```typescript
+// dashboard-performance-test.ts
+import { test, expect } from '@playwright/test';
+
+test('Dashboard loads within 2s on 4G', async ({ page, context }) => {
+  // Simulate 4G network
+  await context.route('**/*', async route => {
+    await route.continue();
+  });
+  
+  const startTime = Date.now();
+  await page.goto('/dashboard/[companyId]', {
+    waitUntil: 'networkidle'
+  });
+  const loadTime = Date.now() - startTime;
+  
+  // Verify p95 target (allowing some margin)
+  expect(loadTime).toBeLessThan(2000);
+  
+  // Verify content is visible
+  await expect(page.locator('[data-testid="kpi-tiles"]')).toBeVisible();
+});
+```
+
+#### Performance Monitoring
+
+Monitor dashboard performance in production:
+
+- **Load Time p95**: Tracked via Real User Monitoring (RUM)
+- **Time to First Contentful Paint (FCP)**: Target < 1s
+- **Largest Contentful Paint (LCP)**: Target < 2.5s
+- **First Input Delay (FID)**: Target < 100ms
+- **Cumulative Layout Shift (CLS)**: Target < 0.1
+
+### Performance Baseline
+
+Current performance characteristics (baseline):
+
+- **Average Load Time**: [X]ms (Target: <2000ms)
+- **p95 Load Time**: [X]ms (Target: <2000ms)
+- **p99 Load Time**: [X]ms
+- **Time to First Contentful Paint**: [X]ms (Target: <1000ms)
+- **Largest Contentful Paint**: [X]ms (Target: <2500ms)
+
+*Note: Update these values with actual production metrics from RUM tools*
+
+### Performance Optimization
+
+To maintain performance targets:
+
+1. **Code Splitting**: Load dashboard components lazily
+2. **Caching**: Cache API responses and static assets
+3. **Database Optimization**: Use indexes and optimize queries
+4. **CDN**: Serve static assets from CDN
+5. **Compression**: Enable gzip/brotli compression
+6. **Image Optimization**: Use WebP format and lazy loading
+
 ## Overview
 
 ### Dashboard Components

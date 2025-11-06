@@ -2,7 +2,7 @@
 // Handles loading company-specific settings with environment fallbacks
 
 import { sql } from '@/lib/db';
-import { env } from '@/lib/env';
+import { env, additionalEnv } from '@/lib/env';
 import { logger } from '@/lib/logger';
 
 export interface CompanySettings {
@@ -16,10 +16,10 @@ export interface CompanySettings {
 
 // Default settings (from environment)
 const DEFAULT_SETTINGS: Omit<CompanySettings, 'company_id' | 'updated_at'> = {
-  enable_push: env.ENABLE_PUSH,
-  enable_dm: env.ENABLE_DM,
-  incentive_days: env.DEFAULT_INCENTIVE_DAYS,
-  reminder_offsets_days: env.REMINDER_OFFSETS_DAYS
+  enable_push: additionalEnv.ENABLE_PUSH === 'true' || false,
+  enable_dm: additionalEnv.ENABLE_DM === 'true' || false,
+  incentive_days: additionalEnv.DEFAULT_INCENTIVE_DAYS || 0,
+  reminder_offsets_days: (additionalEnv as any).REMINDER_OFFSETS_DAYS || []
 };
 
 // Get settings for a company (with fallback to defaults)
@@ -90,6 +90,12 @@ export async function upsertSettingsForCompany(settings: CompanySettings): Promi
     return false;
   }
 }
+
+
+
+
+
+
 
 
 

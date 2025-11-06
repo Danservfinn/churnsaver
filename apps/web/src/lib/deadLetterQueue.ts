@@ -5,6 +5,7 @@ import { logger } from '@/lib/logger';
 import { sql } from '@/lib/db';
 import { AppError, ErrorCode, ErrorCategory, ErrorSeverity } from '@/lib/apiResponse';
 import { getCircuitBreaker } from '@/lib/circuitBreaker';
+import type { ProcessedEvent } from '@/server/services/eventProcessor';
 
 // Dead letter job interface
 export interface DeadLetterJob {
@@ -300,7 +301,7 @@ export class DeadLetterQueueService {
 
     const result = await sql.query(query, params);
     
-    return result.rows.map(row => ({
+    return result.rows.map((row: any) => ({
       id: row.id,
       originalJobId: row.original_job_id,
       jobType: row.job_type,
@@ -412,7 +413,7 @@ export class DeadLetterQueueService {
         SELECT retry_count FROM job_queue_dead_letter WHERE id = $1
       `, [jobId]);
 
-      const currentRetryCount = newRetryCount.rows[0]?.retry_count || 0;
+      const currentRetryCount = ((newRetryCount.rows[0] as any)?.retry_count as number) || 0;
       const newRetryCountValue = currentRetryCount + 1;
 
       if (newRetryCountValue >= this.config.maxRetryAttempts) {
@@ -485,15 +486,16 @@ export class DeadLetterQueueService {
         try {
           // Import dynamically to avoid circular dependencies
           const { processWebhookEvent } = await import('@/server/services/eventProcessor');
-          const { ProcessedEvent } = await import('@/server/services/eventProcessor');
           
-          const processedEvent = new ProcessedEvent(
-            job.jobData.eventId,
-            job.jobData.eventType,
-            job.jobData.membershipId,
-            job.jobData.payload,
-            job.jobData.eventCreatedAt
-          );
+          const processedEvent: ProcessedEvent = {
+            id: job.jobData.eventId || job.id,
+            whop_event_id: job.jobData.eventId || job.id,
+            type: job.jobData.eventType,
+            membership_id: job.jobData.membershipId,
+            payload: job.jobData.payload,
+            processed_at: new Date(),
+            event_created_at: job.jobData.eventCreatedAt ? new Date(job.jobData.eventCreatedAt) : new Date()
+          };
 
           const success = await processWebhookEvent(processedEvent, job.companyId || 'unknown');
           
@@ -700,17 +702,17 @@ export class DeadLetterQueueService {
         GROUP BY company_id
       `, params);
 
-      const row = result.rows[0];
+      const row = result.rows[0] as any;
       const totalJobs = parseInt(row.total_jobs);
       const recoveredJobs = totalJobs - parseInt(row.failed_jobs) - parseInt(row.pending_jobs) - parseInt(row.processing_jobs);
       
       const jobsByType: Record<string, number> = {};
-      jobsByTypeResult.rows.forEach(r => {
+      jobsByTypeResult.rows.forEach((r: any) => {
         jobsByType[r.job_type] = parseInt(r.count);
       });
 
       const jobsByCompany: Record<string, number> = {};
-      jobsByCompanyResult.rows.forEach(r => {
+      jobsByCompanyResult.rows.forEach((r: any) => {
         jobsByCompany[r.company_id || 'unknown'] = parseInt(r.count);
       });
 

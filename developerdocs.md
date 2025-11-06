@@ -72,7 +72,11 @@ pnpm install
 Create environment file from template:
 
 ```bash
-cp .env.example .env.local
+# Copy the example file (note: .env files are gitignored, so we use env.example)
+cp env.example .env.local
+
+# Or copy the Whop template for minimal setup
+cp env.development.template .env.local
 ```
 
 Configure the following variables in `.env.local`:
@@ -86,7 +90,9 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 DATABASE_URL=postgresql://churn_saver_dev:dev_password@localhost:5432/churn_saver_dev
 
 # Whop Configuration
+# Both variables are supported - NEXT_PUBLIC_WHOP_APP_ID is preferred
 NEXT_PUBLIC_WHOP_APP_ID=your_development_app_id
+WHOP_APP_ID=your_development_app_id  # Optional alias
 WHOP_API_KEY=your_development_api_key
 WHOP_WEBHOOK_SECRET=your_development_webhook_secret
 
@@ -98,6 +104,8 @@ DEBUG_MODE=true
 JWT_SECRET=your_development_jwt_secret_minimum_32_characters
 ENCRYPTION_KEY=your_development_encryption_key_32_characters
 ```
+
+**Note:** The codebase supports both `NEXT_PUBLIC_WHOP_APP_ID` and `WHOP_APP_ID` for backward compatibility. Use `NEXT_PUBLIC_WHOP_APP_ID` as the primary variable.
 
 ### 4. Database Setup
 
@@ -211,36 +219,45 @@ The project follows a testing pyramid with comprehensive coverage:
 
 ```bash
 # Run all unit tests
-pnpm run test:unit
-
-# Run specific test file
-pnpm run test:unit -- test/unit/components/Button.test.tsx
+pnpm test
 
 # Run tests in watch mode
-pnpm run test:unit -- --watch
+pnpm test:watch
+
+# Run specific test file
+pnpm test -- test/unit/components/Button.test.ts
+
+# Run tests matching a pattern
+pnpm test -- -t "Button"
 ```
 
 #### Integration Tests
 
 ```bash
 # Run integration tests
-pnpm run test:integration
+pnpm test -- test/integration
 
-# Run with database
-pnpm run test:integration -- --runInBand
+# Run webhook tests specifically
+pnpm test:webhooks
+
+# Run core service tests
+pnpm test:core
 ```
 
 #### End-to-End Tests
 
 ```bash
 # Run E2E tests (requires running dev server)
-pnpm run test:e2e
+pnpm test:e2e
+
+# Run E2E tests with UI
+pnpm test:e2e:ui
 
 # Run specific test
-pnpm run test:e2e -- tests/auth.spec.ts
+pnpm test:e2e -- tests/auth.spec.ts
 
 # Run in headed mode (see browser)
-pnpm run test:e2e -- --headed
+pnpm test:e2e:headed
 ```
 
 #### All Tests
@@ -250,10 +267,13 @@ pnpm run test:e2e -- --headed
 pnpm test
 
 # Run with coverage
-pnpm run test:coverage
+pnpm test:coverage
 
-# Generate coverage report
-open coverage/lcov-report/index.html
+# Generate coverage report (HTML)
+pnpm coverage:html
+
+# Generate coverage report (LCOV)
+pnpm coverage:lcov
 ```
 
 ### Test Scripts
@@ -262,11 +282,17 @@ Available npm scripts:
 
 ```json
 {
-  "test": "node test/auth.test.js && node test/webhooks.test.js && node test/protected-api.test.js && node test/dashboard.test.js",
-  "test:unit": "jest test/unit",
-  "test:integration": "jest test/integration",
+  "test": "vitest run",
+  "test:watch": "vitest",
+  "test:coverage": "vitest run --coverage",
+  "test:ci": "vitest run --coverage --reporter=verbose",
   "test:e2e": "playwright test",
-  "test:coverage": "jest --coverage"
+  "test:e2e:ui": "playwright test --ui",
+  "test:e2e:headed": "playwright test --headed",
+  "test:webhooks": "vitest run --coverage --src src/lib/whop/ src/app/api/webhooks/ src/test/webhooks",
+  "test:core": "vitest run --coverage --src src/server/services/...",
+  "coverage:html": "vitest --coverage --reporter=html",
+  "coverage:lcov": "vitest --coverage --reporter=lcov"
 }
 ```
 
@@ -285,17 +311,18 @@ Tests use isolated database state. Each test suite:
 
 ```typescript
 // test/unit/components/Button.test.tsx
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Button } from '@/components/ui/button';
 
 describe('Button', () => {
-  test('renders with correct text', () => {
+  it('renders with correct text', () => {
     render(<Button>Click me</Button>);
     expect(screen.getByRole('button', { name: 'Click me' })).toBeInTheDocument();
   });
 
-  test('handles click events', () => {
-    const handleClick = jest.fn();
+  it('handles click events', () => {
+    const handleClick = vi.fn();
     render(<Button onClick={handleClick}>Click me</Button>);
 
     fireEvent.click(screen.getByRole('button'));
@@ -306,26 +333,31 @@ describe('Button', () => {
 
 #### API Test Example
 
-```javascript
-// test/integration/api/cases.test.js
-const request = require('supertest');
-const app = require('../../../src/app');
+```typescript
+// test/integration/api/cases.test.ts
+import { describe, it, expect } from 'vitest';
+import { fetch } from 'undici';
 
 describe('Cases API', () => {
-  test('creates new case', async () => {
-    const response = await request(app)
-      .post('/api/cases')
-      .set('Authorization', 'Bearer valid-token')
-      .send({
+  it('creates new case', async () => {
+    const response = await fetch('http://localhost:3000/api/cases', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer valid-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         userId: 'user-123',
         companyId: 'company-456',
         reason: 'churn_risk',
         description: 'User at risk of churning'
-      })
-      .expect(201);
+      }),
+    });
 
-    expect(response.body).toHaveProperty('case');
-    expect(response.body.case.reason).toBe('churn_risk');
+    expect(response.status).toBe(201);
+    const data = await response.json();
+    expect(data).toHaveProperty('case');
+    expect(data.case.reason).toBe('churn_risk');
   });
 });
 ```
@@ -444,13 +476,16 @@ rm -rf .next && pnpm build
 
 ```bash
 # Run specific failing test
-pnpm run test:unit -- test/unit/components/Button.test.tsx --verbose
+pnpm test -- test/unit/components/Button.test.ts
+
+# Run tests with verbose output
+pnpm test:ci
 
 # Debug integration test
-DEBUG=test:* pnpm run test:integration
+pnpm test -- test/integration --reporter=verbose
 
 # Run E2E in debug mode
-pnpm run test:e2e -- --debug
+pnpm test:e2e -- --debug
 ```
 
 ## Development Server Startup
@@ -463,8 +498,10 @@ pnpm dev
 
 # Server starts on http://localhost:3000
 # API available at http://localhost:3000/api
-# Whop iFrame context automatically configured
+# Whop iFrame context automatically configured via whop-proxy
 ```
+
+**Note:** The `dev` script automatically uses `whop-proxy` to configure the Whop iframe context. For detailed setup instructions, see [Whop Development Proxy Setup](../../infra/dev-proxy.md).
 
 ### Development Options
 
@@ -525,6 +562,7 @@ curl http://localhost:3000/api/health
 - Verify Whop credentials in `.env.local`
 - Check internet connection
 - Restart with clean cache: `rm -rf node_modules/.cache`
+- See [Whop Development Proxy Setup](../../infra/dev-proxy.md) for detailed troubleshooting
 
 ---
 

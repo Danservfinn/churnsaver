@@ -1,3 +1,5 @@
+'use client';
+
 import Link from 'next/link';
 import { useEffect } from 'react';
 
@@ -18,13 +20,14 @@ export default function Home() {
       });
 
       // Initialize Web Vitals monitoring
-      import('web-vitals').then(({ getCLS, getFID, getFCP, getLCP, getTTFB }) => {
+      import('web-vitals').then(({ onCLS, onINP, onFCP, onLCP, onTTFB }) => {
         import('@/lib/metrics').then(({ metrics }) => {
-          getCLS((metric) => metrics.recordWebVitals('cls', metric.value));
-          getFID((metric) => metrics.recordWebVitals('fid', metric.value));
-          getFCP((metric) => metrics.recordWebVitals('fcp', metric.value));
-          getLCP((metric) => metrics.recordWebVitals('lcp', metric.value));
-          getTTFB((metric) => metrics.recordWebVitals('ttfb', metric.value));
+          // Web Vitals v5 API - FID replaced by INP
+          onCLS((metric) => metrics.recordWebVitals('cls', metric.value));
+          onINP((metric) => metrics.recordWebVitals('inp', metric.value));
+          onFCP((metric) => metrics.recordWebVitals('fcp', metric.value));
+          onLCP((metric) => metrics.recordWebVitals('lcp', metric.value));
+          onTTFB((metric) => metrics.recordWebVitals('ttfb', metric.value));
         });
       });
     }

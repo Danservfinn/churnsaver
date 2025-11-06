@@ -142,8 +142,8 @@ class WhopObservabilityService {
         endpoint: options.endpoint,
         method: options.method,
         success: response.success.toString(),
-        user_id: context.userId,
-        company_id: context.companyId,
+        user_id: context.userId || '',
+        company_id: context.companyId || '',
       });
 
       // Record duration histogram
@@ -164,7 +164,9 @@ class WhopObservabilityService {
         );
       }
     } catch (error) {
-      logger.warn('Failed to record Whop API call metrics', { error: error.message });
+      logger.warn('Failed to record Whop API call metrics', { 
+        error: error instanceof Error ? error.message : String(error) 
+      });
     }
   }
 
@@ -229,8 +231,8 @@ class WhopObservabilityService {
       metrics.recordCounter('whop_webhook_events_total', 1, {
         event_type: event.eventType,
         success: processing.success.toString(),
-        user_id: context.userId,
-        company_id: context.companyId,
+        user_id: context.userId || '',
+        company_id: context.companyId || '',
       });
 
       metrics.recordHistogram('whop_webhook_processing_duration_ms', processing.duration, {
@@ -248,7 +250,9 @@ class WhopObservabilityService {
         );
       }
     } catch (error) {
-      logger.warn('Failed to record Whop webhook metrics', { error: error.message });
+      logger.warn('Failed to record Whop webhook metrics', { 
+        error: error instanceof Error ? error.message : String(error) 
+      });
     }
   }
 
@@ -294,8 +298,8 @@ class WhopObservabilityService {
       metrics.recordCounter('whop_auth_operations_total', 1, {
         operation: auth.operation,
         success: auth.success.toString(),
-        user_id: context.userId,
-        company_id: context.companyId,
+        user_id: context.userId || '',
+        company_id: context.companyId || '',
       });
 
       metrics.recordHistogram('whop_auth_operation_duration_ms', auth.duration, {
@@ -315,7 +319,9 @@ class WhopObservabilityService {
         );
       }
     } catch (error) {
-      logger.warn('Failed to record Whop auth metrics', { error: error.message });
+      logger.warn('Failed to record Whop auth metrics', { 
+        error: error instanceof Error ? error.message : String(error) 
+      });
     }
   }
 
@@ -361,7 +367,9 @@ class WhopObservabilityService {
           throw error;
         }
       },
-      spanAttributes,
+      Object.fromEntries(
+        Object.entries(spanAttributes).filter(([_, value]) => value !== undefined)
+      ) as Record<string, string>,
       SpanKind.INTERNAL
     );
   }
@@ -435,11 +443,7 @@ class WhopObservabilityService {
   /**
    * Gets current metrics snapshot for Whop operations
    */
-  getMetrics(): {
-    apiCalls: any;
-    webhooks: any;
-    auth: any;
-  } {
+  getMetrics() {
     return {
       apiCalls: metrics.getMetric('whop_api_calls_total'),
       webhooks: metrics.getMetric('whop_webhook_events_total'),
@@ -450,4 +454,4 @@ class WhopObservabilityService {
 
 // Singleton instance
 export const whopObservability = new WhopObservabilityService();
-export default whopObservability;</code>
+export default whopObservability;

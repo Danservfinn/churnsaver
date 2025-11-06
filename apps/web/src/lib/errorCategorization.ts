@@ -125,7 +125,7 @@ const ERROR_PATTERNS: ErrorPattern[] = [
     pattern: /api.*limit|rate.*limit|quota.*exceeded/i,
     category: ErrorCategory.RATE_LIMIT,
     severity: ErrorSeverity.MEDIUM,
-    code: ErrorCode.RATE_LIMITED,
+    code: ErrorCode.TOO_MANY_REQUESTS,
     retryable: true,
     description: 'Rate limit exceeded'
   },
@@ -143,7 +143,7 @@ const ERROR_PATTERNS: ErrorPattern[] = [
     pattern: /suspicious.*activity|potential.*attack|security.*violation/i,
     category: ErrorCategory.SECURITY,
     severity: ErrorSeverity.CRITICAL,
-    code: ErrorCode.SECURITY_VIOLATION,
+    code: ErrorCode.FORBIDDEN,
     retryable: false,
     description: 'Security violation detected'
   }
@@ -210,10 +210,10 @@ export class ErrorCategorizer {
       categorizedError.category,
       categorizedError.severity,
       categorizedError.statusCode,
+      categorizedError.isOperational ?? true,
       categorizedError.retryable,
-      categorizedError.retryAfter,
       {
-        ...categorizedError.context,
+        ...(categorizedError.details || {}),
         ...context
       }
     );
@@ -286,7 +286,6 @@ export class ErrorCategorizer {
       companyId: context.companyId,
       processingTimeMs: context.processingTimeMs,
       isRetryable: error.retryable,
-      retryAfter: error.retryAfter,
       // Additional metrics for monitoring
       metrics: {
         'error.count': 1,
@@ -359,7 +358,7 @@ export function logCategorizedError(categorizedError: CategorizedError): void {
     securityMonitor.processSecurityEvent({
       category: 'intrusion',
       severity: error.severity === ErrorSeverity.CRITICAL ? 'critical' : 'high',
-      type: error.code.toLowerCase(),
+      type: String(error.code).toLowerCase(),
       description: error.message,
       ip: context.ip,
       userAgent: context.userAgent,

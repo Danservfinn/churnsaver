@@ -1,0 +1,327 @@
+name: Comprehensive Testing and Validation
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    name: Lint and Type Check
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.15.9
+
+      - name: Install dependencies
+        working-directory: apps/web
+        run: pnpm install --frozen-lockfile
+
+      - name: Run linting
+        working-directory: apps/web
+        run: pnpm lint
+
+      - name: Run type checking
+        working-directory: apps/web
+        run: npx tsc --noEmit
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    name: Unit Tests
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.15.9
+
+      - name: Install dependencies
+        working-directory: apps/web
+        run: pnpm install --frozen-lockfile
+
+      - name: Run unit tests
+        working-directory: apps/web
+        run: pnpm test
+        env:
+          NODE_ENV: test
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-coverage-${{ matrix.node-version }}
+          path: apps/web/coverage/
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    name: Integration Tests
+    needs: [lint-and-typecheck, unit-tests]
+    
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: churn_saver_test
+          POSTGRES_USER: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:6
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.15.9
+
+      - name: Install dependencies
+        working-directory: apps/web
+        run: pnpm install --frozen-lockfile
+
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+
+      - name: Setup test database
+        run: |
+          psql -h localhost -p 5432 -U postgres -d postgres -c "
+            DROP DATABASE IF EXISTS churn_saver_test;
+            CREATE DATABASE churn_saver_test;
+            GRANT ALL PRIVILEGES ON DATABASE churn_saver_test TO postgres;
+          "
+
+      - name: Run database migrations
+        working-directory: apps/web
+        run: |
+          export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/churn_saver_test"
+          pnpm db:migrate || echo "Migrations may already be applied"
+
+      - name: Run integration tests
+        working-directory: apps/web
+        run: pnpm test test/integration/
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/churn_saver_test
+          REDIS_URL: redis://localhost:6379
+          WHOP_WEBHOOK_SECRET: ${{ secrets.WHOP_WEBHOOK_SECRET || 'test_webhook_secret' }}
+
+      - name: Upload integration test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-results
+          path: apps/web/coverage/
+
+  e2e-tests:
+    runs-on: ubuntu-latest
+    name: E2E Tests
+    needs: [integration-tests]
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.15.9
+
+      - name: Install dependencies
+        working-directory: apps/web
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright
+        working-directory: apps/web
+        run: pnpm exec playwright install --with-deps
+
+      - name: Build application
+        working-directory: apps/web
+        run: pnpm build
+        env:
+          NODE_ENV: production
+
+      - name: Run E2E tests
+        working-directory: apps/web
+        run: pnpm test:e2e
+        env:
+          NODE_ENV: test
+          E2E_BASE_URL: http://localhost:3000
+
+      - name: Upload E2E test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-test-results
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+
+  e2e-staging:
+    runs-on: ubuntu-latest
+    name: E2E Tests (Staging)
+    needs: [integration-tests]
+    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'
+    environment: staging
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.15.9
+
+      - name: Install dependencies
+        working-directory: apps/web
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright
+        working-directory: apps/web
+        run: pnpm exec playwright install --with-deps
+
+      - name: Run E2E tests against staging
+        working-directory: apps/web
+        run: pnpm test:e2e:staging
+        env:
+          NODE_ENV: staging
+          E2E_BASE_URL: ${{ secrets.STAGING_URL || 'https://staging.churnsaver.app' }}
+
+      - name: Upload staging E2E test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: staging-e2e-test-results
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    name: Deploy to Staging
+    needs: [lint-and-typecheck, unit-tests, integration-tests, e2e-tests]
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    environment: staging
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to Vercel Staging
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: '--prod'
+          working-directory: apps/web
+
+      - name: Run staging validation
+        run: |
+          STAGING_URL=${{ secrets.STAGING_URL || 'https://staging.churnsaver.app' }}
+          
+          # Health check
+          curl -f "$STAGING_URL/api/health" || exit 1
+          
+          echo "✅ Staging deployment validated"
+
+  test-summary:
+    runs-on: ubuntu-latest
+    name: Test Summary
+    needs: [lint-and-typecheck, unit-tests, integration-tests, e2e-tests]
+    if: always()
+    
+    steps:
+      - name: Create test summary
+        run: |
+          echo "# 🧪 Test Suite Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Run Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📊 Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Suite | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Lint & Type Check | ${{ needs.lint-and-typecheck.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Unit Tests | ${{ needs.unit-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Integration Tests | ${{ needs.integration-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| E2E Tests | ${{ needs.e2e-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ needs.lint-and-typecheck.result }}" == "success" && "${{ needs.unit-tests.result }}" == "success" && "${{ needs.integration-tests.result }}" == "success" && "${{ needs.e2e-tests.result }}" == "success" ]]; then
+            echo "## 🎉 Overall Status: PASSED" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "All test suites are passing! Ready for merge." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ❌ Overall Status: FAILED" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Some test suites are failing. Please review and fix issues." >> $GITHUB_STEP_SUMMARY
+          fi
+

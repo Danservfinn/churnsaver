@@ -232,6 +232,11 @@ The development server runs on:
 - **API**: http://localhost:3000/api
 - **Database**: localhost:5432
 - **Health Check**: http://localhost:3000/api/health
+- **Dashboard**: http://localhost:3000/dashboard/[companyId] (company-scoped route)
+
+**Dashboard Routes:**
+- `/dashboard/[companyId]` - Full dashboard with company ID validation
+- `/dashboard` - Redirects to company-scoped route using authenticated context
 
 ### Hot Reloading
 

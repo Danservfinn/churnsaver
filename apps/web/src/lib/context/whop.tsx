@@ -20,7 +20,7 @@ export interface WhopProviderProps {
 }
 
 export function WhopProvider({ children }: WhopProviderProps) {
-  const [companyId, setCompanyId] = useState<string>(env.NEXT_PUBLIC_WHOP_COMPANY_ID || env.WHOP_APP_ID);
+  const [companyId, setCompanyId] = useState<string>(env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'unknown');
   const [userId, setUserId] = useState<string>('anonymous');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -36,12 +36,19 @@ export function WhopProvider({ children }: WhopProviderProps) {
 
       if (!inIframe) {
         // Not in iframe, use default context
-        setCompanyId(env.NEXT_PUBLIC_WHOP_COMPANY_ID || env.WHOP_APP_ID);
-        setUserId('anonymous');
-        setIsAuthenticated(false);
+        // In development mode, allow bypassing authentication for local testing
+        const devMode = env.DEBUG_MODE && env.NODE_ENV === 'development';
+        const devCompanyId = env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'dev-company';
+        
+        setCompanyId(devCompanyId);
+        setUserId(devMode ? 'dev-user' : 'anonymous');
+        setIsAuthenticated(devMode); // Allow authenticated state in dev mode
+        
         logger.info('Whop context initialized for standalone app', {
-          companyId: env.NEXT_PUBLIC_WHOP_COMPANY_ID || env.WHOP_APP_ID,
-          userId: 'anonymous'
+          companyId: devCompanyId,
+          userId: devMode ? 'dev-user' : 'anonymous',
+          isAuthenticated: devMode,
+          devMode
         });
         return;
       }
@@ -58,7 +65,7 @@ export function WhopProvider({ children }: WhopProviderProps) {
 
         if (response.ok) {
           const contextData = await response.json();
-          setCompanyId(contextData.companyId || env.NEXT_PUBLIC_WHOP_COMPANY_ID || env.WHOP_APP_ID);
+          setCompanyId(contextData.companyId || env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'unknown');
           setUserId(contextData.userId || 'anonymous');
           setIsAuthenticated(contextData.isAuthenticated || false);
 
@@ -76,7 +83,7 @@ export function WhopProvider({ children }: WhopProviderProps) {
           error: apiError instanceof Error ? apiError.message : String(apiError)
         });
 
-        setCompanyId(env.NEXT_PUBLIC_WHOP_COMPANY_ID || env.WHOP_APP_ID);
+        setCompanyId(env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'unknown');
         setUserId('anonymous');
         setIsAuthenticated(false);
       }
@@ -89,7 +96,7 @@ export function WhopProvider({ children }: WhopProviderProps) {
       });
 
       // Set fallback values
-      setCompanyId(env.NEXT_PUBLIC_WHOP_COMPANY_ID || env.WHOP_APP_ID);
+      setCompanyId(env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'unknown');
       setUserId('anonymous');
       setIsAuthenticated(false);
     } finally {

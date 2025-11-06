@@ -3,7 +3,7 @@
 
 import { whopApiRequest } from '@/server/services/memberships';
 import { logger } from '@/lib/logger';
-import { env } from '@/lib/env';
+import { env, additionalEnv } from '@/lib/env';
 
 export interface PushNotificationPayload {
   userId?: string; // Optional - will use default agent if not provided
@@ -42,7 +42,7 @@ export async function sendWhopPushNotification(
   let lastError: string | undefined;
 
   // Use default agent user ID if no userId provided
-  const targetUserId = payload.userId || env.NEXT_PUBLIC_WHOP_AGENT_USER_ID;
+  const targetUserId = payload.userId || (process.env.NEXT_PUBLIC_WHOP_AGENT_USER_ID as string | undefined);
   
   if (!targetUserId) {
     const error = 'No userId provided and no NEXT_PUBLIC_WHOP_AGENT_USER_ID configured';
@@ -130,7 +130,7 @@ export async function sendWhopDirectMessage(
   let lastError: string | undefined;
 
   // Use default agent user ID if no userId provided
-  const targetUserId = payload.userId || env.NEXT_PUBLIC_WHOP_AGENT_USER_ID;
+  const targetUserId = payload.userId || (process.env.NEXT_PUBLIC_WHOP_AGENT_USER_ID as string | undefined);
   
   if (!targetUserId) {
     const error = 'No userId provided and no NEXT_PUBLIC_WHOP_AGENT_USER_ID configured';

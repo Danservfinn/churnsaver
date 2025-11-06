@@ -34,7 +34,7 @@ export async function getRequestContext(request: { headers: { get: (key: string)
     });
 
     return {
-      companyId: env.WHOP_APP_ID,
+      companyId: env.WHOP_APP_ID || env.NEXT_PUBLIC_WHOP_APP_ID || 'unknown',
       userId: 'anonymous',
       isAuthenticated: false
     };
@@ -43,6 +43,12 @@ export async function getRequestContext(request: { headers: { get: (key: string)
 
 // Export types for backward compatibility
 export type { RequestContext };
+
+
+
+
+
+
 
 
 

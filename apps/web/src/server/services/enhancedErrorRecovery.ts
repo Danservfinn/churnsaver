@@ -316,15 +316,17 @@ export class EnhancedErrorRecoveryService {
 
       // Categorize and log the error
       await categorizeAndLogError(lastError, {
-        service: options.service,
-        operation: options.operation,
-        attempts,
-        duration: Date.now() - startTime,
-        circuitBreakerState,
-        memoryUsage: this.memoryMonitor.getCurrentUsage(),
         companyId: options.companyId,
         userId: options.userId,
-        requestId: options.requestId
+        requestId: options.requestId,
+        additionalData: {
+          service: options.service,
+          operation: options.operation,
+          attempts,
+          duration: Date.now() - startTime,
+          circuitBreakerState,
+          memoryUsage: this.memoryMonitor.getCurrentUsage()
+        }
       });
 
       return {

@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { AccessibilityUtils } from '@/lib/accessibility';
 import { getAriaAttributes } from '@/lib/accessibilityConfig';
 
-interface AccessibleTableProps extends TableHTMLAttributes<HTMLTableElement> {
+interface AccessibleTableProps extends Omit<TableHTMLAttributes<HTMLTableElement>, 'onSort' | 'onSelect' | 'onPageChange'> {
   caption?: string;
   description?: string;
   sortable?: boolean;
@@ -19,7 +19,7 @@ interface AccessibleTableProps extends TableHTMLAttributes<HTMLTableElement> {
   };
 }
 
-interface AccessibleTableCellProps extends React.TdHTMLAttributes<HTMLTableCellElement> {
+interface AccessibleTableCellProps extends Omit<React.TdHTMLAttributes<HTMLTableCellElement>, 'onSort' | 'onSelect'> {
   scope?: 'col' | 'row' | 'colgroup' | 'rowgroup';
   headers?: string;
   abbr?: string;
@@ -31,7 +31,7 @@ interface AccessibleTableCellProps extends React.TdHTMLAttributes<HTMLTableCellE
   onSelect?: (selected: boolean) => void;
 }
 
-interface AccessibleTableRowProps extends React.HTMLAttributes<HTMLTableRowElement> {
+interface AccessibleTableRowProps extends Omit<React.HTMLAttributes<HTMLTableRowElement>, 'onSelect'> {
   selected?: boolean;
   onSelect?: (selected: boolean) => void;
   selectable?: boolean;
@@ -117,7 +117,7 @@ const AccessibleTable = forwardRef<HTMLTableElement, AccessibleTableProps>(
 
     // Handle select all
     const handleSelectAll = (selected: boolean) => {
-      const table = ref?.current;
+      const table = ref && 'current' in ref ? ref.current : null;
       if (!table) return;
       
       const rows = table.querySelectorAll('tbody tr[data-row-id]');
@@ -155,7 +155,7 @@ const AccessibleTable = forwardRef<HTMLTableElement, AccessibleTableProps>(
 
     // Count rows for aria-rowcount
     useEffect(() => {
-      const table = ref?.current;
+      const table = ref && 'current' in ref ? ref.current : null;
       if (table) {
         const tbody = table.querySelector('tbody');
         if (tbody) {
@@ -236,7 +236,7 @@ const AccessibleTable = forwardRef<HTMLTableElement, AccessibleTableProps>(
 AccessibleTable.displayName = 'AccessibleTable';
 
 // Accessible Table Cell component
-export const AccessibleTableCell = forwardRef<HTMLTableCellElement, AccessibleTableCellProps>(
+const AccessibleTableCell = forwardRef<HTMLTableCellElement, AccessibleTableCellProps>(
   ({ 
     className, 
     scope, 
@@ -357,7 +357,7 @@ export const AccessibleTableCell = forwardRef<HTMLTableCellElement, AccessibleTa
 AccessibleTableCell.displayName = 'AccessibleTableCell';
 
 // Accessible Table Row component
-export const AccessibleTableRow = forwardRef<HTMLTableRowElement, AccessibleTableRowProps>(
+const AccessibleTableRow = forwardRef<HTMLTableRowElement, AccessibleTableRowProps>(
   ({ 
     className, 
     selected, 

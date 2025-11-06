@@ -5,6 +5,10 @@ import { handleWhopWebhook } from '@/server/webhooks/whop';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { errors } from '@/lib/apiResponse';
 
+// Disable middleware for this route
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 // Only allow POST requests with rate limiting
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {

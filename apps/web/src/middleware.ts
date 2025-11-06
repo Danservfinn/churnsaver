@@ -47,8 +47,9 @@ export async function middleware(request: NextRequest) {
     return new NextResponse(null, { status: 200, headers: response.headers });
   }
 
-  // Skip authentication for health check endpoints
-  if (request.nextUrl.pathname.startsWith('/api/health')) {
+  // Skip authentication for health check and webhook endpoints
+  if (request.nextUrl.pathname.startsWith('/api/health') || 
+      request.nextUrl.pathname.startsWith('/api/webhooks')) {
     return applySecurityHeaders(response, isProduction, requestId);
   }
 

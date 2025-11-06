@@ -6,15 +6,24 @@ import { logger } from '@/lib/logger';
 import { setRequestContext, clearRequestContext } from '@/lib/db-rls';
 
 export async function middleware(request: NextRequest) {
-  // Skip all middleware processing for webhook endpoints
-  if (request.nextUrl.pathname.startsWith('/api/webhooks')) {
-    return NextResponse.next();
-  }
+  try {
+    // Skip all middleware processing for webhook endpoints
+    if (request.nextUrl.pathname.startsWith('/api/webhooks')) {
+      return NextResponse.next();
+    }
 
-  // Check request size limits first (before other processing)
-  const sizeCheck = await requestSizeLimitMiddleware(request);
-  if (sizeCheck) {
-    return sizeCheck; // Return early if request size exceeds limits
+    // Check request size limits first (before other processing)
+    const sizeCheck = await requestSizeLimitMiddleware(request);
+    if (sizeCheck) {
+      return sizeCheck; // Return early if request size exceeds limits
+    }
+  } catch (error) {
+    // If middleware fails for webhooks, allow them through
+    if (request.nextUrl.pathname.startsWith('/api/webhooks')) {
+      return NextResponse.next();
+    }
+    // For other routes, log and continue
+    console.error('Middleware error:', error instanceof Error ? error.message : String(error));
   }
 
   // Only apply security headers to API routes

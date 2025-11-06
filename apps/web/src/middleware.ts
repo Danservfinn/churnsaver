@@ -6,6 +6,11 @@ import { logger } from '@/lib/logger';
 import { setRequestContext, clearRequestContext } from '@/lib/db-rls';
 
 export async function middleware(request: NextRequest) {
+  // Skip all middleware processing for webhook endpoints
+  if (request.nextUrl.pathname.startsWith('/api/webhooks')) {
+    return NextResponse.next();
+  }
+
   // Check request size limits first (before other processing)
   const sizeCheck = await requestSizeLimitMiddleware(request);
   if (sizeCheck) {

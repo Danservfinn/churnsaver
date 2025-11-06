@@ -435,9 +435,9 @@ export async function GET(
 ): Promise<NextResponse> {
   const handler = async (req: NextRequest, context: MiddlewareAuthContext): Promise<NextResponse<any>> => {
     const { searchParams } = new URL(req.url);
-    if (searchParams.get('sessionId')) {
+  if (searchParams.get('sessionId')) {
       return await getSessionHandler(req, context);
-    }
+  }
     return await getSessionsHandler(req, context);
   };
   return authenticatedRoute(handler as any)(request);

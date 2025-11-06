@@ -15,7 +15,7 @@ const whopConfigSchema = z.object({
   webhookSecret: z.string().min(16, 'Webhook secret must be at least 16 characters').optional(),
   
   // API endpoints and timeouts
-  apiBaseUrl: z.string().url().default('https://api.whop.com/api/v5/app'),
+  apiBaseUrl: z.string().url().default('https://api.whop.com/api/v1'),
   requestTimeout: z.number().int().positive().default(30000), // 30 seconds default
   
   // Retry configuration
@@ -49,7 +49,7 @@ export interface ConfigValidationResult {
  */
 const ENVIRONMENT_DEFAULTS: Record<string, Partial<WhopSdkConfig>> = {
   development: {
-    apiBaseUrl: 'https://api.whop.com/api/v5/app',
+    apiBaseUrl: 'https://api.whop.com/api/v1',
     requestTimeout: 30000,
     maxRetries: 1,
     retryDelay: 500,
@@ -57,7 +57,7 @@ const ENVIRONMENT_DEFAULTS: Record<string, Partial<WhopSdkConfig>> = {
     debugMode: true,
   },
   staging: {
-    apiBaseUrl: 'https://api.staging.whop.com/api/v5/app',
+    apiBaseUrl: 'https://api.staging.whop.com/api/v1',
     requestTimeout: 25000,
     maxRetries: 2,
     retryDelay: 1000,
@@ -65,7 +65,7 @@ const ENVIRONMENT_DEFAULTS: Record<string, Partial<WhopSdkConfig>> = {
     debugMode: false,
   },
   production: {
-    apiBaseUrl: 'https://api.whop.com/api/v5/app',
+    apiBaseUrl: 'https://api.whop.com/api/v1',
     requestTimeout: 20000,
     maxRetries: 3,
     retryDelay: 1000,

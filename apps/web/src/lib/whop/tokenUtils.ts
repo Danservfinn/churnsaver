@@ -125,7 +125,7 @@ export class TokenUtils {
       // Create a minimal mock configuration for testing
       this.config = config || {
         appId: 'test-app-id',
-        apiBaseUrl: 'https://api.whop.com/api/v5/app',
+        apiBaseUrl: 'https://api.whop.com/api/v1',
         requestTimeout: 30000,
         maxRetries: 3,
         retryDelay: 1000,

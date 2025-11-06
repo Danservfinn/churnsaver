@@ -328,7 +328,7 @@ export class WhopOAuthService {
       params.append('code_challenge_method', codeChallengeMethod);
     }
 
-    const baseUrl = this.config.apiBaseUrl.replace('/api/v5/app', '');
+    const baseUrl = this.config.apiBaseUrl.replace(/\/api\/v\d+(\/app)?$/, '');
     const authUrl = `${baseUrl}/oauth/authorize?${params.toString()}`;
 
     logger.info('OAuth authorization URL generated', {

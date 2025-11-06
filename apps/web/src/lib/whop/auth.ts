@@ -165,7 +165,7 @@ export class WhopAuthService {
         appId: config?.appId || 'test-app-id',
         apiKey: config?.apiKey,
         webhookSecret: config?.webhookSecret,
-        apiBaseUrl: 'https://api.whop.com/api/v5/app',
+        apiBaseUrl: 'https://api.whop.com/api/v1',
         requestTimeout: 30000,
         maxRetries: 3,
         retryDelay: 1000,

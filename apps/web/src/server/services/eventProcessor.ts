@@ -214,7 +214,8 @@ function extractPaymentSucceededEvent(event: ProcessedEvent): PaymentSucceededEv
 // Extract MembershipValidEvent from webhook payload
 function extractMembershipValidEvent(event: ProcessedEvent): MembershipValidEvent | null {
   try {
-    if (event.type !== 'membership_went_valid') {
+    // Support both v5 and v1 API event names
+    if (event.type !== 'membership_went_valid' && event.type !== 'membership_activated') {
       return null;
     }
 
@@ -247,7 +248,8 @@ function extractMembershipValidEvent(event: ProcessedEvent): MembershipValidEven
 // Extract MembershipInvalidEvent from webhook payload
 function extractMembershipInvalidEvent(event: ProcessedEvent): MembershipInvalidEvent | null {
   try {
-    if (event.type !== 'membership_went_invalid') {
+    // Support both v5 and v1 API event names
+    if (event.type !== 'membership_went_invalid' && event.type !== 'membership_deactivated') {
       return null;
     }
 
@@ -333,7 +335,8 @@ export async function processWebhookEvent(
     }
 
     // Process membership_went_valid events (recovery attribution)
-    if (event.type === 'membership_went_valid') {
+    // Also handle v1 API event name: membership_activated
+    if (event.type === 'membership_went_valid' || event.type === 'membership_activated') {
       logger.info('Extracting membership valid event data', { eventId: event.whop_event_id });
       const membershipEvent = extractMembershipValidEvent(event);
       if (!membershipEvent) {
@@ -354,7 +357,8 @@ export async function processWebhookEvent(
     }
 
     // Process membership_went_invalid events (create recovery case)
-    if (event.type === 'membership_went_invalid') {
+    // Also handle v1 API event name: membership_deactivated
+    if (event.type === 'membership_went_invalid' || event.type === 'membership_deactivated') {
       logger.info('Extracting membership invalid event data', { eventId: event.whop_event_id });
       const membershipEvent = extractMembershipInvalidEvent(event);
       if (!membershipEvent) {
@@ -416,7 +420,7 @@ export async function processUnprocessedEvents(companyId: string): Promise<{
        FROM events
        WHERE processed = false
          AND company_id = $1
-         AND type IN ('payment_failed', 'payment_succeeded', 'membership_went_valid', 'membership_went_invalid')
+         AND type IN ('payment_failed', 'payment_succeeded', 'membership_went_valid', 'membership_went_invalid', 'membership_activated', 'membership_deactivated')
        ORDER BY received_at ASC`,
       [companyId]
     );

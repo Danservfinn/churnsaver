@@ -361,11 +361,11 @@ export class ErrorHandler {
     return (
       error instanceof AppErrorClass ||
       (
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        'message' in error &&
-        'category' in error &&
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      'message' in error &&
+      'category' in error &&
         'severity' in error
       )
     );

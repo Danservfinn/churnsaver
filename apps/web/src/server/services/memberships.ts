@@ -33,7 +33,7 @@ export async function whopApiRequest(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<any> {
-  const baseURL = 'https://api.whop.com/api/v5/app';
+  const baseURL = 'https://api.whop.com/api/v1';
   const url = `${baseURL}${endpoint}`;
 
   // Fail fast at call time if API key is not configured (do not throw at module load)

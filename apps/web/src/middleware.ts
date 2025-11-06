@@ -233,8 +233,14 @@ function applySecurityHeaders(response: NextResponse, isProduction: boolean, req
 
 export const config = {
   matcher: [
-    '/api/:path*',
-    '!/api/webhooks/:path*', // Exclude webhook endpoints from middleware
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api/webhooks (webhook endpoints)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     */
+    '/((?!api/webhooks|_next/static|_next/image|favicon.ico).*)',
   ],
 };
 

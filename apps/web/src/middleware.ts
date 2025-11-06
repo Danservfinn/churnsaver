@@ -1,16 +1,20 @@
-import { requestSizeLimitMiddleware } from '@/middleware/requestSizeLimit';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { getRequestContextSDK } from '@/lib/whop-sdk';
-import { logger } from '@/lib/logger';
-import { setRequestContext, clearRequestContext } from '@/lib/db-rls';
 
 export async function middleware(request: NextRequest) {
+  // CRITICAL: Skip all middleware processing for webhook endpoints FIRST
+  // This must be checked before any other imports or code execution
+  if (request.nextUrl.pathname.startsWith('/api/webhooks')) {
+    return NextResponse.next();
+  }
+
+  // Lazy import other modules only when needed (not for webhooks)
+  const { requestSizeLimitMiddleware } = await import('@/middleware/requestSizeLimit');
+  const { getRequestContextSDK } = await import('@/lib/whop-sdk');
+  const { logger } = await import('@/lib/logger');
+  const { setRequestContext } = await import('@/lib/db-rls');
+
   try {
-    // Skip all middleware processing for webhook endpoints
-    if (request.nextUrl.pathname.startsWith('/api/webhooks')) {
-      return NextResponse.next();
-    }
 
     // Check request size limits first (before other processing)
     const sizeCheck = await requestSizeLimitMiddleware(request);

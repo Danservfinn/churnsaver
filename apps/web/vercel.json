@@ -21,6 +21,10 @@
         {
           "key": "Cache-Control",
           "value": "no-cache, no-store, must-revalidate"
+        },
+        {
+          "key": "x-vercel-sso-protection",
+          "value": "none"
         }
       ]
     },
@@ -41,6 +45,15 @@
     {
       "path": "/api/scheduler/reminders",
       "schedule": "0 9 * * *"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/webhooks/(.*)",
+      "dest": "/api/webhooks/$1",
+      "headers": {
+        "x-vercel-sso-protection": "none"
+      }
     }
   ]
 }

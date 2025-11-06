@@ -226,7 +226,10 @@ function applySecurityHeaders(response: NextResponse, isProduction: boolean, req
 }
 
 export const config = {
-  matcher: '/api/:path*',
+  matcher: [
+    '/api/:path*',
+    '!/(api/webhooks)/:path*', // Exclude webhook endpoints from middleware
+  ],
 };
 
 export const runtime = 'experimental-edge';

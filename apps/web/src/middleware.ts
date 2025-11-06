@@ -241,7 +241,5 @@ export const config = {
   ],
 };
 
-export const runtime = 'experimental-edge';
-
-// Note: In Edge Runtime, cleanup happens automatically at the end of request
-// process.on is not available in Edge Runtime, so we rely on automatic cleanup
+// Removed edge runtime to avoid compatibility issues with middleware imports
+// Using Node.js runtime instead for better compatibility

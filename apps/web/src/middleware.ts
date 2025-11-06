@@ -228,7 +228,7 @@ function applySecurityHeaders(response: NextResponse, isProduction: boolean, req
 export const config = {
   matcher: [
     '/api/:path*',
-    '!/(api/webhooks)/:path*', // Exclude webhook endpoints from middleware
+    '!/api/webhooks/:path*', // Exclude webhook endpoints from middleware
   ],
 };
 

@@ -8,13 +8,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Lazy import other modules only when needed (not for webhooks)
-  const { requestSizeLimitMiddleware } = await import('@/middleware/requestSizeLimit');
-  const { getRequestContextSDK } = await import('@/lib/whop-sdk');
-  const { logger } = await import('@/lib/logger');
-  const { setRequestContext } = await import('@/lib/db-rls');
-
   try {
+    // Lazy import other modules only when needed (not for webhooks)
+    const { requestSizeLimitMiddleware } = await import('@/middleware/requestSizeLimit');
+    const { getRequestContextSDK } = await import('@/lib/whop-sdk');
+    const { logger } = await import('@/lib/logger');
+    const { setRequestContext } = await import('@/lib/db-rls');
 
     // Check request size limits first (before other processing)
     const sizeCheck = await requestSizeLimitMiddleware(request);
@@ -22,12 +21,10 @@ export async function middleware(request: NextRequest) {
       return sizeCheck; // Return early if request size exceeds limits
     }
   } catch (error) {
-    // If middleware fails for webhooks, allow them through
-    if (request.nextUrl.pathname.startsWith('/api/webhooks')) {
-      return NextResponse.next();
-    }
-    // For other routes, log and continue
-    console.error('Middleware error:', error instanceof Error ? error.message : String(error));
+    // If any import or middleware fails, log but don't block the request
+    // This ensures webhooks and other routes can still function
+    console.error('Middleware error (non-blocking):', error instanceof Error ? error.message : String(error));
+    // Continue to next middleware step or return response
   }
 
   // Only apply security headers to API routes

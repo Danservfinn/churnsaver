@@ -39,7 +39,8 @@
     }
   ],
   "env": {
-    "NODE_ENV": "production"
+    "NODE_ENV": "production",
+    "ALLOW_INSECURE_DEV": "false"
   },
   "crons": [
     {

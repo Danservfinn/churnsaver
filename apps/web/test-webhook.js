@@ -4,8 +4,8 @@
  * This creates a properly signed webhook payload and sends it to your endpoint
  */
 
-const crypto = require('crypto');
-const https = require('https');
+const crypto = require('node:crypto');
+const https = require('node:https');
 
 // Configuration
 const WEBHOOK_URL = 'https://churnsaver-dannys-projects-de68569e.vercel.app/api/webhooks/whop';

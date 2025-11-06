@@ -17,7 +17,8 @@ export function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-// Only match API routes, excluding webhooks via early return
+// Temporarily disable middleware matcher to bypass edge runtime issues
+// Webhook routes will work without middleware
 export const config = {
-  matcher: '/api/:path*',
+  matcher: [],
 };

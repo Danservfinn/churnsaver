@@ -7,11 +7,8 @@ export function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-// Only match API routes, but exclude webhooks explicitly
+// Match API routes but exclude webhooks using negative lookahead
 export const config = {
-  matcher: [
-    '/api/:path*',
-    '!/api/webhooks/:path*', // Explicitly exclude webhooks
-  ],
+  matcher: '/api/((?!webhooks).)*',
 };
 

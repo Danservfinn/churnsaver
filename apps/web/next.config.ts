@@ -1,5 +1,4 @@
-// Temporarily disable withWhopAppConfig to test if it's adding middleware
-// import { withWhopAppConfig } from "@whop/react/next.config";
+import { withWhopAppConfig } from "@whop/react/next.config";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -10,6 +9,4 @@ const nextConfig: NextConfig = {
 	serverExternalPackages: ["@whop/api"],
 };
 
-// Temporarily export config directly instead of wrapping with withWhopAppConfig
-export default nextConfig;
-// export default withWhopAppConfig(nextConfig);
+export default withWhopAppConfig(nextConfig);

@@ -1,5 +1,6 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "pnpm run build",
+  "installCommand": "pnpm install",
   "outputDirectory": ".next",
   "framework": "nextjs",
   "functions": {
@@ -20,6 +21,10 @@
         {
           "key": "Cache-Control",
           "value": "no-cache, no-store, must-revalidate"
+        },
+        {
+          "key": "x-vercel-sso-protection",
+          "value": "none"
         }
       ]
     },
@@ -39,9 +44,17 @@
   "crons": [
     {
       "path": "/api/scheduler/reminders",
-      "schedule": "0 9 * * *"
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/scheduler/events-cleanup",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/scheduler/privacy-cleanup",
+      "schedule": "0 3 * * 0"
     }
-  ]
+  ],
 }
 
 

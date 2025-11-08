@@ -182,8 +182,8 @@ export class ErrorCategorizer {
           matchedPattern.category,
           matchedPattern.severity,
           this.getStatusCodeForCategory(matchedPattern.category),
+          true,
           matchedPattern.retryable || false,
-          undefined,
           { originalError: error.name, stack: error.stack }
         );
         suggestedActions = this.getSuggestedActions(matchedPattern);

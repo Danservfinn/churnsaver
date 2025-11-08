@@ -28,8 +28,13 @@ describe('Encryption Module', () => {
     // Set environment variable for tests
     process.env.ENCRYPTION_KEY = testKey;
     
-    // Generate a hash for password tests
-    testHash = await hashPassword(testPassword);
+    // Generate a hash for password tests - wrapped in try-catch for native module safety
+    try {
+      testHash = await hashPassword(testPassword);
+    } catch (error) {
+      console.warn('Warning: bcrypt initialization failed in beforeAll, will retry in tests:', error instanceof Error ? error.message : String(error));
+      // testHash will be undefined, tests will generate it lazily
+    }
   });
 
   afterAll(() => {
@@ -167,6 +172,14 @@ describe('Encryption Module', () => {
       expect(isMatch).toBe(true);
     });
 
+    it('should use testHash when available', async () => {
+      // If testHash wasn't set in beforeAll due to bcrypt issues, generate it now
+      const hash = testHash || await hashPassword(testPassword);
+      
+      const isMatch = await comparePassword(testPassword, hash);
+      expect(isMatch).toBe(true);
+    });
+
     it('should reject wrong password', async () => {
       const password = 'MySecurePassword123';
       const wrongPassword = 'WrongPassword456';
@@ -178,7 +191,9 @@ describe('Encryption Module', () => {
 
     it('should handle empty password error', async () => {
       await expect(hashPassword('')).rejects.toThrow('Password cannot be empty');
-      await expect(comparePassword('', testHash)).rejects.toThrow('Password cannot be empty');
+      // Use freshly generated hash if testHash is undefined
+      const hash = testHash || await hashPassword(testPassword);
+      await expect(comparePassword('', hash)).rejects.toThrow('Password cannot be empty');
     });
 
     it('should handle empty hash error', async () => {

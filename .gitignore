@@ -66,3 +66,4 @@ supabase/.temp/
 
 #Ignore cursor AI rules
 .cursor/rules/codacy.mdc
+.vercel

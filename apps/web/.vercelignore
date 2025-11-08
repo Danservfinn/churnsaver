@@ -1,0 +1,80 @@
+# Dependencies
+node_modules/
+
+# Testing
+test/
+*.test.ts
+*.test.js
+*.test.tsx
+*.test.jsx
+test-*.js
+test-*.ts
+
+# Documentation
+docs/
+README.md
+VERCEL_SETUP_GUIDE.md
+WHOP_CREDENTIALS_IMPLEMENTATION_SUMMARY.md
+
+# Development and build artifacts
+.next/
+.turbo/
+*.tsbuildinfo
+*.log
+npm-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment files (except required ones)
+.env.local
+.env.development
+.env.test
+.env.*.local
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Debug files
+debug/
+*.debug
+
+# Coverage reports
+coverage/
+*.lcov
+
+# Temporary files
+tmp/
+temp/
+
+# Scripts not needed in production
+scripts/check-jsdoc-coverage*
+scripts/init-db.ts
+scripts/setup-test-env-supabase.sh
+
+# Test payloads and webhooks
+test_payload.json
+test-webhook.js
+
+# Large infra files not needed at runtime
+infra/
+infra/**/*
+
+# Source maps (if generated)
+*.map
+
+# Optional: exclude backup files
+*.backup
+*.bak

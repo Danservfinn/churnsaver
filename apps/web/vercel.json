@@ -45,16 +45,11 @@
   "crons": [
     {
       "path": "/api/scheduler/reminders",
-      "schedule": "0 9 * * *"
-    }
-  ],
-  "routes": [
+      "schedule": "0 8 * * *"
+    },
     {
-      "src": "/api/webhooks/(.*)",
-      "dest": "/api/webhooks/$1",
-      "headers": {
-        "x-vercel-sso-protection": "none"
-      }
+      "path": "/api/scheduler/privacy-cleanup",
+      "schedule": "0 3 * * 0"
     }
   ]
 }

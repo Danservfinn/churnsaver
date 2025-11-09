@@ -7,7 +7,7 @@ import { logger } from '@/lib/logger';
 export interface RateLimitConfig {
   windowMs: number; // Window size in milliseconds
   maxRequests: number; // Maximum requests per window
-  keyPrefix: string; // Prefix for rate limit keys (e.g., "webhook", "case_action")
+  keyPrefix?: string; // Optional prefix for rate limit keys
 }
 
 export interface RateLimitResult {
@@ -28,6 +28,12 @@ export async function checkRateLimit(
 ): Promise<RateLimitResult> {
   try {
     const now = new Date();
+    
+    logger.debug('Rate limit check started', {
+      identifier,
+      env: process.env.NODE_ENV,
+      timestamp: now.toISOString(),
+    });
     
     // Calculate fixed time bucket using floor division
     // This ensures all requests in the same window use the same bucket
@@ -105,8 +111,8 @@ export async function checkRateLimit(
       };
     }
 
-    // In development, allow the request but log the error (fail-open for debugging)
-    logger.error('Rate limit check failed, allowing request (development mode)', {
+    // In development and test environments, allow the request but log the error (fail-open for debugging)
+    logger.error('Rate limit check failed, allowing request (development/test mode)', {
       identifier,
       error: error instanceof Error ? error.message : String(error),
     });
@@ -213,6 +219,19 @@ dataExportDelete: {
     maxRequests: 10, // 10 alert actions per minute per user
     keyPrefix: 'alert_resolve'
   },
+} as const;
+
+/**
+ * Test-specific rate limit configurations with higher limits and shorter windows
+ * for faster test execution while maintaining rate limiting behavior
+ */
+export const TEST_RATE_LIMIT_CONFIGS = {
+  ...RATE_LIMIT_CONFIGS,
+  webhooks: {
+    ...RATE_LIMIT_CONFIGS.webhooks,
+    maxRequests: 1000, // Higher limit for tests: 1000 requests per minute
+    windowMs: 5000, // Shorter window for faster tests: 5 seconds
+  }
 } as const;
 
 /**

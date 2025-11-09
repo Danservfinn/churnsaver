@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { handleWhopWebhook } from '@/server/webhooks/whop';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { errors } from '@/lib/apiResponse';
+import { getWebhookCompanyContext } from '@/lib/whop-sdk';
 
 // Disable middleware for this route
 export const runtime = 'nodejs';
@@ -12,8 +13,32 @@ export const dynamic = 'force-dynamic';
 // Only allow POST requests with rate limiting
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    // Check rate limit before processing webhook
-    const rateLimitResult = await checkRateLimit('webhook:global', RATE_LIMIT_CONFIGS.webhooks);
+    // Get raw body first to extract company ID for per-company rate limiting
+    const body = await request.text();
+    let companyId: string | undefined;
+    
+    try {
+      const payload = JSON.parse(body);
+      // Extract company ID from webhook payload for per-company rate limiting
+      // This ensures fair usage across tenants and prevents one company's testing from affecting others
+      const headersObj: Record<string, string> = {};
+      request.headers.forEach((value, key) => {
+        headersObj[key] = value;
+      });
+      companyId = getWebhookCompanyContext(headersObj);
+    } catch (e) {
+      // If we can't parse the body or extract company ID, we'll use global rate limiting as fallback
+      console.warn('Failed to extract company ID for rate limiting', {
+        error: e instanceof Error ? e.message : String(e)
+      });
+    }
+
+    // Use per-company rate limit if company ID is available, otherwise fall back to global
+    const rateLimitKey = companyId ? `webhook:company:${companyId}` : 'webhook:global';
+    const rateLimitResult = await checkRateLimit(rateLimitKey, {
+      ...RATE_LIMIT_CONFIGS.webhooks,
+      maxRequests: companyId ? 100 : RATE_LIMIT_CONFIGS.webhooks.maxRequests // 100 req/min per company
+    });
 
     if (!rateLimitResult.allowed) {
       // Log rate limit violation for security monitoring
@@ -25,20 +50,35 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       console.error('Rate limit exceeded', {
         endpoint: 'webhooks/whop',
         ip: clientIP,
+        companyId: companyId || 'unknown',
+        rateLimitKey,
         userAgent: request.headers.get('user-agent')?.substring(0, 200) || 'unknown',
         retryAfter: rateLimitResult.retryAfter,
         resetAt: rateLimitResult.resetAt.toISOString(),
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        isPerCompanyLimit: !!companyId
       });
 
       return NextResponse.json(
-        { error: 'Rate limit exceeded', retryAfter: rateLimitResult.retryAfter, resetAt: rateLimitResult.resetAt.toISOString() },
+        {
+          error: 'Rate limit exceeded',
+          retryAfter: rateLimitResult.retryAfter,
+          resetAt: rateLimitResult.resetAt.toISOString(),
+          companyId: companyId || 'unknown'
+        },
         { status: 429 }
       );
     }
 
     // Rate limit passed, process webhook
-    return handleWhopWebhook(request);
+    // Create a new request with the body text since we already consumed it
+    const newRequest = new NextRequest(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: body
+    });
+    
+    return handleWhopWebhook(newRequest);
   } catch (error) {
     // In production, fail-closed for security
     if (process.env.NODE_ENV === 'production') {

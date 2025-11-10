@@ -32,7 +32,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
     // === DEBUG LOGGING END ===
 
-    // Get raw body first for signature validation
+    // Get raw body first for rate limiting and signature validation
     const body = await request.text();
     
     // === DEBUG LOGGING START ===
@@ -40,6 +40,75 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.log('[DEBUG_WEBHOOK] Body string preview:', body.substring(0, 500));
     // === DEBUG LOGGING END ===
     
+    // Extract company ID from payload BEFORE processing webhook for rate limiting
+    // This allows per-company rate limiting and prevents unnecessary processing
+    let companyId: string | undefined;
+    try {
+      const payload = JSON.parse(body);
+      // Extract company ID from webhook payload for per-company rate limiting
+      // This ensures fair usage across tenants and prevents one company's testing from affecting others
+      companyId = getWebhookCompanyContext(headersObj, payload);
+      
+      console.log('[DEBUG_WEBHOOK] CompanyId extraction result', {
+        companyId: companyId || 'undefined',
+        hasPayload: !!payload,
+        payloadType: payload?.type,
+        payloadKeys: payload ? Object.keys(payload) : [],
+        dataKeys: payload?.data ? Object.keys(payload.data) : []
+      });
+    } catch (e) {
+      // If we can't parse the body or extract company ID, we'll use IP-based rate limiting as fallback
+      console.warn('[DEBUG_WEBHOOK] Failed to extract company ID for rate limiting', {
+        error: e instanceof Error ? e.message : String(e),
+        bodyPreview: body.substring(0, 200)
+      });
+    }
+
+    // Use per-company rate limit if company ID is available, otherwise fall back to IP-based
+    // This prevents global rate limit from being exhausted by testing from same IP
+    const clientIP = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+                     request.headers.get('x-real-ip') ||
+                     'unknown';
+    
+    // Use IP-based rate limiting as fallback when companyId is not available
+    const rateLimitKey = companyId 
+      ? `webhook:company:${companyId}` 
+      : `webhook:ip:${clientIP}`;
+    
+    // Apply rate limiting BEFORE webhook processing to prevent unnecessary work
+    const rateLimitResult = await checkRateLimit(rateLimitKey, {
+      ...RATE_LIMIT_CONFIGS.webhooks,
+      // Per-company: 100 req/min, per-IP: 50 req/min (more lenient for testing)
+      maxRequests: companyId ? 100 : 50
+    });
+
+    if (!rateLimitResult.allowed) {
+      // Log rate limit violation for security monitoring
+      console.error('[DEBUG_WEBHOOK] Rate limit exceeded', {
+        endpoint: 'webhooks/whop',
+        ip: clientIP,
+        companyId: companyId || 'unknown',
+        rateLimitKey,
+        userAgent: request.headers.get('user-agent')?.substring(0, 200) || 'unknown',
+        retryAfter: rateLimitResult.retryAfter,
+        resetAt: rateLimitResult.resetAt.toISOString(),
+        timestamp: new Date().toISOString(),
+        isPerCompanyLimit: !!companyId,
+        maxRequests: companyId ? 100 : 50
+      });
+
+      return NextResponse.json(
+        {
+          error: 'Rate limit exceeded',
+          retryAfter: rateLimitResult.retryAfter,
+          resetAt: rateLimitResult.resetAt.toISOString(),
+          companyId: companyId || 'unknown'
+        },
+        { status: 429 }
+      );
+    }
+
+    // Rate limit passed, now process the webhook (includes signature validation)
     // Create a new request with the body text since we already consumed it
     const newRequest = new NextRequest(request.url, {
       method: request.method,
@@ -47,75 +116,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       body: body
     });
     
-    // Process webhook first (includes signature validation and payload parsing)
-    // Then apply rate limiting with the actual companyId from the payload
-    // This ensures accurate per-company rate limiting instead of using "unknown"
     const webhookResult = await handleWhopWebhook(newRequest);
- 31
- 32     // If webhook processing failed due to signature validation or other security issues,
- 33     // return the result immediately without rate limit check
- 34     if (webhookResult.status !== 200) {
- 35       return webhookResult;
- 36     }
- 37
- 38     // For successful webhook processing, now apply rate limiting with the actual companyId
- 39     // Extract company ID from the processed webhook data
- 40     let companyId: string | undefined;
- 41     try {
- 42       const payload = JSON.parse(body);
- 43       const headersObj: Record<string, string> = {};
- 44       request.headers.forEach((value, key) => {
- 45         headersObj[key] = value;
- 46       });
- 47       // Extract company ID from webhook payload for per-company rate limiting
- 48       // This ensures fair usage across tenants and prevents one company's testing from affecting others
- 49       companyId = getWebhookCompanyContext(headersObj, payload);
- 50     } catch (e) {
- 51       // If we can't parse the body or extract company ID, we'll use global rate limiting as fallback
- 52       console.warn('Failed to extract company ID for rate limiting', {
- 53         error: e instanceof Error ? e.message : String(e)
- 54       });
- 55     }
- 56
- 57     // Use per-company rate limit if company ID is available, otherwise fall back to global
- 58     const rateLimitKey = companyId ? `webhook:company:${companyId}` : 'webhook:global';
- 59     const rateLimitResult = await checkRateLimit(rateLimitKey, {
- 60       ...RATE_LIMIT_CONFIGS.webhooks,
- 61       maxRequests: companyId ? 100 : RATE_LIMIT_CONFIGS.webhooks.maxRequests // 100 req/min per company
- 62     });
- 63
- 64     if (!rateLimitResult.allowed) {
- 65       // Log rate limit violation for security monitoring
- 66       const clientIP = request.headers.get('x-forwarded-for') ||
- 67                        request.headers.get('x-real-ip') ||
- 68                        'unknown';
- 69
- 70       // Use structured logging for security monitoring
- 71       console.error('Rate limit exceeded', {
- 72         endpoint: 'webhooks/whop',
- 73         ip: clientIP,
- 74         companyId: companyId || 'unknown',
- 75         rateLimitKey,
- 76         userAgent: request.headers.get('user-agent')?.substring(0, 200) || 'unknown',
- 77         retryAfter: rateLimitResult.retryAfter,
- 78         resetAt: rateLimitResult.resetAt.toISOString(),
- 79         timestamp: new Date().toISOString(),
- 80         isPerCompanyLimit: !!companyId
- 81       });
- 82
- 83       return NextResponse.json(
- 84         {
- 85           error: 'Rate limit exceeded',
- 86           retryAfter: rateLimitResult.retryAfter,
- 87           resetAt: rateLimitResult.resetAt.toISOString(),
- 88           companyId: companyId || 'unknown'
- 89         },
- 90         { status: 429 }
- 91       );
- 92     }
- 93
- 94     // Rate limit passed, return the successful webhook result
- 95     return webhookResult;
+    
+    // Return the webhook processing result
+    return webhookResult;
   } catch (error) {
     // === DEBUG LOGGING START ===
     console.log('[DEBUG_WEBHOOK] === ERROR IN POST HANDLER ===');
@@ -172,13 +176,3 @@ export async function DELETE(): Promise<NextResponse> {
     { status: 405 }
   );
 }
-
-
-
-
-
-
-
-
-
-

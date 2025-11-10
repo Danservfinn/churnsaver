@@ -43,8 +43,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Extract company ID from payload BEFORE processing webhook for rate limiting
     // This allows per-company rate limiting and prevents unnecessary processing
     let companyId: string | undefined;
+    let parsedPayload: unknown;
     try {
       const payload = JSON.parse(body);
+      parsedPayload = payload;
       // Extract company ID from webhook payload for per-company rate limiting
       // This ensures fair usage across tenants and prevents one company's testing from affecting others
       companyId = getWebhookCompanyContext(headersObj, payload);
@@ -66,6 +68,35 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         error: e instanceof Error ? e.message : String(e),
         bodyPreview: body.substring(0, 200)
       });
+    }
+
+    // Handle Whop dashboard test events (data null + action string)
+    const dashboardPayload =
+      parsedPayload && typeof parsedPayload === 'object'
+        ? (parsedPayload as { action?: unknown; data?: unknown })
+        : undefined;
+    const isDashboardTestEvent =
+      dashboardPayload !== undefined &&
+      dashboardPayload.data == null &&
+      typeof dashboardPayload.action === 'string';
+
+    if (isDashboardTestEvent) {
+      const action = dashboardPayload.action as string;
+      console.log('[DEBUG_WEBHOOK] Detected Whop dashboard test event', {
+        action,
+        hasData: false,
+        note: 'Bypassing rate limiting and returning acknowledgement'
+      });
+
+      return NextResponse.json(
+        {
+          status: 'ok',
+          message: 'Whop dashboard test webhook received.',
+          action,
+          note: 'Test payloads from the Whop dashboard use a lightweight schema without data. No processing was performed.'
+        },
+        { status: 200 }
+      );
     }
 
     // Use per-company rate limit if company ID is available, otherwise fall back to IP-based

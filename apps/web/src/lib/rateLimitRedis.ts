@@ -261,6 +261,66 @@ export async function checkRateLimit(
 }
 
 /**
+ * Clean up Redis rate limit keys matching a pattern
+ * Useful for test isolation and manual cleanup
+ */
+export async function cleanupRateLimitKeys(pattern: string): Promise<number> {
+  const client = getRedisClient();
+  if (!client) {
+    logger.warn('Redis client not available for cleanup');
+    return 0;
+  }
+
+  try {
+    // Find all keys matching the pattern
+    const keys = await client.keys(pattern);
+    
+    if (keys.length === 0) {
+      return 0;
+    }
+
+    // Delete the keys
+    const deletedCount = await client.del(...keys);
+    
+    logger.debug('Cleaned up Redis rate limit keys', {
+      pattern,
+      deletedCount,
+      keyCount: keys.length
+    });
+
+    return deletedCount;
+  } catch (error) {
+    logger.error('Failed to cleanup Redis rate limit keys', {
+      pattern,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return 0;
+  }
+}
+
+/**
+ * Get all Redis rate limit keys matching a pattern
+ * Useful for debugging and verification
+ */
+export async function getRateLimitKeys(pattern: string): Promise<string[]> {
+  const client = getRedisClient();
+  if (!client) {
+    logger.warn('Redis client not available for key listing');
+    return [];
+  }
+
+  try {
+    return await client.keys(pattern);
+  } catch (error) {
+    logger.error('Failed to get Redis rate limit keys', {
+      pattern,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return [];
+  }
+}
+
+/**
  * Gracefully close Redis connection on app shutdown
  */
 export async function closeRedisConnection(): Promise<void> {

@@ -13,8 +13,32 @@ export const dynamic = 'force-dynamic';
 // Only allow POST requests with rate limiting
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
+    // === DEBUG LOGGING START ===
+    console.log('[DEBUG_WEBHOOK] === Webhook Request Start ===');
+    console.log('[DEBUG_WEBHOOK] Method:', request.method);
+    console.log('[DEBUG_WEBHOOK] URL:', request.url);
+    
+    const headersObj: Record<string, string> = {};
+    request.headers.forEach((value, key) => {
+      headersObj[key] = value;
+    });
+    
+    console.log('[DEBUG_WEBHOOK] Headers:', {
+      'content-type': request.headers.get('content-type'),
+      'user-agent': request.headers.get('user-agent'),
+      'x-whop-signature': request.headers.get('x-whop-signature') ? '[PRESENT]' : '[MISSING]',
+      'x-whop-timestamp': request.headers.get('x-whop-timestamp'),
+      'x-whop-event-type': request.headers.get('x-whop-event-type'),
+    });
+    // === DEBUG LOGGING END ===
+
     // Get raw body first for signature validation
     const body = await request.text();
+    
+    // === DEBUG LOGGING START ===
+    console.log('[DEBUG_WEBHOOK] Body string length:', body.length);
+    console.log('[DEBUG_WEBHOOK] Body string preview:', body.substring(0, 500));
+    // === DEBUG LOGGING END ===
     
     // Create a new request with the body text since we already consumed it
     const newRequest = new NextRequest(request.url, {
@@ -93,6 +117,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
  94     // Rate limit passed, return the successful webhook result
  95     return webhookResult;
   } catch (error) {
+    // === DEBUG LOGGING START ===
+    console.log('[DEBUG_WEBHOOK] === ERROR IN POST HANDLER ===');
+    console.log('[DEBUG_WEBHOOK] Error message:', error instanceof Error ? error.message : String(error));
+    console.log('[DEBUG_WEBHOOK] Error stack:', error instanceof Error ? error.stack : 'No stack');
+    // === DEBUG LOGGING END ===
+
     // In production, fail-closed for security
     if (process.env.NODE_ENV === 'production') {
       const clientIP = request.headers.get('x-forwarded-for') ||

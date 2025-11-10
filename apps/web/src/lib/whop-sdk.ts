@@ -149,9 +149,18 @@ export async function retrieveExperience(experienceId: string) {
  * Get company context from webhook headers or payload
  */
 export function getWebhookCompanyContext(headers: Record<string, string>, payload?: any): string | undefined {
+  // DEBUG: Log extraction attempt
+  console.log('[DEBUG] getWebhookCompanyContext called', {
+    hasHeader: !!headers['x-whop-company-id'],
+    hasPayload: !!payload,
+    payloadKeys: payload ? Object.keys(payload) : [],
+    dataKeys: payload?.data ? Object.keys(payload.data) : []
+  });
+
   // First try to extract from headers (for backward compatibility)
   const headerCompanyId = headers['x-whop-company-id'];
   if (headerCompanyId) {
+    console.log('[DEBUG] CompanyId extracted from header:', headerCompanyId);
     return headerCompanyId;
   }
 
@@ -162,35 +171,44 @@ export function getWebhookCompanyContext(headers: Record<string, string>, payloa
     
     // Direct company_id field
     if (typeof data.company_id === 'string') {
+      console.log('[DEBUG] CompanyId extracted from payload.data.company_id:', data.company_id);
       return data.company_id;
     }
     
     // Nested company object with id
     if (data.company && typeof data.company === 'object' && typeof data.company.id === 'string') {
+      console.log('[DEBUG] CompanyId extracted from payload.data.company.id:', data.company.id);
       return data.company.id;
     }
     
     // Membership object with company_id
     if (data.membership && typeof data.membership === 'object') {
       if (typeof data.membership.company_id === 'string') {
+        console.log('[DEBUG] CompanyId extracted from payload.data.membership.company_id:', data.membership.company_id);
         return data.membership.company_id;
       }
       if (data.membership.company && typeof data.membership.company === 'object' && typeof data.membership.company.id === 'string') {
+        console.log('[DEBUG] CompanyId extracted from payload.data.membership.company.id:', data.membership.company.id);
         return data.membership.company.id;
       }
     }
     
     // Experience object with company_id
     if (data.experience && typeof data.experience === 'object' && typeof data.experience.company_id === 'string') {
+      console.log('[DEBUG] CompanyId extracted from payload.data.experience.company_id:', data.experience.company_id);
       return data.experience.company_id;
     }
     
     // Try data.company as a string
     if (typeof data.company === 'string') {
+      console.log('[DEBUG] CompanyId extracted from payload.data.company:', data.company);
       return data.company;
     }
+    
+    console.log('[DEBUG] No companyId found in payload, available data keys:', Object.keys(data));
   }
 
+  console.log('[DEBUG] No companyId could be extracted');
   return undefined;
 }
 

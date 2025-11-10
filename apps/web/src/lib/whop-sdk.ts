@@ -146,13 +146,52 @@ export async function retrieveExperience(experienceId: string) {
 }
 
 /**
- * Get company context from webhook headers
+ * Get company context from webhook headers or payload
  */
-export function getWebhookCompanyContext(headers: Record<string, string>): string | undefined {
-  // Try to extract company ID from headers
-  // This is a simplified implementation - in a real scenario you might
-  // want to validate the signature against the company's webhook secret
-  return headers['x-whop-company-id'];
+export function getWebhookCompanyContext(headers: Record<string, string>, payload?: any): string | undefined {
+  // First try to extract from headers (for backward compatibility)
+  const headerCompanyId = headers['x-whop-company-id'];
+  if (headerCompanyId) {
+    return headerCompanyId;
+  }
+
+  // If payload is provided and no header company ID, extract from payload
+  if (payload) {
+    // Try different possible locations for company ID in the payload
+    const data = payload.data || {};
+    
+    // Direct company_id field
+    if (typeof data.company_id === 'string') {
+      return data.company_id;
+    }
+    
+    // Nested company object with id
+    if (data.company && typeof data.company === 'object' && typeof data.company.id === 'string') {
+      return data.company.id;
+    }
+    
+    // Membership object with company_id
+    if (data.membership && typeof data.membership === 'object') {
+      if (typeof data.membership.company_id === 'string') {
+        return data.membership.company_id;
+      }
+      if (data.membership.company && typeof data.membership.company === 'object' && typeof data.membership.company.id === 'string') {
+        return data.membership.company.id;
+      }
+    }
+    
+    // Experience object with company_id
+    if (data.experience && typeof data.experience === 'object' && typeof data.experience.company_id === 'string') {
+      return data.experience.company_id;
+    }
+    
+    // Try data.company as a string
+    if (typeof data.company === 'string') {
+      return data.company;
+    }
+  }
+
+  return undefined;
 }
 
 // Export the SDK instance for direct usage if needed

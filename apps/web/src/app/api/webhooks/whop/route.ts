@@ -54,7 +54,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         hasPayload: !!payload,
         payloadType: payload?.type,
         payloadKeys: payload ? Object.keys(payload) : [],
-        dataKeys: payload?.data ? Object.keys(payload.data) : []
+        dataKeys: payload?.data ? Object.keys(payload.data) : [],
+        // Log full payload structure for debugging (truncated)
+        fullPayload: payload ? JSON.stringify(payload).substring(0, 1000) : 'no payload',
+        membershipKeys: payload?.data?.membership ? Object.keys(payload.data.membership) : [],
+        paymentKeys: payload?.data?.payment ? Object.keys(payload.data.payment) : []
       });
     } catch (e) {
       // If we can't parse the body or extract company ID, we'll use IP-based rate limiting as fallback

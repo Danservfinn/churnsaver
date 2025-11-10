@@ -149,16 +149,18 @@ export async function retrieveExperience(experienceId: string) {
  * Get company context from webhook headers or payload
  */
 export function getWebhookCompanyContext(headers: Record<string, string>, payload?: any): string | undefined {
-  // DEBUG: Log extraction attempt
+  // DEBUG: Log full payload structure for troubleshooting
   console.log('[DEBUG] getWebhookCompanyContext called', {
     hasHeader: !!headers['x-whop-company-id'],
     hasPayload: !!payload,
     payloadKeys: payload ? Object.keys(payload) : [],
-    dataKeys: payload?.data ? Object.keys(payload.data) : []
+    dataKeys: payload?.data ? Object.keys(payload.data) : [],
+    // Log full payload structure (truncated for safety)
+    payloadStructure: payload ? JSON.stringify(payload).substring(0, 500) : 'no payload'
   });
 
   // First try to extract from headers (for backward compatibility)
-  const headerCompanyId = headers['x-whop-company-id'];
+  const headerCompanyId = headers['x-whop-company-id'] || headers['X-Whop-Company-Id'];
   if (headerCompanyId) {
     console.log('[DEBUG] CompanyId extracted from header:', headerCompanyId);
     return headerCompanyId;
@@ -166,46 +168,83 @@ export function getWebhookCompanyContext(headers: Record<string, string>, payloa
 
   // If payload is provided and no header company ID, extract from payload
   if (payload) {
+    // Try top-level company_id first (some webhook formats)
+    if (typeof payload.company_id === 'string' && payload.company_id) {
+      console.log('[DEBUG] CompanyId extracted from payload.company_id:', payload.company_id);
+      return payload.company_id;
+    }
+
     // Try different possible locations for company ID in the payload
     const data = payload.data || {};
     
-    // Direct company_id field
-    if (typeof data.company_id === 'string') {
+    // Direct company_id field in data
+    if (typeof data.company_id === 'string' && data.company_id) {
       console.log('[DEBUG] CompanyId extracted from payload.data.company_id:', data.company_id);
       return data.company_id;
     }
     
     // Nested company object with id
-    if (data.company && typeof data.company === 'object' && typeof data.company.id === 'string') {
-      console.log('[DEBUG] CompanyId extracted from payload.data.company.id:', data.company.id);
-      return data.company.id;
+    if (data.company && typeof data.company === 'object') {
+      if (typeof data.company.id === 'string' && data.company.id) {
+        console.log('[DEBUG] CompanyId extracted from payload.data.company.id:', data.company.id);
+        return data.company.id;
+      }
+      if (typeof data.company.company_id === 'string' && data.company.company_id) {
+        console.log('[DEBUG] CompanyId extracted from payload.data.company.company_id:', data.company.company_id);
+        return data.company.company_id;
+      }
     }
     
     // Membership object with company_id
     if (data.membership && typeof data.membership === 'object') {
-      if (typeof data.membership.company_id === 'string') {
+      if (typeof data.membership.company_id === 'string' && data.membership.company_id) {
         console.log('[DEBUG] CompanyId extracted from payload.data.membership.company_id:', data.membership.company_id);
         return data.membership.company_id;
       }
-      if (data.membership.company && typeof data.membership.company === 'object' && typeof data.membership.company.id === 'string') {
-        console.log('[DEBUG] CompanyId extracted from payload.data.membership.company.id:', data.membership.company.id);
-        return data.membership.company.id;
+      if (data.membership.company && typeof data.membership.company === 'object') {
+        if (typeof data.membership.company.id === 'string' && data.membership.company.id) {
+          console.log('[DEBUG] CompanyId extracted from payload.data.membership.company.id:', data.membership.company.id);
+          return data.membership.company.id;
+        }
+        if (typeof data.membership.company.company_id === 'string' && data.membership.company.company_id) {
+          console.log('[DEBUG] CompanyId extracted from payload.data.membership.company.company_id:', data.membership.company.company_id);
+          return data.membership.company.company_id;
+        }
       }
     }
     
+    // Payment object might have company_id
+    if (data.payment && typeof data.payment === 'object' && typeof data.payment.company_id === 'string' && data.payment.company_id) {
+      console.log('[DEBUG] CompanyId extracted from payload.data.payment.company_id:', data.payment.company_id);
+      return data.payment.company_id;
+    }
+    
     // Experience object with company_id
-    if (data.experience && typeof data.experience === 'object' && typeof data.experience.company_id === 'string') {
+    if (data.experience && typeof data.experience === 'object' && typeof data.experience.company_id === 'string' && data.experience.company_id) {
       console.log('[DEBUG] CompanyId extracted from payload.data.experience.company_id:', data.experience.company_id);
       return data.experience.company_id;
     }
     
+    // Product object might have company_id
+    if (data.product && typeof data.product === 'object' && typeof data.product.company_id === 'string' && data.product.company_id) {
+      console.log('[DEBUG] CompanyId extracted from payload.data.product.company_id:', data.product.company_id);
+      return data.product.company_id;
+    }
+    
     // Try data.company as a string
-    if (typeof data.company === 'string') {
+    if (typeof data.company === 'string' && data.company) {
       console.log('[DEBUG] CompanyId extracted from payload.data.company:', data.company);
       return data.company;
     }
     
-    console.log('[DEBUG] No companyId found in payload, available data keys:', Object.keys(data));
+    // Log detailed structure for debugging
+    console.log('[DEBUG] No companyId found in payload. Full structure:', {
+      topLevelKeys: Object.keys(payload),
+      dataKeys: Object.keys(data),
+      membershipKeys: data.membership ? Object.keys(data.membership) : [],
+      paymentKeys: data.payment ? Object.keys(data.payment) : [],
+      samplePayload: JSON.stringify(payload).substring(0, 1000)
+    });
   }
 
   console.log('[DEBUG] No companyId could be extracted');

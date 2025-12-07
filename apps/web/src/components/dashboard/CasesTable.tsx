@@ -4,6 +4,15 @@ import { useState, useTransition, useEffect } from 'react';
 import { AccessibilityUtils } from '@/lib/accessibility';
 import { AccessibleTable, AccessibleTableCell, AccessibleTableRow } from '@/components/ui/AccessibleTable';
 import { AccessibleButton } from '@/components/ui/AccessibleButton';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { EmptyState } from '@/components/ui/empty-state';
+import { CheckCircle2, XCircle, AlertCircle, RefreshCw, X, Calendar, DollarSign } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
+import Image from 'next/image';
 
 /**
  * Represents a recovery case in the system
@@ -91,18 +100,31 @@ export function CasesTable({
 
   const formatStatus = (status: string) => {
     const statusConfig = {
-      open: { label: 'Open', class: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' },
-      recovered: { label: 'Recovered', class: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' },
-      closed_no_recovery: { label: 'Closed', class: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200' }
+      open: { 
+        label: 'Open', 
+        variant: 'warning' as const,
+        icon: <AlertCircle className="h-3 w-3" />
+      },
+      recovered: { 
+        label: 'Recovered', 
+        variant: 'success' as const,
+        icon: <CheckCircle2 className="h-3 w-3" />
+      },
+      closed_no_recovery: { 
+        label: 'Closed', 
+        variant: 'destructive' as const,
+        icon: <XCircle className="h-3 w-3" />
+      }
     };
 
     const config = statusConfig[status as keyof typeof statusConfig] ||
-                  { label: status, class: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200' };
+                  { label: status, variant: 'default' as const, icon: null };
 
     return (
-      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${config.class}`}>
+      <Badge variant={config.variant} className="flex items-center gap-1">
+        {config.icon}
         {config.label}
-      </span>
+      </Badge>
     );
   };
 
@@ -255,62 +277,78 @@ export function CasesTable({
 
   if (isLoading) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="p-6">
-          <div className="animate-pulse" role="status" aria-live="polite">
-            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4 mb-4"></div>
-            <div className="space-y-3">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
-              ))}
-            </div>
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-6 w-48" />
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4" role="status" aria-live="polite">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="flex items-center gap-4">
+                <Skeleton className="h-12 flex-1" />
+                <Skeleton className="h-12 w-32" />
+                <Skeleton className="h-12 w-24" />
+              </div>
+            ))}
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     );
   }
 
   if (cases.length === 0) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="p-6">
-          <div
-            className="text-gray-500 dark:text-gray-400 text-center py-8"
-            role="status"
-            aria-live="polite"
-          >
-            <p>No recovery cases yet. Cases will appear here when payment failures occur.</p>
-          </div>
-        </div>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Recovery Cases</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <EmptyState
+            illustration={
+              <div className="w-64 h-64 relative">
+                <Image
+                  src="/illustrations/empty-cases.svg"
+                  alt=""
+                  fill
+                  className="object-contain"
+                  aria-hidden="true"
+                />
+              </div>
+            }
+            title="No recovery cases yet"
+            description="Cases will appear here automatically when payment failures occur. We'll track recovery progress and show metrics as cases are created."
+          />
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-      <header className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+    <Card>
+      <CardHeader>
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Recovery Cases
-          </h2>
-          <div className="text-sm text-gray-500 dark:text-gray-400">
-            {total} total cases
+          <CardTitle>Recovery Cases</CardTitle>
+          <div className="text-sm text-gray-500 dark:text-gray-400 font-medium">
+            {total} {total === 1 ? 'case' : 'cases'}
           </div>
         </div>
-      </header>
+      </CardHeader>
 
       {/* Message display */}
       {message && (
-        <div
-          role="alert"
-          aria-live="assertive"
-          className={`px-6 py-3 border-b ${
-            message.type === 'success'
-              ? 'bg-green-50 border-green-200 text-green-800 dark:bg-green-900 dark:border-green-700 dark:text-green-200'
-              : 'bg-red-50 border-red-200 text-red-800 dark:bg-red-900 dark:border-red-700 dark:text-red-200'
-          }`}
-        >
-          {message.text}
+        <div className="px-6 py-3">
+          <Alert variant={message.type === 'success' ? 'success' : 'destructive'}>
+            <AlertDescription className="flex items-center justify-between">
+              <span>{message.text}</span>
+              <button
+                onClick={() => setMessage(null)}
+                className="ml-4 text-current opacity-70 hover:opacity-100"
+                aria-label="Dismiss message"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </AlertDescription>
+          </Alert>
         </div>
       )}
 
@@ -350,59 +388,76 @@ export function CasesTable({
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                  {formatDate(case_.first_failure_at)}
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-gray-400" />
+                    {formatDate(case_.first_failure_at)}
+                  </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                  {case_.attempts}
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <Badge variant="outline" className="font-mono">
+                    {case_.attempts}
+                  </Badge>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                  {case_.recovered_amount_cents > 0 ? formatCurrency(case_.recovered_amount_cents) : '-'}
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">
+                  {case_.recovered_amount_cents > 0 ? (
+                    <div className="flex items-center gap-1 text-orange-600 dark:text-orange-400">
+                      <DollarSign className="h-4 w-4" />
+                      {formatCurrency(case_.recovered_amount_cents)}
+                    </div>
+                  ) : (
+                    <span className="text-gray-400">-</span>
+                  )}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                   {case_.failure_reason || '-'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex flex-wrap gap-2" role="group" aria-label="Case actions">
                     {case_.status === 'open' && (
                       <>
-                        <AccessibleButton
-                          variant="ghost"
+                        <Button
+                          variant="outline"
                           size="sm"
                           onClick={() => handleNudge(case_.id)}
                           disabled={isPending}
                           aria-label="Send another reminder for this case"
+                          className="h-8"
                         >
+                          <RefreshCw className="h-3 w-3 mr-1" />
                           Nudge
-                        </AccessibleButton>
-                        <AccessibleButton
-                          variant="ghost"
+                        </Button>
+                        <Button
+                          variant="outline"
                           size="sm"
                           onClick={() => handleCancel(case_.id)}
                           disabled={isPending}
                           aria-label="Cancel this recovery case"
+                          className="h-8"
                         >
                           Cancel Case
-                        </AccessibleButton>
+                        </Button>
                       </>
                     )}
-                    <AccessibleButton
-                      variant="ghost"
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={() => handleCancelMembership(case_.id)}
                       disabled={isPending}
                       aria-label="Cancel membership at period end"
+                      className="h-8 text-xs"
                     >
-                      Cancel at Period End
-                    </AccessibleButton>
-                    <AccessibleButton
-                      variant="ghost"
+                      Cancel Period End
+                    </Button>
+                    <Button
+                      variant="destructive"
                       size="sm"
                       onClick={() => handleTerminate(case_.id)}
                       disabled={isPending}
                       aria-label="Terminate membership immediately"
+                      className="h-8 text-xs"
                     >
-                      Terminate Now
-                    </AccessibleButton>
+                      Terminate
+                    </Button>
                   </div>
                 </td>
               </AccessibleTableRow>
@@ -410,6 +465,6 @@ export function CasesTable({
           </tbody>
         </AccessibleTable>
       </main>
-    </div>
+    </Card>
   );
 }

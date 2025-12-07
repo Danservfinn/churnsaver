@@ -260,7 +260,7 @@ const AccessibleTableCell = forwardRef<HTMLTableCellElement, AccessibleTableCell
     
     const classes = cn(baseClasses, className, {
       'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700': sortable,
-      'bg-blue-50 dark:bg-blue-900': selected
+      'bg-primary-50 dark:bg-primary-900': selected
     });
 
     // Build ARIA attributes
@@ -321,7 +321,7 @@ const AccessibleTableCell = forwardRef<HTMLTableCellElement, AccessibleTableCell
               <svg
                 className={cn(
                   "w-3 h-3 text-gray-400",
-                  sortDirection === 'asc' ? "text-blue-600" : ""
+                  sortDirection === 'asc' ? "text-primary-600" : ""
                 )}
                 fill="currentColor"
                 viewBox="0 0 20 20"
@@ -335,7 +335,7 @@ const AccessibleTableCell = forwardRef<HTMLTableCellElement, AccessibleTableCell
               <svg
                 className={cn(
                   "w-3 h-3 text-gray-400",
-                  sortDirection === 'desc' ? "text-blue-600" : ""
+                  sortDirection === 'desc' ? "text-primary-600" : ""
                 )}
                 fill="currentColor"
                 viewBox="0 0 20 20"
@@ -370,7 +370,7 @@ const AccessibleTableRow = forwardRef<HTMLTableRowElement, AccessibleTableRowPro
     
     const baseClasses = "hover:bg-gray-50 dark:hover:bg-gray-700";
     const classes = cn(baseClasses, className, {
-      'bg-blue-50 dark:bg-blue-900': selected
+      'bg-primary-50 dark:bg-primary-900': selected
     });
 
     // Build ARIA attributes

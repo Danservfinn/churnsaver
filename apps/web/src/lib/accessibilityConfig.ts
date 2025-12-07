@@ -11,8 +11,8 @@ export const accessibilityConfig = {
     highContrastTheme: {
       background: '#000000',
       text: '#ffffff',
-      primary: '#ffcc00',
-      secondary: '#0066cc'
+      primary: '#ffcc00', // amber
+      secondary: '#ff6f00' // deep orange (replacing blue)
     },
     minimumContrastRatio: {
       normalText: 4.5, // WCAG AA standard

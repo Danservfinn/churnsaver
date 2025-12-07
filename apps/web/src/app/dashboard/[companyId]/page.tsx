@@ -5,6 +5,12 @@ import { useRouter } from 'next/navigation';
 import { KpiTile } from '@/components/dashboard/KpiTile';
 import { CasesTable } from '@/components/dashboard/CasesTable';
 import { useWhop, useWhopAuth, useWhopCompany } from '@/lib/context/whop';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useToast } from '@/components/ui/toast';
+import { Download, RefreshCw, Settings, TrendingUp, AlertCircle } from 'lucide-react';
+import Link from 'next/link';
 
 interface DashboardKPIs {
   activeCases: number;
@@ -55,12 +61,15 @@ export default function DashboardCompanyPage({
   const { refreshContext } = useWhop();
   const router = useRouter();
 
+  const { addToast } = useToast();
   const [kpis, setKpis] = useState<DashboardKPIs | null>(null);
   const [casesData, setCasesData] = useState<CasesResponse | null>(null);
   const [isLoadingKpis, setIsLoadingKpis] = useState(true);
   const [isLoadingCases, setIsLoadingCases] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [companyIdMismatch, setCompanyIdMismatch] = useState(false);
+  const [kpiError, setKpiError] = useState<string | null>(null);
+  const [casesError, setCasesError] = useState<string | null>(null);
 
   // Validate companyId from URL matches context
   useEffect(() => {
@@ -77,14 +86,28 @@ export default function DashboardCompanyPage({
   const fetchKpis = async () => {
     try {
       setIsLoadingKpis(true);
+      setKpiError(null);
       const response = await fetch('/api/dashboard/kpis?window=14');
       if (response.ok) {
         const data = await response.json();
         setKpis(data);
       } else {
-        console.error('Failed to fetch KPIs:', response.status, response.statusText);
+        const errorMessage = `Failed to load KPIs: ${response.status} ${response.statusText}`;
+        setKpiError(errorMessage);
+        addToast({
+          type: 'error',
+          title: 'Failed to load KPIs',
+          message: 'Unable to fetch dashboard metrics. Please try again.',
+        });
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch KPIs';
+      setKpiError(errorMessage);
+      addToast({
+        type: 'error',
+        title: 'Failed to load KPIs',
+        message: 'Unable to fetch dashboard metrics. Please try again.',
+      });
       console.error('Failed to fetch KPIs:', error);
     } finally {
       setIsLoadingKpis(false);
@@ -95,14 +118,28 @@ export default function DashboardCompanyPage({
   const fetchCases = async (page: number = 1) => {
     try {
       setIsLoadingCases(true);
+      setCasesError(null);
       const response = await fetch(`/api/dashboard/cases?page=${page}&limit=10`);
       if (response.ok) {
         const data = await response.json();
         setCasesData(data);
       } else {
-        console.error('Failed to fetch cases:', response.status, response.statusText);
+        const errorMessage = `Failed to load cases: ${response.status} ${response.statusText}`;
+        setCasesError(errorMessage);
+        addToast({
+          type: 'error',
+          title: 'Failed to load cases',
+          message: 'Unable to fetch recovery cases. Please try again.',
+        });
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch cases';
+      setCasesError(errorMessage);
+      addToast({
+        type: 'error',
+        title: 'Failed to load cases',
+        message: 'Unable to fetch recovery cases. Please try again.',
+      });
       console.error('Failed to fetch cases:', error);
     } finally {
       setIsLoadingCases(false);
@@ -146,10 +183,10 @@ export default function DashboardCompanyPage({
   // Show loading state while context is being established
   if (!contextCompanyId) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+      <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-300">Loading dashboard...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading dashboard...</p>
         </div>
       </div>
     );
@@ -158,16 +195,16 @@ export default function DashboardCompanyPage({
   // Show company ID mismatch error
   if (companyIdMismatch) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto p-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
-          <div className="text-yellow-500 text-6xl mb-4">⚠️</div>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-            Company ID Mismatch
-          </h2>
-          <p className="text-gray-600 dark:text-gray-300 mb-4">
-            Redirecting to the correct company dashboard...
-          </p>
-        </div>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="max-w-md mx-auto">
+          <CardHeader className="text-center">
+            <div className="text-5xl mb-4">⚠️</div>
+            <CardTitle>Company ID Mismatch</CardTitle>
+            <CardDescription>
+              Redirecting to the correct company dashboard...
+            </CardDescription>
+          </CardHeader>
+        </Card>
       </div>
     );
   }
@@ -177,83 +214,126 @@ export default function DashboardCompanyPage({
   const isDevMode = contextCompanyId === 'dev-company' || urlCompanyId === 'dev-company';
   if (!isAuthenticated && !isDevMode) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto p-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
-          <div className="text-red-500 text-6xl mb-4">🔒</div>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-            Authentication Required
-          </h2>
-          <p className="text-gray-600 dark:text-gray-300 mb-4">
-            You need to be authenticated to access the dashboard. Please access this app through Whop.
-          </p>
-          <button
-            onClick={refreshContext}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Retry Authentication
-          </button>
-        </div>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="max-w-md mx-auto">
+          <CardHeader className="text-center">
+            <div className="text-5xl mb-4">🔒</div>
+            <CardTitle>Authentication Required</CardTitle>
+            <CardDescription>
+              You need to be authenticated to access the dashboard. Please access this app through Whop.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center">
+            <Button onClick={refreshContext}>
+              Retry Authentication
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="container mx-auto px-4 py-8">
-        <header className="mb-8">
-          <div className="flex items-center justify-between mb-2">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              Recovery Dashboard
-            </h1>
-            <button
-              onClick={handleExportCSV}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
-              aria-label="Export cases to CSV"
-            >
-              <span>📥</span>
-              <span>Export CSV</span>
-            </button>
-          </div>
-          <p className="text-gray-600 dark:text-gray-300 mb-4">
+    <div className="space-y-6">
+      {/* Welcome Header */}
+      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground flex items-center gap-2">
+            <TrendingUp className="h-6 w-6 text-primary" />
+            Recovery Dashboard
+          </h1>
+          <p className="text-muted-foreground mt-1">
             Monitor recovery cases and track performance metrics
           </p>
-          <div className="text-sm text-gray-500 dark:text-gray-400">
-            Company: {urlCompanyId} | User: {userId}
-          </div>
-        </header>
-
-        {/* KPI Tiles */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <KpiTile
-            title="Active Cases"
-            value={kpis?.activeCases || 0}
-            subtitle="Currently being recovered"
-            isLoading={isLoadingKpis}
-          />
-
-          <KpiTile
-            title="Recoveries"
-            value={kpis?.recoveries || 0}
-            subtitle="Successful recoveries"
-            isLoading={isLoadingKpis}
-          />
-
-          <KpiTile
-            title="Recovery Rate"
-            value={`${kpis?.recoveryRate || 0}%`}
-            subtitle={`${kpis?.windowDays || 14}-day attribution window`}
-            isLoading={isLoadingKpis}
-          />
-
-          <KpiTile
-            title="Recovered Revenue"
-            value={kpis?.recoveredRevenueCents ? formatRevenue(kpis.recoveredRevenueCents) : '$0.00'}
-            subtitle="Revenue attributed to recoveries"
-            isLoading={isLoadingKpis}
-          />
         </div>
+        <div className="flex items-center gap-3">
+          <Link href="/settings">
+            <Button variant="outline" size="sm" className="gap-2">
+              <Settings className="h-4 w-4" />
+              Settings
+            </Button>
+          </Link>
+          <Button
+            onClick={handleExportCSV}
+            size="sm"
+            className="gap-2"
+            aria-label="Export cases to CSV"
+          >
+            <Download className="h-4 w-4" />
+            Export CSV
+          </Button>
+        </div>
+      </header>
 
-        {/* Cases Table */}
+      {/* Company Info */}
+      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+        <span className="font-medium">Company:</span>
+        <code className="px-2 py-1 bg-muted rounded text-xs font-mono">
+          {urlCompanyId}
+        </code>
+        {userId && (
+          <>
+            <span className="font-medium">User:</span>
+            <code className="px-2 py-1 bg-muted rounded text-xs font-mono">
+              {userId.slice(-8)}
+            </code>
+          </>
+        )}
+      </div>
+
+      {/* Error Messages */}
+      {kpiError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{kpiError}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* KPI Tiles */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiTile
+          title="Active Cases"
+          value={kpis?.activeCases || 0}
+          subtitle="Currently being recovered"
+          isLoading={isLoadingKpis}
+          variant="warning"
+        />
+
+        <KpiTile
+          title="Recoveries"
+          value={kpis?.recoveries || 0}
+          subtitle="Successful recoveries"
+          isLoading={isLoadingKpis}
+          variant="success"
+        />
+
+        <KpiTile
+          title="Recovery Rate"
+          value={`${kpis?.recoveryRate || 0}%`}
+          subtitle={`${kpis?.windowDays || 14}-day attribution window`}
+          isLoading={isLoadingKpis}
+          variant="info"
+        />
+
+        <KpiTile
+          title="Recovered Revenue"
+          value={kpis?.recoveredRevenueCents ? formatRevenue(kpis.recoveredRevenueCents) : '$0.00'}
+          subtitle="Revenue attributed to recoveries"
+          isLoading={isLoadingKpis}
+          variant="success"
+        />
+      </div>
+
+      {/* Cases Error */}
+      {casesError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{casesError}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Cases Table */}
+      {!casesError && (
         <CasesTable
           cases={casesData?.cases || []}
           isLoading={isLoadingCases}
@@ -263,21 +343,22 @@ export default function DashboardCompanyPage({
           totalPages={casesData?.totalPages || 1}
           onPageChange={handlePageChange}
         />
+      )}
 
-        {/* Refresh Button */}
-        <div className="mt-8 flex justify-center">
-          <button
-            onClick={() => {
-              fetchKpis();
-              fetchCases(currentPage);
-            }}
-            disabled={isLoadingKpis || isLoadingCases}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-          >
-            <span>🔄</span>
-            <span>Refresh Data</span>
-          </button>
-        </div>
+      {/* Refresh Button */}
+      <div className="flex justify-center">
+        <Button
+          onClick={() => {
+            fetchKpis();
+            fetchCases(currentPage);
+          }}
+          disabled={isLoadingKpis || isLoadingCases}
+          variant="outline"
+          className="gap-2"
+        >
+          <RefreshCw className={`h-4 w-4 ${(isLoadingKpis || isLoadingCases) ? 'animate-spin' : ''}`} />
+          Refresh Data
+        </Button>
       </div>
     </div>
   );

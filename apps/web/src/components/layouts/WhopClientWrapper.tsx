@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import WhopAppLayout from './WhopAppLayout';
+import { MainLayout } from './MainLayout';
 
 type Props = { children: React.ReactNode };
 
@@ -21,7 +22,7 @@ export function WhopClientWrapper({ children }: Props) {
     return <WhopAppLayout>{children}</WhopAppLayout>;
   }
 
-  return <>{children}</>;
+  return <MainLayout>{children}</MainLayout>;
 }
 
 export default WhopClientWrapper;

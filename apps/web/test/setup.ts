@@ -89,6 +89,14 @@ WhopAuthService: {
 },
 }));
 
+// Setup testing-library/jest-dom matchers for Vitest
+// Note: Vitest uses a different expect API, so we'll set up matchers manually
+import { expect } from 'vitest';
+import * as matchers from '@testing-library/jest-dom/matchers';
+
+// Extend Vitest's expect with jest-dom matchers
+expect.extend(matchers);
+
 // Export test utilities for use in test files
 export const testUtils = {
   // Helper to create mock responses

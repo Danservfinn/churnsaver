@@ -6,21 +6,36 @@ import { apiSuccess, errors } from '@/lib/apiResponse';
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     // Get request context from Whop token
+    // Extract token from various header sources
+    const whopToken = request.headers.get('x-whop-user-token');
+    const authHeader = request.headers.get('authorization');
+    const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+    const token = whopToken || bearerToken;
+
     const context = await getRequestContextSDK({
       headers: {
         get: (key: string) => {
-          if (key.toLowerCase() === 'x-whop-user-token') {
-            return request.headers.get('x-whop-user-token');
+          const lowerKey = key.toLowerCase();
+          
+          // Token sources
+          if (lowerKey === 'x-whop-user-token') {
+            return token || null;
           }
-          if (key.toLowerCase() === 'x-forwarded-for') {
+          if (lowerKey === 'authorization') {
+            return token ? `Bearer ${token}` : null;
+          }
+          
+          // Other headers
+          if (lowerKey === 'x-forwarded-for') {
             return request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip');
           }
-          if (key.toLowerCase() === 'x-real-ip') {
+          if (lowerKey === 'x-real-ip') {
             return request.headers.get('x-real-ip');
           }
-          if (key.toLowerCase() === 'user-agent') {
+          if (lowerKey === 'user-agent') {
             return request.headers.get('user-agent');
           }
+          
           return null;
         }
       }

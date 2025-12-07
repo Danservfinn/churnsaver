@@ -1,0 +1,30 @@
+<svg role="img" aria-labelledby="gift-title gift-desc" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+  <title id="gift-title">Incentives</title>
+  <desc id="gift-desc">An illustration of a gift box with a bow</desc>
+  <defs>
+    <linearGradient id="gift-accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff7043" />
+      <stop offset="100%" stop-color="#ff5722" />
+    </linearGradient>
+    <linearGradient id="gift-amber" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffc107" />
+      <stop offset="100%" stop-color="#ff8f00" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Gift box -->
+  <rect x="100" y="120" width="100" height="100" rx="8" fill="url(#gift-accent)" />
+  
+  <!-- Bow -->
+  <circle cx="150" cy="120" r="25" fill="url(#gift-amber)" />
+  <path d="M 150 95 L 130 120 L 150 145 L 170 120 Z" fill="url(#gift-amber)" />
+  <path d="M 125 120 L 100 100 L 100 140 Z" fill="url(#gift-amber)" opacity="0.8" />
+  <path d="M 175 120 L 200 100 L 200 140 Z" fill="url(#gift-amber)" opacity="0.8" />
+  
+  <!-- Sparkles -->
+  <circle cx="80" cy="100" r="5" fill="url(#gift-amber)" opacity="0.6" />
+  <circle cx="220" cy="180" r="4" fill="url(#gift-amber)" opacity="0.6" />
+</svg>
+
+
+

@@ -110,7 +110,7 @@ interface DashboardData {
 
 // Status utility functions - defined outside component for use in render functions
 const STATUS_COLORS = {
-  healthy: 'text-green-600 bg-green-100',
+  healthy: 'text-orange-600 bg-orange-100',
   degraded: 'text-yellow-600 bg-yellow-100',
   unhealthy: 'text-red-600 bg-red-100',
   default: 'text-gray-600 bg-gray-100'
@@ -402,7 +402,7 @@ export default function MonitoringDashboard() {
     P0: 'bg-red-100 text-red-800 border-red-200',
     P1: 'bg-orange-100 text-orange-800 border-orange-200',
     P2: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-    P3: 'bg-blue-100 text-blue-800 border-blue-200',
+    P3: 'bg-gray-100 text-gray-800 border-gray-200',
     default: 'bg-gray-100 text-gray-800 border-gray-200'
   } as const;
 
@@ -462,7 +462,7 @@ export default function MonitoringDashboard() {
             variant="outline"
             size="sm"
             onClick={() => setAutoRefresh(!autoRefresh)}
-            className={autoRefresh ? 'bg-blue-50' : ''}
+            className={autoRefresh ? 'bg-primary-50' : ''}
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${autoRefresh ? 'animate-spin' : ''}`} />
             Auto-refresh
@@ -499,7 +499,7 @@ export default function MonitoringDashboard() {
           <CardContent>
             {data.alerts.active.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
-                <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-500" />
+                <CheckCircle className="w-8 h-8 mx-auto mb-2 text-orange-500" />
                 <p>No active alerts</p>
               </div>
             ) : (
@@ -552,7 +552,7 @@ export default function MonitoringDashboard() {
                           </Badge>
                           <span className="text-sm font-medium">{alert.ruleName}</span>
                           {alert.resolved && (
-                            <Badge variant="outline" className="text-green-600 border-green-200">
+                            <Badge variant="outline" className="text-orange-600 border-orange-200">
                               Resolved
                             </Badge>
                           )}

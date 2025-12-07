@@ -130,7 +130,7 @@ export default function MonitoringDashboardSimple() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'healthy': return 'text-green-600 bg-green-100';
+      case 'healthy': return 'text-orange-600 bg-orange-100';
       case 'degraded': return 'text-yellow-600 bg-yellow-100';
       case 'unhealthy': return 'text-red-600 bg-red-100';
       default: return 'text-gray-600 bg-gray-100';
@@ -151,7 +151,7 @@ export default function MonitoringDashboardSimple() {
       case 'P0': return 'bg-red-100 text-red-800 border-red-200';
       case 'P1': return 'bg-orange-100 text-orange-800 border-orange-200';
       case 'P2': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'P3': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'P3': return 'bg-gray-100 text-gray-800 border-gray-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
@@ -229,7 +229,7 @@ export default function MonitoringDashboardSimple() {
         <div className="flex items-center space-x-2">
           <button
             className={`px-3 py-1 text-sm border rounded ${
-              autoRefresh ? 'bg-blue-50 border-blue-200' : 'border-gray-300'
+              autoRefresh ? 'bg-primary-50 border-primary-200' : 'border-gray-300'
             }`}
             onClick={() => setAutoRefresh(!autoRefresh)}
           >
@@ -421,7 +421,7 @@ export default function MonitoringDashboardSimple() {
           </h3>
           {data.alerts.active.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-500" />
+              <CheckCircle className="w-8 h-8 mx-auto mb-2 text-orange-500" />
               <p>No active alerts</p>
             </div>
           ) : (
@@ -470,7 +470,7 @@ export default function MonitoringDashboardSimple() {
                         </span>
                         <span className="text-sm font-medium">{alert.ruleName}</span>
                         {alert.resolved && (
-                          <span className="px-2 py-1 rounded text-xs font-medium border text-green-600 border-green-200">
+                          <span className="px-2 py-1 rounded text-xs font-medium border text-orange-600 border-orange-200">
                             Resolved
                           </span>
                         )}

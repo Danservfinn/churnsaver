@@ -1,3 +1,8 @@
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { TrendingUp, TrendingDown, Minus, Activity, DollarSign, Target, CheckCircle2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
 interface KpiTileProps {
   title: string;
   value: string | number;
@@ -7,14 +12,20 @@ interface KpiTileProps {
     direction: 'up' | 'down' | 'neutral';
     value: string;
   };
+  icon?: React.ReactNode;
+  variant?: 'default' | 'success' | 'warning' | 'info';
 }
 
-export function KpiTile({ title, value, subtitle, isLoading, trend }: KpiTileProps) {
+const iconMap: Record<string, React.ReactNode> = {
+  'active cases': <Activity className="h-5 w-5" />,
+  'recoveries': <CheckCircle2 className="h-5 w-5" />,
+  'recovery rate': <Target className="h-5 w-5" />,
+  'recovered revenue': <DollarSign className="h-5 w-5" />,
+};
+
+export function KpiTile({ title, value, subtitle, isLoading, trend, icon, variant = 'default' }: KpiTileProps) {
   const formatValue = (val: string | number) => {
     if (typeof val === 'number') {
-      if (title.toLowerCase().includes('rate') || title.toLowerCase().includes('revenue')) {
-        return val.toString();
-      }
       return val.toLocaleString();
     }
     return val;
@@ -25,54 +36,68 @@ export function KpiTile({ title, value, subtitle, isLoading, trend }: KpiTilePro
 
     switch (trend.direction) {
       case 'up':
-        return <span className="text-green-500">↗</span>;
+        return <TrendingUp className="h-4 w-4 text-success-500" />;
       case 'down':
-        return <span className="text-red-500">↘</span>;
+        return <TrendingDown className="h-4 w-4 text-danger-500" />;
       case 'neutral':
-        return <span className="text-gray-500">→</span>;
+        return <Minus className="h-4 w-4 text-muted-foreground" />;
     }
   };
 
+  const getIconStyles = () => {
+    switch (variant) {
+      case 'success':
+        return 'bg-success-100 text-success-600 dark:bg-success-900/30 dark:text-success-400';
+      case 'warning':
+        return 'bg-warning-100 text-warning-600 dark:bg-warning-900/30 dark:text-warning-400';
+      case 'info':
+        return 'bg-accent-100 text-accent-600 dark:bg-accent-900/30 dark:text-accent-400';
+      default:
+        return 'bg-muted text-muted-foreground';
+    }
+  };
+
+  const displayIcon = icon || iconMap[title.toLowerCase()];
+
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-muted-foreground">
           {title}
-        </h3>
-        {trend && getTrendIcon()}
-      </div>
-
-      <div className="flex items-baseline">
-        <p className="text-3xl font-bold text-gray-900 dark:text-white">
-          {isLoading ? '--' : formatValue(value)}
-        </p>
-        {trend && (
-          <span className={`ml-2 text-sm font-medium ${
-            trend.direction === 'up' ? 'text-green-500' :
-            trend.direction === 'down' ? 'text-red-500' :
-            'text-gray-500'
-          }`}>
-            {trend.value}
-          </span>
+        </CardTitle>
+        {displayIcon && (
+          <div className={cn('p-2 rounded-lg', getIconStyles())}>
+            {displayIcon}
+          </div>
         )}
-      </div>
-
-      {subtitle && (
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          {subtitle}
-        </p>
-      )}
-    </div>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-baseline gap-2">
+          {isLoading ? (
+            <Skeleton className="h-8 w-24" />
+          ) : (
+            <p className="text-2xl font-bold text-foreground">
+              {formatValue(value)}
+            </p>
+          )}
+          {trend && !isLoading && (
+            <span className={cn(
+              "text-sm font-medium flex items-center gap-1",
+              trend.direction === 'up' ? 'text-success-600 dark:text-success-400' :
+              trend.direction === 'down' ? 'text-danger-600 dark:text-danger-400' :
+              'text-muted-foreground'
+            )}>
+              {getTrendIcon()}
+              {trend.value}
+            </span>
+          )}
+        </div>
+        {subtitle && !isLoading && (
+          <p className="text-xs text-muted-foreground mt-1">
+            {subtitle}
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
-
-
-
-
-
-
-
-
-
-
-

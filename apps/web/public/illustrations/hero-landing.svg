@@ -1,0 +1,58 @@
+<svg role="img" aria-labelledby="hero-title hero-desc" viewBox="0 0 1440 600" xmlns="http://www.w3.org/2000/svg">
+  <title id="hero-title">ChurnSaver Hero</title>
+  <desc id="hero-desc">An illustration showing a person catching customers with a safety net, representing churn recovery</desc>
+  <defs>
+    <linearGradient id="accent-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff7043" />
+      <stop offset="100%" stop-color="#ff5722" />
+    </linearGradient>
+    <linearGradient id="amber-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffc107" />
+      <stop offset="100%" stop-color="#ff8f00" />
+    </linearGradient>
+    <linearGradient id="primary-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9e9e9e" />
+      <stop offset="100%" stop-color="#616161" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background decorative circles -->
+  <circle cx="200" cy="100" r="80" fill="url(#amber-grad)" opacity="0.1" />
+  <circle cx="1200" cy="450" r="120" fill="url(#accent-grad)" opacity="0.1" />
+  <circle cx="100" cy="500" r="60" fill="url(#primary-grad)" opacity="0.1" />
+  
+  <!-- Safety net -->
+  <path d="M 200 400 Q 400 300 600 400 Q 800 500 1000 400 Q 1200 300 1400 400" 
+        stroke="url(#accent-grad)" stroke-width="8" fill="none" opacity="0.3" />
+  <path d="M 200 420 Q 400 320 600 420 Q 800 520 1000 420 Q 1200 320 1400 420" 
+        stroke="url(#accent-grad)" stroke-width="6" fill="none" opacity="0.2" />
+  
+  <!-- Person figure (simplified) -->
+  <circle cx="720" cy="200" r="50" fill="url(#primary-grad)" />
+  <rect x="700" y="250" width="40" height="80" rx="20" fill="url(#primary-grad)" />
+  <rect x="680" y="280" width="20" height="60" rx="10" fill="url(#primary-grad)" />
+  <rect x="740" y="280" width="20" height="60" rx="10" fill="url(#primary-grad)" />
+  
+  <!-- Customers being caught (simplified circles with faces) -->
+  <g opacity="0.8">
+    <circle cx="400" cy="380" r="30" fill="url(#amber-grad)" />
+    <circle cx="400" cy="375" r="8" fill="#424242" />
+    <path d="M 390 385 Q 400 390 410 385" stroke="#424242" stroke-width="2" fill="none" />
+    
+    <circle cx="600" cy="420" r="30" fill="url(#amber-grad)" />
+    <circle cx="600" cy="415" r="8" fill="#424242" />
+    <path d="M 590 425 Q 600 430 610 425" stroke="#424242" stroke-width="2" fill="none" />
+    
+    <circle cx="1000" cy="380" r="30" fill="url(#amber-grad)" />
+    <circle cx="1000" cy="375" r="8" fill="#424242" />
+    <path d="M 990 385 Q 1000 390 1010 385" stroke="#424242" stroke-width="2" fill="none" />
+  </g>
+  
+  <!-- Sparkles -->
+  <circle cx="300" cy="150" r="4" fill="url(#amber-grad)" opacity="0.6" />
+  <circle cx="1100" cy="200" r="3" fill="url(#accent-grad)" opacity="0.6" />
+  <circle cx="500" cy="100" r="5" fill="url(#amber-grad)" opacity="0.5" />
+</svg>
+
+
+

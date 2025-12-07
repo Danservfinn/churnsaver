@@ -1,0 +1,27 @@
+<svg role="img" aria-labelledby="success-title success-desc" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+  <title id="success-title">Settings Saved</title>
+  <desc id="success-desc">An illustration celebrating successful settings save</desc>
+  <defs>
+    <linearGradient id="success-accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff7043" />
+      <stop offset="100%" stop-color="#ff5722" />
+    </linearGradient>
+    <linearGradient id="success-amber" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffc107" />
+      <stop offset="100%" stop-color="#ff8f00" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Checkmark circle -->
+  <circle cx="200" cy="200" r="100" fill="url(#success-accent)" />
+  <path d="M 150 200 L 180 230 L 250 160" stroke="white" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+  
+  <!-- Sparkles around -->
+  <circle cx="100" cy="100" r="8" fill="url(#success-amber)" opacity="0.8" />
+  <circle cx="300" cy="120" r="6" fill="url(#success-amber)" opacity="0.8" />
+  <circle cx="120" cy="300" r="7" fill="url(#success-amber)" opacity="0.8" />
+  <circle cx="280" cy="280" r="5" fill="url(#success-amber)" opacity="0.8" />
+</svg>
+
+
+

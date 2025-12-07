@@ -13,7 +13,7 @@ Handles "Kilo Code is having trouble" errors with automatic guidance to help use
 
 ### Configuration
 
-**Name:** `go`  
+**Name:** `thinking_process_failure_handler`  
 **Status:** Enabled  
 **Priority:** High
 

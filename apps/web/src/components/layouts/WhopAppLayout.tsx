@@ -1,13 +1,17 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 
 type Props = { children: React.ReactNode };
 
 export function WhopAppLayout({ children }: Props) {
+  const [isIframe, setIsIframe] = useState(false);
+
   useEffect(() => {
     const inIframe =
       typeof window !== 'undefined' && window.self !== window.top;
+
+    setIsIframe(inIframe);
 
     if (!inIframe) return;
 
@@ -44,9 +48,10 @@ export function WhopAppLayout({ children }: Props) {
   return (
     <div
       data-whop-app
+      className={isIframe ? 'p-0 max-w-full' : 'p-4 sm:p-6 lg:p-8'}
       style={{
         minHeight: '100vh',
-        backgroundColor: 'transparent',
+        backgroundColor: isIframe ? 'transparent' : undefined,
         color: 'inherit',
       }}
     >

@@ -2,20 +2,18 @@ import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
+import { Loader2, CheckCircle2 } from "lucide-react"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/90",
-        destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-        outline:
-          "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
-        secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
+        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        outline: "border border-input bg-background hover:bg-muted hover:text-foreground",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost: "hover:bg-muted hover:text-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
@@ -40,23 +38,48 @@ export interface ButtonProps
   'aria-describedby'?: string
   'aria-expanded'?: boolean
   'aria-pressed'?: boolean
+  loading?: boolean
+  success?: boolean
+  icon?: React.ReactNode
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, 'aria-label': ariaLabel, 'aria-describedby': ariaDescribedBy, 'aria-expanded': ariaExpanded, 'aria-pressed': ariaPressed, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, loading, success, icon, children, 'aria-label': ariaLabel, 'aria-describedby': ariaDescribedBy, 'aria-expanded': ariaExpanded, 'aria-pressed': ariaPressed, disabled, ...props }, ref) => {
     const Comp = asChild ? Slot : "button"
+    const isDisabled = disabled || loading
+    
+    // When using Slot (asChild), don't apply role and tabIndex (child may already be a button)
+    // But still pass through disabled and other props
+    const buttonProps = asChild ? {
+      disabled: isDisabled,
+    } : {
+      role: "button" as const,
+      tabIndex: 0,
+      disabled: isDisabled,
+    }
+    
     return (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
-        role="button"
-        tabIndex={0}
         aria-label={ariaLabel}
         aria-describedby={ariaDescribedBy}
         aria-expanded={ariaExpanded}
         aria-pressed={ariaPressed}
+        {...buttonProps}
         {...props}
-      />
+      >
+        {loading && (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+        )}
+        {success && !loading && (
+          <CheckCircle2 className="mr-2 h-4 w-4" aria-hidden="true" />
+        )}
+        {icon && !loading && !success && (
+          <span className="mr-2" aria-hidden="true">{icon}</span>
+        )}
+        {children}
+      </Comp>
     )
   }
 )

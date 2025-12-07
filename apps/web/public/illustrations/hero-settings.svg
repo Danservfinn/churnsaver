@@ -1,0 +1,28 @@
+<svg role="img" aria-labelledby="settings-title settings-desc" viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+  <title id="settings-title">Settings Configuration</title>
+  <desc id="settings-desc">An illustration of a gear/control panel representing settings</desc>
+  <defs>
+    <linearGradient id="settings-accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff7043" />
+      <stop offset="100%" stop-color="#ff5722" />
+    </linearGradient>
+    <linearGradient id="settings-amber" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffc107" />
+      <stop offset="100%" stop-color="#ff8f00" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Gear -->
+  <circle cx="200" cy="150" r="80" fill="url(#settings-accent)" opacity="0.2" />
+  <path d="M 200 80 L 220 100 L 240 80 L 260 100 L 280 80 L 300 100 L 320 80 L 320 120 L 300 140 L 320 160 L 320 200 L 300 220 L 280 240 L 260 220 L 240 240 L 220 220 L 200 240 L 180 220 L 160 240 L 140 220 L 120 240 L 80 200 L 80 160 L 100 140 L 80 120 L 80 80 L 100 100 L 120 80 L 140 100 L 160 80 L 180 100 Z" 
+        fill="url(#settings-accent)" />
+  <circle cx="200" cy="150" r="40" fill="url(#settings-amber)" />
+  <circle cx="200" cy="150" r="20" fill="white" />
+  
+  <!-- Control knobs -->
+  <circle cx="120" cy="100" r="15" fill="url(#settings-amber)" />
+  <circle cx="280" cy="200" r="15" fill="url(#settings-amber)" />
+</svg>
+
+
+

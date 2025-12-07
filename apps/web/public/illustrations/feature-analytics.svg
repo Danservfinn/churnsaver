@@ -1,0 +1,30 @@
+<svg role="img" aria-labelledby="analytics-title analytics-desc" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+  <title id="analytics-title">Analytics</title>
+  <desc id="analytics-desc">An illustration of a chart showing analytics</desc>
+  <defs>
+    <linearGradient id="analytics-accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff7043" />
+      <stop offset="100%" stop-color="#ff5722" />
+    </linearGradient>
+    <linearGradient id="analytics-amber" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffc107" />
+      <stop offset="100%" stop-color="#ff8f00" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Chart bars -->
+  <rect x="80" y="200" width="40" height="60" rx="4" fill="url(#analytics-accent)" />
+  <rect x="140" y="160" width="40" height="100" rx="4" fill="url(#analytics-accent)" />
+  <rect x="200" y="120" width="40" height="140" rx="4" fill="url(#analytics-amber)" />
+  
+  <!-- Trend line -->
+  <path d="M 60 240 Q 100 220 140 200 Q 180 180 220 160 Q 260 140 240 120" 
+        stroke="url(#analytics-accent)" stroke-width="4" fill="none" />
+  
+  <!-- Data points -->
+  <circle cx="140" cy="200" r="6" fill="url(#analytics-accent)" />
+  <circle cx="200" cy="160" r="6" fill="url(#analytics-amber)" />
+</svg>
+
+
+

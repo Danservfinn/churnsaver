@@ -11,6 +11,7 @@ export interface WhopContextType {
   isLoading: boolean;
   error: string | null;
   refreshContext: () => Promise<void>;
+  getAuthHeaders: () => Record<string, string>;
 }
 
 const WhopContext = createContext<WhopContextType | undefined>(undefined);
@@ -19,23 +20,117 @@ export interface WhopProviderProps {
   children: React.ReactNode;
 }
 
+/**
+ * Extract Whop authentication token from various sources
+ */
+function extractWhopToken(): string | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  // 1. Try URL query parameter (for development/testing)
+  const urlParams = new URLSearchParams(window.location.search);
+  const tokenFromUrl = urlParams.get('token') || urlParams.get('whop_token');
+  if (tokenFromUrl) {
+    return tokenFromUrl;
+  }
+
+  // 2. Try localStorage (for persistence across page reloads)
+  try {
+    const tokenFromStorage = localStorage.getItem('whop_user_token');
+    if (tokenFromStorage) {
+      return tokenFromStorage;
+    }
+  } catch (e) {
+    // localStorage may not be available in some contexts
+  }
+
+  // 3. Try to get from parent window (if in iframe)
+  try {
+    const inIframe = window.self !== window.top;
+    if (inIframe && window.parent) {
+      // Try to access parent window's token (if same origin)
+      // Note: This only works if parent is same origin
+      const parentToken = (window.parent as any)?.whopUserToken;
+      if (parentToken) {
+        return parentToken;
+      }
+    }
+  } catch (e) {
+    // Cross-origin iframe, can't access parent
+  }
+
+  // 4. Try to get from window object (set by Whop SDK or parent)
+  const windowToken = (window as any).whopUserToken;
+  if (windowToken) {
+    return windowToken;
+  }
+
+  return null;
+}
+
+/**
+ * Store token for future use
+ */
+function storeWhopToken(token: string | null): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    if (token) {
+      localStorage.setItem('whop_user_token', token);
+    } else {
+      // Remove token from localStorage when token is null/cleared
+      localStorage.removeItem('whop_user_token');
+    }
+  } catch (e) {
+    // localStorage may not be available
+  }
+}
+
 export function WhopProvider({ children }: WhopProviderProps) {
   const [companyId, setCompanyId] = useState<string>(env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'unknown');
   const [userId, setUserId] = useState<string>('anonymous');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+
+  /**
+   * Get authentication headers for API calls
+   */
+  const getAuthHeaders = (): Record<string, string> => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    const token = authToken || extractWhopToken();
+    if (token) {
+      headers['x-whop-user-token'] = token;
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    return headers;
+  };
 
   const fetchContext = async () => {
     try {
       setIsLoading(true);
       setError(null);
 
+      // Extract token from various sources
+      const token = extractWhopToken();
+      if (token) {
+        setAuthToken(token);
+        storeWhopToken(token);
+      }
+
       // Check if we're in an iframe (Whop app context)
       const inIframe = typeof window !== 'undefined' && window.self !== window.top;
 
-      if (!inIframe) {
-        // Not in iframe, use default context
+      if (!inIframe && !token) {
+        // Not in iframe and no token, use default context
         // In development mode, allow bypassing authentication for local testing
         const devMode = env.DEBUG_MODE && env.NODE_ENV === 'development';
         const devCompanyId = env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'dev-company';
@@ -53,29 +148,51 @@ export function WhopProvider({ children }: WhopProviderProps) {
         return;
       }
 
-      // In iframe, try to get context from parent or API
+      // Try to get context from API with token
       try {
-        // First, try to get context from a health check API call
+        const headers = getAuthHeaders();
         const response = await fetch('/api/health/context', {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers,
+          credentials: 'include', // Include cookies if needed
         });
 
         if (response.ok) {
           const contextData = await response.json();
-          setCompanyId(contextData.companyId || env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'unknown');
-          setUserId(contextData.userId || 'anonymous');
-          setIsAuthenticated(contextData.isAuthenticated || false);
+          const data = contextData.data || contextData;
+          
+          setCompanyId(data.companyId || env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'unknown');
+          setUserId(data.userId || 'anonymous');
+          setIsAuthenticated(data.isAuthenticated || false);
+
+          // Store token if we got authenticated context
+          if (data.isAuthenticated && token) {
+            setAuthToken(token);
+            storeWhopToken(token);
+          }
 
           logger.info('Whop context loaded from API', {
-            companyId: contextData.companyId,
-            userId: contextData.userId,
-            isAuthenticated: contextData.isAuthenticated
+            companyId: data.companyId,
+            userId: data.userId,
+            isAuthenticated: data.isAuthenticated,
+            hasToken: !!token
           });
         } else {
-          throw new Error('API context fetch failed');
+          // If API fails but we have a token, try dev mode fallback
+          if (env.NODE_ENV === 'development' && token) {
+            logger.warn('API context fetch failed, using dev mode fallback', {
+              status: response.status,
+              hasToken: !!token
+            });
+            
+            const devCompanyId = env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'dev-company';
+            setCompanyId(devCompanyId);
+            setUserId('dev-user');
+            setIsAuthenticated(true);
+            return;
+          }
+          
+          throw new Error(`API context fetch failed: ${response.status}`);
         }
       } catch (apiError) {
         // Fallback to default context if API fails
@@ -83,9 +200,17 @@ export function WhopProvider({ children }: WhopProviderProps) {
           error: apiError instanceof Error ? apiError.message : String(apiError)
         });
 
-        setCompanyId(env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'unknown');
-        setUserId('anonymous');
-        setIsAuthenticated(false);
+        // In development, allow authenticated state if we have a token
+        if (env.NODE_ENV === 'development' && token) {
+          const devCompanyId = env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'dev-company';
+          setCompanyId(devCompanyId);
+          setUserId('dev-user');
+          setIsAuthenticated(true);
+        } else {
+          setCompanyId(env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'unknown');
+          setUserId('anonymous');
+          setIsAuthenticated(false);
+        }
       }
 
     } catch (err) {
@@ -119,6 +244,7 @@ export function WhopProvider({ children }: WhopProviderProps) {
     isLoading,
     error,
     refreshContext,
+    getAuthHeaders,
   };
 
   return (

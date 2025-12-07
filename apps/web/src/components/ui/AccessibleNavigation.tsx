@@ -187,7 +187,7 @@ const AccessibleNavigation = forwardRef<HTMLElement, AccessibleNavigationProps>(
           <div className="sr-only">
             <a
               href="#main-content"
-              className="absolute top-0 left-0 -translate-y-full focus:translate-y-0 bg-blue-600 text-white px-4 py-2 z-50 focus:outline-none"
+              className="absolute top-0 left-0 -translate-y-full focus:translate-y-0 bg-primary-600 text-white px-4 py-2 z-50 focus:outline-none"
             >
               Skip to main content
             </a>
@@ -282,7 +282,7 @@ const AccessibleNavItem = forwardRef<HTMLAnchorElement | HTMLButtonElement, Acce
     const classes = cn(
       baseClasses,
       {
-        'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200': active,
+        'bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-200': active,
         'text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-700': !active && !disabled,
         'text-gray-400 cursor-not-allowed opacity-50': disabled
       },
@@ -544,7 +544,7 @@ const AccessibleBreadcrumb = forwardRef<HTMLElement, AccessibleBreadcrumbProps>(
                 {item.href && !isCurrent ? (
                   <a
                     href={item.href}
-                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
+                    className="text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-200"
                   >
                     {item.label}
                   </a>

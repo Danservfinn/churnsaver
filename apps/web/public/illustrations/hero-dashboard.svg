@@ -1,0 +1,43 @@
+<svg role="img" aria-labelledby="dashboard-title dashboard-desc" viewBox="0 0 1200 400" xmlns="http://www.w3.org/2000/svg">
+  <title id="dashboard-title">Dashboard Welcome</title>
+  <desc id="dashboard-desc">An illustration welcoming users to the dashboard with charts and metrics</desc>
+  <defs>
+    <linearGradient id="dash-accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff7043" />
+      <stop offset="100%" stop-color="#ff5722" />
+    </linearGradient>
+    <linearGradient id="dash-amber" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffc107" />
+      <stop offset="100%" stop-color="#ff8f00" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Wave background -->
+  <path d="M 0 300 Q 300 250 600 300 T 1200 300 L 1200 400 L 0 400 Z" fill="url(#dash-amber)" opacity="0.1" />
+  
+  <!-- Dashboard chart bars -->
+  <rect x="200" y="200" width="60" height="120" rx="4" fill="url(#dash-accent)" opacity="0.8" />
+  <rect x="300" y="150" width="60" height="170" rx="4" fill="url(#dash-accent)" />
+  <rect x="400" y="180" width="60" height="140" rx="4" fill="url(#dash-accent)" opacity="0.8" />
+  <rect x="500" y="120" width="60" height="200" rx="4" fill="url(#dash-accent)" />
+  <rect x="600" y="160" width="60" height="160" rx="4" fill="url(#dash-accent)" opacity="0.8" />
+  
+  <!-- Hand wave -->
+  <path d="M 900 150 Q 950 100 1000 150 Q 1050 200 1000 250 Q 950 300 900 250 Q 850 200 900 150" 
+        fill="url(#dash-amber)" />
+  <circle cx="920" cy="180" r="15" fill="#424242" />
+  <circle cx="980" cy="180" r="15" fill="#424242" />
+  <path d="M 900 220 Q 950 240 1000 220" stroke="#424242" stroke-width="3" fill="none" />
+  
+  <!-- Stats badges -->
+  <circle cx="250" cy="100" r="40" fill="url(#dash-amber)" opacity="0.2" />
+  <circle cx="250" cy="100" r="25" fill="url(#dash-amber)" />
+  <text x="250" y="110" text-anchor="middle" fill="#424242" font-size="20" font-weight="bold">✓</text>
+  
+  <circle cx="450" cy="80" r="35" fill="url(#dash-accent)" opacity="0.2" />
+  <circle cx="450" cy="80" r="20" fill="url(#dash-accent)" />
+  <text x="450" y="88" text-anchor="middle" fill="white" font-size="16" font-weight="bold">$</text>
+</svg>
+
+
+

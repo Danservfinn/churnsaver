@@ -1,0 +1,36 @@
+<svg role="img" aria-labelledby="empty-title empty-desc" viewBox="0 0 600 400" xmlns="http://www.w3.org/2000/svg">
+  <title id="empty-title">No Cases Yet</title>
+  <desc id="empty-desc">An illustration showing a person celebrating with no cases to handle</desc>
+  <defs>
+    <linearGradient id="empty-amber" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffc107" />
+      <stop offset="100%" stop-color="#ff8f00" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Person celebrating -->
+  <circle cx="300" cy="150" r="50" fill="url(#empty-amber)" />
+  <circle cx="285" cy="140" r="8" fill="#424242" />
+  <circle cx="315" cy="140" r="8" fill="#424242" />
+  <path d="M 280 170 Q 300 180 320 170" stroke="#424242" stroke-width="3" fill="none" />
+  
+  <!-- Arms raised -->
+  <rect x="240" y="120" width="20" height="60" rx="10" fill="url(#empty-amber)" />
+  <rect x="340" y="120" width="20" height="60" rx="10" fill="url(#empty-amber)" />
+  
+  <!-- Body -->
+  <rect x="270" y="200" width="60" height="100" rx="30" fill="url(#empty-amber)" />
+  
+  <!-- Confetti -->
+  <circle cx="150" cy="100" r="8" fill="#ff7043" opacity="0.7" />
+  <circle cx="450" cy="120" r="6" fill="#ffc107" opacity="0.7" />
+  <circle cx="200" cy="200" r="7" fill="#ff5722" opacity="0.7" />
+  <circle cx="400" cy="180" r="5" fill="#ff8f00" opacity="0.7" />
+  
+  <!-- Empty box illustration -->
+  <rect x="200" y="320" width="200" height="60" rx="8" fill="none" stroke="#9e9e9e" stroke-width="3" stroke-dasharray="8 4" opacity="0.5" />
+  <text x="300" y="355" text-anchor="middle" fill="#9e9e9e" font-size="16" font-style="italic">No cases yet</text>
+</svg>
+
+
+

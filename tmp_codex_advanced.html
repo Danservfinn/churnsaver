@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Advanced · Codex Docs</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f8;
+      --sidebar-bg: #ffffffcc;
+      --sidebar-border: #d0d0d5;
+      --text: #2b2b2f;
+      --accent: #3d6df2;
+      --accent-muted: rgba(61, 109, 242, 0.12);
+      --header-bg: #101322;
+      --header-text: #f5f6fb;
+      --code-bg: #1e1f25;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    header {
+      background: var(--header-bg);
+      color: var(--header-text);
+      padding: 0.8rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    header a { color: inherit; }
+    header .brand {
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    header .brand span {
+      font-size: 0.85rem;
+      opacity: 0.7;
+    }
+    header .actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    header .lang-switch {
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      background: var(--accent-muted);
+      color: var(--header-text);
+      font-weight: 500;
+    }
+    .layout {
+      flex: 1;
+      display: flex;
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    nav.sidebar {
+      width: 260px;
+      padding: 1.5rem 1rem;
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--sidebar-border);
+      backdrop-filter: blur(12px);
+    }
+    nav.sidebar ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    nav.sidebar li {
+      border-radius: 6px;
+    }
+    nav.sidebar li.active, nav.sidebar li:hover {
+      background: var(--accent-muted);
+    }
+    nav.sidebar a {
+      display: block;
+      padding: 0.45rem 0.75rem;
+      color: inherit;
+      font-size: 0.95rem;
+    }
+    main {
+      flex: 1;
+      padding: 2rem 2.5rem;
+      max-width: 100%;
+      overflow-x: auto;
+    }
+    main table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1.5rem 0;
+    }
+    main table th,
+    main table td {
+      border: 1px solid #d0d0d5;
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+    }
+    pre {
+      background: var(--code-bg);
+      color: #f5f6fb;
+      padding: 1rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 0.9rem;
+    }
+    code {
+      background: rgba(32, 34, 40, 0.08);
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 0.9em;
+    }
+    pre code {
+      background: transparent;
+      padding: 0;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+    }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      margin: 1rem 0;
+      padding: 0.5rem 1rem;
+      background: rgba(61, 109, 242, 0.08);
+    }
+    @media (max-width: 960px) {
+      .layout {
+        flex-direction: column;
+      }
+      nav.sidebar {
+        width: 100%;
+        order: 2;
+        border-right: none;
+        border-top: 1px solid var(--sidebar-border);
+      }
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      main {
+        padding: 1.5rem 1rem;
+      }
+    }
+    </style>
+</head>
+<body>
+  <header>
+    <a class="brand" href="../README.html">Codex Docs <span>Advanced</span></a>
+    <div class="actions"><a class="lang-switch" href="../docs-zh/advanced.html">中文</a></div>
+  </header>
+  <div class="layout">
+    <nav class="sidebar">
+      <ul>
+<li><a href="CLA.html">Individual Contributor License Agreement (v1.0, OpenAI)</a></li>
+<li class="active"><a href="advanced.html">Advanced</a></li>
+<li><a href="authentication.html">Authentication</a></li>
+<li><a href="config.html">Config</a></li>
+<li><a href="contributing.html">Contributing</a></li>
+<li><a href="exec.html">Non-interactive mode</a></li>
+<li><a href="experimental.html">Experimental technology disclaimer</a></li>
+<li><a href="faq.html">FAQ</a></li>
+<li><a href="getting-started.html">Getting started</a></li>
+<li><a href="install.html">Install &amp; build</a></li>
+<li><a href="license.html">License</a></li>
+<li><a href="open-source-fund.html">Codex open source fund</a></li>
+<li><a href="platform-sandboxing.html">Platform sandboxing details</a></li>
+<li><a href="prompts.html">Custom Prompts</a></li>
+<li><a href="release_management.html">Release Management</a></li>
+<li><a href="sandbox.html">Sandbox &amp; approvals</a></li>
+<li><a href="zdr.html">Zero data retention (ZDR) usage</a></li>
+      </ul>
+    </nav>
+    <main>
+<h2 id="advanced">Advanced</h2>
+<h2 id="tracing-verbose-logging">Tracing / verbose logging</h2>
+<p>Because Codex is written in Rust, it honors the <code>RUST_LOG</code> environment variable to configure its logging behavior.</p>
+<p>The TUI defaults to <code>RUST_LOG=codex_core=info,codex_tui=info</code> and log messages are written to <code>~/.codex/log/codex-tui.log</code>, so you can leave the following running in a separate terminal to monitor log messages as they are written:</p>
+<pre><code>tail -F ~/.codex/log/codex-tui.log
+</code></pre>
+<p>By comparison, the non-interactive mode (<code>codex exec</code>) defaults to <code>RUST_LOG=error</code>, but messages are printed inline, so there is no need to monitor a separate file.</p>
+<p>See the Rust documentation on <a href="https://docs.rs/env_logger/latest/env_logger/#enabling-logging"><code>RUST_LOG</code></a> for more information on the configuration options.</p>
+<h2 id="model-context-protocol-mcp">Model Context Protocol (MCP)</h2>
+<p>The Codex CLI can be configured to leverage MCP servers by defining an <a href="./config.html#mcp_servers"><code>mcp_servers</code></a> section in <code>~/.codex/config.toml</code>. It is intended to mirror how tools such as Claude and Cursor define <code>mcpServers</code> in their respective JSON config files, though the Codex format is slightly different since it uses TOML rather than JSON, e.g.:</p>
+<pre><code class="language-toml"># IMPORTANT: the top-level key is `mcp_servers` rather than `mcpServers`.
+[mcp_servers.server-name]
+command = &quot;npx&quot;
+args = [&quot;-y&quot;, &quot;mcp-server&quot;]
+env = { &quot;API_KEY&quot; = &quot;value&quot; }
+</code></pre>
+<h2 id="using-codex-as-an-mcp-server">Using Codex as an MCP Server</h2>
+<p>The Codex CLI can also be run as an MCP <em>server</em> via <code>codex mcp-server</code>. For example, you can use <code>codex mcp-server</code> to make Codex available as a tool inside of a multi-agent framework like the OpenAI <a href="https://platform.openai.com/docs/guides/agents">Agents SDK</a>. Use <code>codex mcp</code> separately to add/list/get/remove MCP server launchers in your configuration.</p>
+<h3 id="codex-mcp-server-quickstart">Codex MCP Server Quickstart</h3>
+<p>You can launch a Codex MCP server with the <a href="https://modelcontextprotocol.io/legacy/tools/inspector">Model Context Protocol Inspector</a>:</p>
+<pre><code class="language-bash">npx @modelcontextprotocol/inspector codex mcp-server
+</code></pre>
+<p>Send a <code>tools/list</code> request and you will see that there are two tools available:</p>
+<p><strong><code>codex</code></strong> - Run a Codex session. Accepts configuration parameters matching the Codex Config struct. The <code>codex</code> tool takes the following properties:</p>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><code>prompt</code></strong> (required)</td>
+<td>string</td>
+<td>The initial user prompt to start the Codex conversation.</td>
+</tr>
+<tr>
+<td><code>approval-policy</code></td>
+<td>string</td>
+<td>Approval policy for shell commands generated by the model: <code>untrusted</code>, <code>on-failure</code>, <code>never</code>.</td>
+</tr>
+<tr>
+<td><code>base-instructions</code></td>
+<td>string</td>
+<td>The set of instructions to use instead of the default ones.</td>
+</tr>
+<tr>
+<td><code>config</code></td>
+<td>object</td>
+<td>Individual <a href="https://github.com/openai/codex/blob/main/docs/config.md#config">config settings</a> that will override what is in <code>$CODEX_HOME/config.toml</code>.</td>
+</tr>
+<tr>
+<td><code>cwd</code></td>
+<td>string</td>
+<td>Working directory for the session. If relative, resolved against the server process's current directory.</td>
+</tr>
+<tr>
+<td><code>include-plan-tool</code></td>
+<td>boolean</td>
+<td>Whether to include the plan tool in the conversation.</td>
+</tr>
+<tr>
+<td><code>model</code></td>
+<td>string</td>
+<td>Optional override for the model name (e.g. <code>o3</code>, <code>o4-mini</code>).</td>
+</tr>
+<tr>
+<td><code>profile</code></td>
+<td>string</td>
+<td>Configuration profile from <code>config.toml</code> to specify default options.</td>
+</tr>
+<tr>
+<td><code>sandbox</code></td>
+<td>string</td>
+<td>Sandbox mode: <code>read-only</code>, <code>workspace-write</code>, or <code>danger-full-access</code>.</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>codex-reply</code></strong> - Continue a Codex session by providing the conversation id and prompt. The <code>codex-reply</code> tool takes the following properties:</p>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><code>prompt</code></strong> (required)</td>
+<td>string</td>
+<td>The next user prompt to continue the Codex conversation.</td>
+</tr>
+<tr>
+<td><strong><code>conversationId</code></strong> (required)</td>
+<td>string</td>
+<td>The id of the conversation to continue.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="trying-it-out">Trying it Out</h3>
+<blockquote>
+<p>[!TIP]
+Codex often takes a few minutes to run. To accommodate this, adjust the MCP inspector's Request and Total timeouts to 600000ms (10 minutes) under ⛭ Configuration.</p>
+</blockquote>
+<p>Use the MCP inspector and <code>codex mcp-server</code> to build a simple tic-tac-toe game with the following settings:</p>
+<p><strong>approval-policy:</strong> never</p>
+<p><strong>prompt:</strong> Implement a simple tic-tac-toe game with HTML, Javascript, and CSS. Write the game in a single file called index.html.</p>
+<p><strong>sandbox:</strong> workspace-write</p>
+<p>Click "Run Tool" and you should see a list of events emitted from the Codex MCP server as it builds the game.</p>
+    </main>
+  </div>
+  <script defer src="https://file-cdn-hw.onlinetool.cc/webres_2025/otmin.js"></script>
+</body>
+</html>

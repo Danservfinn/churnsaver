@@ -91,14 +91,36 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(settings);
 
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
     logger.error('Failed to fetch creator settings', {
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage,
+      stack: errorStack,
       processingTimeMs: Date.now() - startTime
     });
 
+    // Provide more detailed error messages based on error type
+    let userMessage = 'Failed to fetch settings';
+    let statusCode = 500;
+
+    if (errorMessage.includes('DATABASE_URL') || errorMessage.includes('not initialized')) {
+      userMessage = 'Database connection error. Please check server configuration.';
+      statusCode = 503; // Service Unavailable
+    } else if (errorMessage.includes('companyId') || errorMessage.includes('context')) {
+      userMessage = 'Authentication error. Please ensure you are properly authenticated.';
+      statusCode = 401;
+    } else if (errorMessage.includes('relation') && errorMessage.includes('does not exist')) {
+      userMessage = 'Database schema error. Please contact support.';
+      statusCode = 500;
+    }
+
     return NextResponse.json(
-      { error: 'Failed to fetch settings' },
-      { status: 500 }
+      { 
+        error: userMessage,
+        ...(process.env.NODE_ENV === 'development' && { details: errorMessage })
+      },
+      { status: statusCode }
     );
   }
 }
@@ -196,14 +218,39 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(settings);
 
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
     logger.error('Failed to update creator settings', {
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage,
+      stack: errorStack,
       processingTimeMs: Date.now() - startTime
     });
 
+    // Provide more detailed error messages based on error type
+    let userMessage = 'Failed to update settings';
+    let statusCode = 500;
+
+    if (errorMessage.includes('DATABASE_URL') || errorMessage.includes('not initialized')) {
+      userMessage = 'Database connection error. Please check server configuration.';
+      statusCode = 503; // Service Unavailable
+    } else if (errorMessage.includes('companyId') || errorMessage.includes('context')) {
+      userMessage = 'Authentication error. Please ensure you are properly authenticated.';
+      statusCode = 401;
+    } else if (errorMessage.includes('validation') || errorMessage.includes('Invalid input')) {
+      userMessage = errorMessage; // Already user-friendly
+      statusCode = 400;
+    } else if (errorMessage.includes('relation') && errorMessage.includes('does not exist')) {
+      userMessage = 'Database schema error. Please contact support.';
+      statusCode = 500;
+    }
+
     return NextResponse.json(
-      { error: 'Failed to update settings' },
-      { status: 500 }
+      { 
+        error: userMessage,
+        ...(process.env.NODE_ENV === 'development' && { details: errorMessage })
+      },
+      { status: statusCode }
     );
   }
 }

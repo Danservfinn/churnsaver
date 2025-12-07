@@ -1,0 +1,29 @@
+<svg role="img" aria-labelledby="notif-title notif-desc" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+  <title id="notif-title">Push Notifications</title>
+  <desc id="notif-desc">An illustration of a bell with notification burst</desc>
+  <defs>
+    <linearGradient id="notif-accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff7043" />
+      <stop offset="100%" stop-color="#ff5722" />
+    </linearGradient>
+    <linearGradient id="notif-amber" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffc107" />
+      <stop offset="100%" stop-color="#ff8f00" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Bell -->
+  <path d="M 150 80 L 120 100 L 120 180 Q 120 200 150 200 Q 180 200 180 180 L 180 100 Z" fill="url(#notif-accent)" />
+  <rect x="145" y="200" width="10" height="20" rx="5" fill="url(#notif-accent)" />
+  
+  <!-- Notification burst -->
+  <circle cx="180" cy="100" r="25" fill="url(#notif-amber)" />
+  <text x="180" y="110" text-anchor="middle" fill="white" font-size="18" font-weight="bold">!</text>
+  
+  <!-- Sound waves -->
+  <path d="M 200 100 Q 220 100 220 120" stroke="url(#notif-amber)" stroke-width="3" fill="none" opacity="0.6" />
+  <path d="M 210 100 Q 240 100 240 120" stroke="url(#notif-amber)" stroke-width="2" fill="none" opacity="0.4" />
+</svg>
+
+
+

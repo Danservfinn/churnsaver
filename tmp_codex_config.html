@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Config · Codex Docs</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f8;
+      --sidebar-bg: #ffffffcc;
+      --sidebar-border: #d0d0d5;
+      --text: #2b2b2f;
+      --accent: #3d6df2;
+      --accent-muted: rgba(61, 109, 242, 0.12);
+      --header-bg: #101322;
+      --header-text: #f5f6fb;
+      --code-bg: #1e1f25;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    header {
+      background: var(--header-bg);
+      color: var(--header-text);
+      padding: 0.8rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    header a { color: inherit; }
+    header .brand {
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    header .brand span {
+      font-size: 0.85rem;
+      opacity: 0.7;
+    }
+    header .actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    header .lang-switch {
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      background: var(--accent-muted);
+      color: var(--header-text);
+      font-weight: 500;
+    }
+    .layout {
+      flex: 1;
+      display: flex;
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    nav.sidebar {
+      width: 260px;
+      padding: 1.5rem 1rem;
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--sidebar-border);
+      backdrop-filter: blur(12px);
+    }
+    nav.sidebar ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    nav.sidebar li {
+      border-radius: 6px;
+    }
+    nav.sidebar li.active, nav.sidebar li:hover {
+      background: var(--accent-muted);
+    }
+    nav.sidebar a {
+      display: block;
+      padding: 0.45rem 0.75rem;
+      color: inherit;
+      font-size: 0.95rem;
+    }
+    main {
+      flex: 1;
+      padding: 2rem 2.5rem;
+      max-width: 100%;
+      overflow-x: auto;
+    }
+    main table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1.5rem 0;
+    }
+    main table th,
+    main table td {
+      border: 1px solid #d0d0d5;
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+    }
+    pre {
+      background: var(--code-bg);
+      color: #f5f6fb;
+      padding: 1rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 0.9rem;
+    }
+    code {
+      background: rgba(32, 34, 40, 0.08);
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 0.9em;
+    }
+    pre code {
+      background: transparent;
+      padding: 0;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+    }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      margin: 1rem 0;
+      padding: 0.5rem 1rem;
+      background: rgba(61, 109, 242, 0.08);
+    }
+    @media (max-width: 960px) {
+      .layout {
+        flex-direction: column;
+      }
+      nav.sidebar {
+        width: 100%;
+        order: 2;
+        border-right: none;
+        border-top: 1px solid var(--sidebar-border);
+      }
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      main {
+        padding: 1.5rem 1rem;
+      }
+    }
+    </style>
+</head>
+<body>
+  <header>
+    <a class="brand" href="../README.html">Codex Docs <span>Config</span></a>
+    <div class="actions"><a class="lang-switch" href="../docs-zh/config.html">中文</a></div>
+  </header>
+  <div class="layout">
+    <nav class="sidebar">
+      <ul>
+<li><a href="CLA.html">Individual Contributor License Agreement (v1.0, OpenAI)</a></li>
+<li><a href="advanced.html">Advanced</a></li>
+<li><a href="authentication.html">Authentication</a></li>
+<li class="active"><a href="config.html">Config</a></li>
+<li><a href="contributing.html">Contributing</a></li>
+<li><a href="exec.html">Non-interactive mode</a></li>
+<li><a href="experimental.html">Experimental technology disclaimer</a></li>
+<li><a href="faq.html">FAQ</a></li>
+<li><a href="getting-started.html">Getting started</a></li>
+<li><a href="install.html">Install &amp; build</a></li>
+<li><a href="license.html">License</a></li>
+<li><a href="open-source-fund.html">Codex open source fund</a></li>
+<li><a href="platform-sandboxing.html">Platform sandboxing details</a></li>
+<li><a href="prompts.html">Custom Prompts</a></li>
+<li><a href="release_management.html">Release Management</a></li>
+<li><a href="sandbox.html">Sandbox &amp; approvals</a></li>
+<li><a href="zdr.html">Zero data retention (ZDR) usage</a></li>
+      </ul>
+    </nav>
+    <main>
+<h1 id="config">Config</h1>
+<p>Codex supports several mechanisms for setting config values:</p>
+<ul>
+<li>Config-specific command-line flags, such as <code>--model o3</code> (highest precedence).</li>
+<li>A generic <code>-c</code>/<code>--config</code> flag that takes a <code>key=value</code> pair, such as <code>--config model="o3"</code>.</li>
+<li>The key can contain dots to set a value deeper than the root, e.g. <code>--config model_providers.openai.wire_api="chat"</code>.</li>
+<li>For consistency with <code>config.toml</code>, values are a string in TOML format rather than JSON format, so use <code>key='{a = 1, b = 2}'</code> rather than <code>key='{"a": 1, "b": 2}'</code>.<ul>
+<li>The quotes around the value are necessary, as without them your shell would split the config argument on spaces, resulting in <code>codex</code> receiving <code>-c key={a</code> with (invalid) additional arguments <code>=</code>, <code>1,</code>, <code>b</code>, <code>=</code>, <code>2}</code>.</li>
+</ul>
+</li>
+<li>Values can contain any TOML object, such as <code>--config shell_environment_policy.include_only='["PATH", "HOME", "USER"]'</code>.</li>
+<li>If <code>value</code> cannot be parsed as a valid TOML value, it is treated as a string value. This means that <code>-c model='"o3"'</code> and <code>-c model=o3</code> are equivalent.<ul>
+<li>In the first case, the value is the TOML string <code>"o3"</code>, while in the second the value is <code>o3</code>, which is not valid TOML and therefore treated as the TOML string <code>"o3"</code>.</li>
+<li>Because quotes are interpreted by one's shell, <code>-c key="true"</code> will be correctly interpreted in TOML as <code>key = true</code> (a boolean) and not <code>key = "true"</code> (a string). If for some reason you needed the string <code>"true"</code>, you would need to use <code>-c key='"true"'</code> (note the two sets of quotes).</li>
+</ul>
+</li>
+<li>The <code>$CODEX_HOME/config.toml</code> configuration file where the <code>CODEX_HOME</code> environment value defaults to <code>~/.codex</code>. (Note <code>CODEX_HOME</code> will also be where logs and other Codex-related information are stored.)</li>
+</ul>
+<p>Both the <code>--config</code> flag and the <code>config.toml</code> file support the following options:</p>
+<h2 id="model">model</h2>
+<p>The model that Codex should use.</p>
+<pre><code class="language-toml">model = &quot;o3&quot;  # overrides the default of &quot;gpt-5-codex&quot;
+</code></pre>
+<h2 id="modelproviders">model_providers</h2>
+<p>This option lets you override and amend the default set of model providers bundled with Codex. This value is a map where the key is the value to use with <code>model_provider</code> to select the corresponding provider.</p>
+<p>For example, if you wanted to add a provider that uses the OpenAI 4o model via the chat completions API, then you could add the following configuration:</p>
+<pre><code class="language-toml"># Recall that in TOML, root keys must be listed before tables.
+model = &quot;gpt-4o&quot;
+model_provider = &quot;openai-chat-completions&quot;
+
+[model_providers.openai-chat-completions]
+# Name of the provider that will be displayed in the Codex UI.
+name = &quot;OpenAI using Chat Completions&quot;
+# The path `/chat/completions` will be amended to this URL to make the POST
+# request for the chat completions.
+base_url = &quot;https://api.openai.com/v1&quot;
+# If `env_key` is set, identifies an environment variable that must be set when
+# using Codex with this provider. The value of the environment variable must be
+# non-empty and will be used in the `Bearer TOKEN` HTTP header for the POST request.
+env_key = &quot;OPENAI_API_KEY&quot;
+# Valid values for wire_api are &quot;chat&quot; and &quot;responses&quot;. Defaults to &quot;chat&quot; if omitted.
+wire_api = &quot;chat&quot;
+# If necessary, extra query params that need to be added to the URL.
+# See the Azure example below.
+query_params = {}
+</code></pre>
+<p>Note this makes it possible to use Codex CLI with non-OpenAI models, so long as they use a wire API that is compatible with the OpenAI chat completions API. For example, you could define the following provider to use Codex CLI with Ollama running locally:</p>
+<pre><code class="language-toml">[model_providers.ollama]
+name = &quot;Ollama&quot;
+base_url = &quot;http://localhost:11434/v1&quot;
+</code></pre>
+<p>Or a third-party provider (using a distinct environment variable for the API key):</p>
+<pre><code class="language-toml">[model_providers.mistral]
+name = &quot;Mistral&quot;
+base_url = &quot;https://api.mistral.ai/v1&quot;
+env_key = &quot;MISTRAL_API_KEY&quot;
+</code></pre>
+<p>It is also possible to configure a provider to include extra HTTP headers with a request. These can be hardcoded values (<code>http_headers</code>) or values read from environment variables (<code>env_http_headers</code>):</p>
+<pre><code class="language-toml">[model_providers.example]
+# name, base_url, ...
+
+# This will add the HTTP header `X-Example-Header` with value `example-value`
+# to each request to the model provider.
+http_headers = { &quot;X-Example-Header&quot; = &quot;example-value&quot; }
+
+# This will add the HTTP header `X-Example-Features` with the value of the
+# `EXAMPLE_FEATURES` environment variable to each request to the model provider
+# _if_ the environment variable is set and its value is non-empty.
+env_http_headers = { &quot;X-Example-Features&quot; = &quot;EXAMPLE_FEATURES&quot; }
+</code></pre>
+<h3 id="azure-model-provider-example">Azure model provider example</h3>
+<p>Note that Azure requires <code>api-version</code> to be passed as a query parameter, so be sure to specify it as part of <code>query_params</code> when defining the Azure provider:</p>
+<pre><code class="language-toml">[model_providers.azure]
+name = &quot;Azure&quot;
+# Make sure you set the appropriate subdomain for this URL.
+base_url = &quot;https://YOUR_PROJECT_NAME.openai.azure.com/openai&quot;
+env_key = &quot;AZURE_OPENAI_API_KEY&quot;  # Or &quot;OPENAI_API_KEY&quot;, whichever you use.
+query_params = { api-version = &quot;2025-04-01-preview&quot; }
+wire_api = &quot;responses&quot;
+</code></pre>
+<p>Export your key before launching Codex: <code>export AZURE_OPENAI_API_KEY=…</code></p>
+<h3 id="per-provider-network-tuning">Per-provider network tuning</h3>
+<p>The following optional settings control retry behaviour and streaming idle timeouts <strong>per model provider</strong>. They must be specified inside the corresponding <code>[model_providers.&lt;id&gt;]</code> block in <code>config.toml</code>. (Older releases accepted top‑level keys; those are now ignored.)</p>
+<p>Example:</p>
+<pre><code class="language-toml">[model_providers.openai]
+name = &quot;OpenAI&quot;
+base_url = &quot;https://api.openai.com/v1&quot;
+env_key = &quot;OPENAI_API_KEY&quot;
+# network tuning overrides (all optional; falls back to built‑in defaults)
+request_max_retries = 4            # retry failed HTTP requests
+stream_max_retries = 10            # retry dropped SSE streams
+stream_idle_timeout_ms = 300000    # 5m idle timeout
+</code></pre>
+<h4 id="requestmaxretries">request_max_retries</h4>
+<p>How many times Codex will retry a failed HTTP request to the model provider. Defaults to <code>4</code>.</p>
+<h4 id="streammaxretries">stream_max_retries</h4>
+<p>Number of times Codex will attempt to reconnect when a streaming response is interrupted. Defaults to <code>5</code>.</p>
+<h4 id="streamidletimeoutms">stream_idle_timeout_ms</h4>
+<p>How long Codex will wait for activity on a streaming response before treating the connection as lost. Defaults to <code>300_000</code> (5 minutes).</p>
+<h2 id="modelprovider">model_provider</h2>
+<p>Identifies which provider to use from the <code>model_providers</code> map. Defaults to <code>"openai"</code>. You can override the <code>base_url</code> for the built-in <code>openai</code> provider via the <code>OPENAI_BASE_URL</code> environment variable.</p>
+<p>Note that if you override <code>model_provider</code>, then you likely want to override
+<code>model</code>, as well. For example, if you are running ollama with Mistral locally,
+then you would need to add the following to your config in addition to the new entry in the <code>model_providers</code> map:</p>
+<pre><code class="language-toml">model_provider = &quot;ollama&quot;
+model = &quot;mistral&quot;
+</code></pre>
+<h2 id="approvalpolicy">approval_policy</h2>
+<p>Determines when the user should be prompted to approve whether Codex can execute a command:</p>
+<pre><code class="language-toml"># Codex has hardcoded logic that defines a set of &quot;trusted&quot; commands.
+# Setting the approval_policy to `untrusted` means that Codex will prompt the
+# user before running a command not in the &quot;trusted&quot; set.
+#
+# See https://github.com/openai/codex/issues/1260 for the plan to enable
+# end-users to define their own trusted commands.
+approval_policy = &quot;untrusted&quot;
+</code></pre>
+<p>If you want to be notified whenever a command fails, use "on-failure":</p>
+<pre><code class="language-toml"># If the command fails when run in the sandbox, Codex asks for permission to
+# retry the command outside the sandbox.
+approval_policy = &quot;on-failure&quot;
+</code></pre>
+<p>If you want the model to run until it decides that it needs to ask you for escalated permissions, use "on-request":</p>
+<pre><code class="language-toml"># The model decides when to escalate
+approval_policy = &quot;on-request&quot;
+</code></pre>
+<p>Alternatively, you can have the model run until it is done, and never ask to run a command with escalated permissions:</p>
+<pre><code class="language-toml"># User is never prompted: if the command fails, Codex will automatically try
+# something out. Note the `exec` subcommand always uses this mode.
+approval_policy = &quot;never&quot;
+</code></pre>
+<h2 id="profiles">profiles</h2>
+<p>A <em>profile</em> is a collection of configuration values that can be set together. Multiple profiles can be defined in <code>config.toml</code> and you can specify the one you
+want to use at runtime via the <code>--profile</code> flag.</p>
+<p>Here is an example of a <code>config.toml</code> that defines multiple profiles:</p>
+<pre><code class="language-toml">model = &quot;o3&quot;
+approval_policy = &quot;untrusted&quot;
+
+# Setting `profile` is equivalent to specifying `--profile o3` on the command
+# line, though the `--profile` flag can still be used to override this value.
+profile = &quot;o3&quot;
+
+[model_providers.openai-chat-completions]
+name = &quot;OpenAI using Chat Completions&quot;
+base_url = &quot;https://api.openai.com/v1&quot;
+env_key = &quot;OPENAI_API_KEY&quot;
+wire_api = &quot;chat&quot;
+
+[profiles.o3]
+model = &quot;o3&quot;
+model_provider = &quot;openai&quot;
+approval_policy = &quot;never&quot;
+model_reasoning_effort = &quot;high&quot;
+model_reasoning_summary = &quot;detailed&quot;
+
+[profiles.gpt3]
+model = &quot;gpt-3.5-turbo&quot;
+model_provider = &quot;openai-chat-completions&quot;
+
+[profiles.zdr]
+model = &quot;o3&quot;
+model_provider = &quot;openai&quot;
+approval_policy = &quot;on-failure&quot;
+</code></pre>
+<p>Users can specify config values at multiple levels. Order of precedence is as follows:</p>
+<ol>
+<li>custom command-line argument, e.g., <code>--model o3</code></li>
+<li>as part of a profile, where the <code>--profile</code> is specified via a CLI (or in the config file itself)</li>
+<li>as an entry in <code>config.toml</code>, e.g., <code>model = "o3"</code></li>
+<li>the default value that comes with Codex CLI (i.e., Codex CLI defaults to <code>gpt-5-codex</code>)</li>
+</ol>
+<h2 id="modelreasoningeffort">model_reasoning_effort</h2>
+<p>If the selected model is known to support reasoning (for example: <code>o3</code>, <code>o4-mini</code>, <code>codex-*</code>, <code>gpt-5</code>, <code>gpt-5-codex</code>), reasoning is enabled by default when using the Responses API. As explained in the <a href="https://platform.openai.com/docs/guides/reasoning?api-mode=responses#get-started-with-reasoning">OpenAI Platform documentation</a>, this can be set to:</p>
+<ul>
+<li><code>"minimal"</code></li>
+<li><code>"low"</code></li>
+<li><code>"medium"</code> (default)</li>
+<li><code>"high"</code></li>
+</ul>
+<p>Note: to minimize reasoning, choose <code>"minimal"</code>.</p>
+<h2 id="modelreasoningsummary">model_reasoning_summary</h2>
+<p>If the model name starts with <code>"o"</code> (as in <code>"o3"</code> or <code>"o4-mini"</code>) or <code>"codex"</code>, reasoning is enabled by default when using the Responses API. As explained in the <a href="https://platform.openai.com/docs/guides/reasoning?api-mode=responses#reasoning-summaries">OpenAI Platform documentation</a>, this can be set to:</p>
+<ul>
+<li><code>"auto"</code> (default)</li>
+<li><code>"concise"</code></li>
+<li><code>"detailed"</code></li>
+</ul>
+<p>To disable reasoning summaries, set <code>model_reasoning_summary</code> to <code>"none"</code> in your config:</p>
+<pre><code class="language-toml">model_reasoning_summary = &quot;none&quot;  # disable reasoning summaries
+</code></pre>
+<h2 id="modelverbosity">model_verbosity</h2>
+<p>Controls output length/detail on GPT‑5 family models when using the Responses API. Supported values:</p>
+<ul>
+<li><code>"low"</code></li>
+<li><code>"medium"</code> (default when omitted)</li>
+<li><code>"high"</code></li>
+</ul>
+<p>When set, Codex includes a <code>text</code> object in the request payload with the configured verbosity, for example: <code>"text": { "verbosity": "low" }</code>.</p>
+<p>Example:</p>
+<pre><code class="language-toml">model = &quot;gpt-5&quot;
+model_verbosity = &quot;low&quot;
+</code></pre>
+<p>Note: This applies only to providers using the Responses API. Chat Completions providers are unaffected.</p>
+<h2 id="modelsupportsreasoningsummaries">model_supports_reasoning_summaries</h2>
+<p>By default, <code>reasoning</code> is only set on requests to OpenAI models that are known to support them. To force <code>reasoning</code> to set on requests to the current model, you can force this behavior by setting the following in <code>config.toml</code>:</p>
+<pre><code class="language-toml">model_supports_reasoning_summaries = true
+</code></pre>
+<h2 id="sandboxmode">sandbox_mode</h2>
+<p>Codex executes model-generated shell commands inside an OS-level sandbox.</p>
+<p>In most cases you can pick the desired behaviour with a single option:</p>
+<pre><code class="language-toml"># same as `--sandbox read-only`
+sandbox_mode = &quot;read-only&quot;
+</code></pre>
+<p>The default policy is <code>read-only</code>, which means commands can read any file on
+disk, but attempts to write a file or access the network will be blocked.</p>
+<p>A more relaxed policy is <code>workspace-write</code>. When specified, the current working directory for the Codex task will be writable (as well as <code>$TMPDIR</code> on macOS). Note that the CLI defaults to using the directory where it was spawned as <code>cwd</code>, though this can be overridden using <code>--cwd/-C</code>.</p>
+<p>On macOS (and soon Linux), all writable roots (including <code>cwd</code>) that contain a <code>.git/</code> folder <em>as an immediate child</em> will configure the <code>.git/</code> folder to be read-only while the rest of the Git repository will be writable. This means that commands like <code>git commit</code> will fail, by default (as it entails writing to <code>.git/</code>), and will require Codex to ask for permission.</p>
+<pre><code class="language-toml"># same as `--sandbox workspace-write`
+sandbox_mode = &quot;workspace-write&quot;
+
+# Extra settings that only apply when `sandbox = &quot;workspace-write&quot;`.
+[sandbox_workspace_write]
+# By default, the cwd for the Codex session will be writable as well as $TMPDIR
+# (if set) and /tmp (if it exists). Setting the respective options to `true`
+# will override those defaults.
+exclude_tmpdir_env_var = false
+exclude_slash_tmp = false
+
+# Optional list of _additional_ writable roots beyond $TMPDIR and /tmp.
+writable_roots = [&quot;/Users/YOU/.pyenv/shims&quot;]
+
+# Allow the command being run inside the sandbox to make outbound network
+# requests. Disabled by default.
+network_access = false
+</code></pre>
+<p>To disable sandboxing altogether, specify <code>danger-full-access</code> like so:</p>
+<pre><code class="language-toml"># same as `--sandbox danger-full-access`
+sandbox_mode = &quot;danger-full-access&quot;
+</code></pre>
+<p>This is reasonable to use if Codex is running in an environment that provides its own sandboxing (such as a Docker container) such that further sandboxing is unnecessary.</p>
+<p>Though using this option may also be necessary if you try to use Codex in environments where its native sandboxing mechanisms are unsupported, such as older Linux kernels or on Windows.</p>
+<h2 id="approval-presets">Approval presets</h2>
+<p>Codex provides three main Approval Presets:</p>
+<ul>
+<li>Read Only: Codex can read files and answer questions; edits, running commands, and network access require approval.</li>
+<li>Auto: Codex can read files, make edits, and run commands in the workspace without approval; asks for approval outside the workspace or for network access.</li>
+<li>Full Access: Full disk and network access without prompts; extremely risky.</li>
+</ul>
+<p>You can further customize how Codex runs at the command line using the <code>--ask-for-approval</code> and <code>--sandbox</code> options.</p>
+<h2 id="mcp-servers">MCP Servers</h2>
+<p>You can configure Codex to use <a href="https://modelcontextprotocol.io/about">MCP servers</a> to give Codex access to external applications, resources, or services such as <a href="https://github.com/microsoft/playwright-mcp">Playwright</a>, <a href="https://www.figma.com/blog/design-context-everywhere-you-build/">Figma</a>, <a href="https://context7.com/">documentation</a>, and <a href="https://github.com/mcp?utm_source=blog-source&amp;utm_campaign=mcp-registry-server-launch-2025">more</a>.</p>
+<h3 id="server-transport-configuration">Server transport configuration</h3>
+<h4 id="stdio">STDIO</h4>
+<pre><code class="language-toml"># The top-level table name must be `mcp_servers`
+# The sub-table name (`server-name` in this example) can be anything you would like.
+[mcp_servers.server-name]
+command = &quot;npx&quot;
+# Optional
+args = [&quot;-y&quot;, &quot;mcp-server&quot;]
+# Optional: propagate additional env vars to the MVP server.
+# A default whitelist of env vars will be propagated to the MCP server.
+# https://github.com/openai/codex/blob/main/codex-rs/rmcp-client/src/utils.rs#L82
+env = { &quot;API_KEY&quot; = &quot;value&quot; }
+</code></pre>
+<h4 id="streamable-http">Streamable HTTP</h4>
+<pre><code class="language-toml"># Streamable HTTP requires the experimental rmcp client
+experimental_use_rmcp_client = true
+[mcp_servers.figma]
+url = &quot;http://127.0.0.1:3845/mcp&quot;
+# Optional bearer token to be passed into an `Authorization: Bearer &lt;token&gt;` header
+# Use this with caution because the token is in plaintext.
+bearer_token = &quot;&lt;token&gt;&quot;
+</code></pre>
+<p>Refer to the MCP CLI commands for oauth login</p>
+<h3 id="other-configuration-options">Other configuration options</h3>
+<pre><code class="language-toml"># Optional: override the default 10s startup timeout
+startup_timeout_sec = 20
+# Optional: override the default 60s per-tool timeout
+tool_timeout_sec = 30
+</code></pre>
+<h3 id="experimental-rmcp-client">Experimental RMCP client</h3>
+<p>Codex is transitioning to the <a href="https://github.com/modelcontextprotocol/rust-sdk">official Rust MCP SDK</a> and new functionality such as streamable http servers will only work with the new client.</p>
+<p>Please try and report issues with the new client. To enable it, add this to the top level of your <code>config.toml</code></p>
+<pre><code class="language-toml">experimental_use_rmcp_client = true
+</code></pre>
+<h3 id="mcp-cli-commands">MCP CLI commands</h3>
+<pre><code class="language-shell"># Add a server (env can be repeated; `--` separates the launcher command)
+codex mcp add docs -- docs-server --port 4000
+
+# List configured servers (pretty table or JSON)
+codex mcp list
+codex mcp list --json
+
+# Show one server (table or JSON)
+codex mcp get docs
+codex mcp get docs --json
+
+# Remove a server
+codex mcp remove docs
+
+# Log in to a streamable HTTP server that supports oauth
+codex mcp login SERVER_NAME
+
+# Log out from a streamable HTTP server that supports oauth
+codex mcp logout SERVER_NAME
+</code></pre>
+<h2 id="shellenvironmentpolicy">shell_environment_policy</h2>
+<p>Codex spawns subprocesses (e.g. when executing a <code>local_shell</code> tool-call suggested by the assistant). By default it now passes <strong>your full environment</strong> to those subprocesses. You can tune this behavior via the <strong><code>shell_environment_policy</code></strong> block in <code>config.toml</code>:</p>
+<pre><code class="language-toml">[shell_environment_policy]
+# inherit can be &quot;all&quot; (default), &quot;core&quot;, or &quot;none&quot;
+inherit = &quot;core&quot;
+# set to true to *skip* the filter for `&quot;*KEY*&quot;` and `&quot;*TOKEN*&quot;`
+ignore_default_excludes = false
+# exclude patterns (case-insensitive globs)
+exclude = [&quot;AWS_*&quot;, &quot;AZURE_*&quot;]
+# force-set / override values
+set = { CI = &quot;1&quot; }
+# if provided, *only* vars matching these patterns are kept
+include_only = [&quot;PATH&quot;, &quot;HOME&quot;]
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>inherit</code></td>
+<td>string</td>
+<td><code>all</code></td>
+<td>Starting template for the environment:<br><code>all</code> (clone full parent env), <code>core</code> (<code>HOME</code>, <code>PATH</code>, <code>USER</code>, …), or <code>none</code> (start empty).</td>
+</tr>
+<tr>
+<td><code>ignore_default_excludes</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>When <code>false</code>, Codex removes any var whose <strong>name</strong> contains <code>KEY</code>, <code>SECRET</code>, or <code>TOKEN</code> (case-insensitive) before other rules run.</td>
+</tr>
+<tr>
+<td><code>exclude</code></td>
+<td>array<string></td>
+<td><code>[]</code></td>
+<td>Case-insensitive glob patterns to drop after the default filter.<br>Examples: <code>"AWS_*"</code>, <code>"AZURE_*"</code>.</td>
+</tr>
+<tr>
+<td><code>set</code></td>
+<td>table<string,string></td>
+<td><code>{}</code></td>
+<td>Explicit key/value overrides or additions – always win over inherited values.</td>
+</tr>
+<tr>
+<td><code>include_only</code></td>
+<td>array<string></td>
+<td><code>[]</code></td>
+<td>If non-empty, a whitelist of patterns; only variables that match <em>one</em> pattern survive the final step. (Generally used with <code>inherit = "all"</code>.)</td>
+</tr>
+</tbody>
+</table>
+<p>The patterns are <strong>glob style</strong>, not full regular expressions: <code>*</code> matches any
+number of characters, <code>?</code> matches exactly one, and character classes like
+<code>[A-Z]</code>/<code>[^0-9]</code> are supported. Matching is always <strong>case-insensitive</strong>. This
+syntax is documented in code as <code>EnvironmentVariablePattern</code> (see
+<code>core/src/config_types.rs</code>).</p>
+<p>If you just need a clean slate with a few custom entries you can write:</p>
+<pre><code class="language-toml">[shell_environment_policy]
+inherit = &quot;none&quot;
+set = { PATH = &quot;/usr/bin&quot;, MY_FLAG = &quot;1&quot; }
+</code></pre>
+<p>Currently, <code>CODEX_SANDBOX_NETWORK_DISABLED=1</code> is also added to the environment, assuming network is disabled. This is not configurable.</p>
+<h2 id="otel">otel</h2>
+<p>Codex can emit <a href="https://opentelemetry.io/">OpenTelemetry</a> <strong>log events</strong> that
+describe each run: outbound API requests, streamed responses, user input,
+tool-approval decisions, and the result of every tool invocation. Export is
+<strong>disabled by default</strong> so local runs remain self-contained. Opt in by adding an
+<code>[otel]</code> table and choosing an exporter.</p>
+<pre><code class="language-toml">[otel]
+environment = &quot;staging&quot;   # defaults to &quot;dev&quot;
+exporter = &quot;none&quot;          # defaults to &quot;none&quot;; set to otlp-http or otlp-grpc to send events
+log_user_prompt = false    # defaults to false; redact prompt text unless explicitly enabled
+</code></pre>
+<p>Codex tags every exported event with <code>service.name = $ORIGINATOR</code> (the same
+value sent in the <code>originator</code> header, <code>codex_cli_rs</code> by default), the CLI
+version, and an <code>env</code> attribute so downstream collectors can distinguish
+dev/staging/prod traffic. Only telemetry produced inside the <code>codex_otel</code>
+crate—the events listed below—is forwarded to the exporter.</p>
+<h3 id="event-catalog">Event catalog</h3>
+<p>Every event shares a common set of metadata fields: <code>event.timestamp</code>,
+<code>conversation.id</code>, <code>app.version</code>, <code>auth_mode</code> (when available),
+<code>user.account_id</code> (when available), <code>terminal.type</code>, <code>model</code>, and <code>slug</code>.</p>
+<p>With OTEL enabled Codex emits the following event types (in addition to the
+metadata above):</p>
+<ul>
+<li><code>codex.conversation_starts</code></li>
+<li><code>provider_name</code></li>
+<li><code>reasoning_effort</code> (optional)</li>
+<li><code>reasoning_summary</code></li>
+<li><code>context_window</code> (optional)</li>
+<li><code>max_output_tokens</code> (optional)</li>
+<li><code>auto_compact_token_limit</code> (optional)</li>
+<li><code>approval_policy</code></li>
+<li><code>sandbox_policy</code></li>
+<li><code>mcp_servers</code> (comma-separated list)</li>
+<li><code>active_profile</code> (optional)</li>
+<li><code>codex.api_request</code></li>
+<li><code>attempt</code></li>
+<li><code>duration_ms</code></li>
+<li><code>http.response.status_code</code> (optional)</li>
+<li><code>error.message</code> (failures)</li>
+<li><code>codex.sse_event</code></li>
+<li><code>event.kind</code></li>
+<li><code>duration_ms</code></li>
+<li><code>error.message</code> (failures)</li>
+<li><code>input_token_count</code> (responses only)</li>
+<li><code>output_token_count</code> (responses only)</li>
+<li><code>cached_token_count</code> (responses only, optional)</li>
+<li><code>reasoning_token_count</code> (responses only, optional)</li>
+<li><code>tool_token_count</code> (responses only)</li>
+<li><code>codex.user_prompt</code></li>
+<li><code>prompt_length</code></li>
+<li><code>prompt</code> (redacted unless <code>log_user_prompt = true</code>)</li>
+<li><code>codex.tool_decision</code></li>
+<li><code>tool_name</code></li>
+<li><code>call_id</code></li>
+<li><code>decision</code> (<code>approved</code>, <code>approved_for_session</code>, <code>denied</code>, or <code>abort</code>)</li>
+<li><code>source</code> (<code>config</code> or <code>user</code>)</li>
+<li><code>codex.tool_result</code></li>
+<li><code>tool_name</code></li>
+<li><code>call_id</code> (optional)</li>
+<li><code>arguments</code> (optional)</li>
+<li><code>duration_ms</code> (execution time for the tool)</li>
+<li><code>success</code> (<code>"true"</code> or <code>"false"</code>)</li>
+<li><code>output</code></li>
+</ul>
+<p>These event shapes may change as we iterate.</p>
+<h3 id="choosing-an-exporter">Choosing an exporter</h3>
+<p>Set <code>otel.exporter</code> to control where events go:</p>
+<ul>
+<li><code>none</code> – leaves instrumentation active but skips exporting. This is the
+  default.</li>
+<li><code>otlp-http</code> – posts OTLP log records to an OTLP/HTTP collector. Specify the
+  endpoint, protocol, and headers your collector expects:</li>
+</ul>
+<p><code>toml
+  [otel]
+  exporter = { otlp-http = {
+    endpoint = "https://otel.example.com/v1/logs",
+    protocol = "binary",
+    headers = { "x-otlp-api-key" = "${OTLP_TOKEN}" }
+  }}</code></p>
+<ul>
+<li><code>otlp-grpc</code> – streams OTLP log records over gRPC. Provide the endpoint and any
+  metadata headers:</li>
+</ul>
+<p><code>toml
+  [otel]
+  exporter = { otlp-grpc = {
+    endpoint = "https://otel.example.com:4317",
+    headers = { "x-otlp-meta" = "abc123" }
+  }}</code></p>
+<p>If the exporter is <code>none</code> nothing is written anywhere; otherwise you must run or point to your
+own collector. All exporters run on a background batch worker that is flushed on
+shutdown.</p>
+<p>If you build Codex from source the OTEL crate is still behind an <code>otel</code> feature
+flag; the official prebuilt binaries ship with the feature enabled. When the
+feature is disabled the telemetry hooks become no-ops so the CLI continues to
+function without the extra dependencies.</p>
+<h2 id="notify">notify</h2>
+<p>Specify a program that will be executed to get notified about events generated by Codex. Note that the program will receive the notification argument as a string of JSON, e.g.:</p>
+<pre><code class="language-json">{
+  &quot;type&quot;: &quot;agent-turn-complete&quot;,
+  &quot;turn-id&quot;: &quot;12345&quot;,
+  &quot;input-messages&quot;: [&quot;Rename `foo` to `bar` and update the callsites.&quot;],
+  &quot;last-assistant-message&quot;: &quot;Rename complete and verified `cargo build` succeeds.&quot;
+}
+</code></pre>
+<p>The <code>"type"</code> property will always be set. Currently, <code>"agent-turn-complete"</code> is the only notification type that is supported.</p>
+<p>As an example, here is a Python script that parses the JSON and decides whether to show a desktop push notification using <a href="https://github.com/julienXX/terminal-notifier">terminal-notifier</a> on macOS:</p>
+<pre><code class="language-python">#!/usr/bin/env python3
+
+import json
+import subprocess
+import sys
+
+
+def main() -&gt; int:
+    if len(sys.argv) != 2:
+        print(&quot;Usage: notify.py &lt;NOTIFICATION_JSON&gt;&quot;)
+        return 1
+
+    try:
+        notification = json.loads(sys.argv[1])
+    except json.JSONDecodeError:
+        return 1
+
+    match notification_type := notification.get(&quot;type&quot;):
+        case &quot;agent-turn-complete&quot;:
+            assistant_message = notification.get(&quot;last-assistant-message&quot;)
+            if assistant_message:
+                title = f&quot;Codex: {assistant_message}&quot;
+            else:
+                title = &quot;Codex: Turn Complete!&quot;
+            input_messages = notification.get(&quot;input_messages&quot;, [])
+            message = &quot; &quot;.join(input_messages)
+            title += message
+        case _:
+            print(f&quot;not sending a push notification for: {notification_type}&quot;)
+            return 0
+
+    subprocess.check_output(
+        [
+            &quot;terminal-notifier&quot;,
+            &quot;-title&quot;,
+            title,
+            &quot;-message&quot;,
+            message,
+            &quot;-group&quot;,
+            &quot;codex&quot;,
+            &quot;-ignoreDnD&quot;,
+            &quot;-activate&quot;,
+            &quot;com.googlecode.iterm2&quot;,
+        ]
+    )
+
+    return 0
+
+
+if __name__ == &quot;__main__&quot;:
+    sys.exit(main())
+</code></pre>
+<p>To have Codex use this script for notifications, you would configure it via <code>notify</code> in <code>~/.codex/config.toml</code> using the appropriate path to <code>notify.py</code> on your computer:</p>
+<pre><code class="language-toml">notify = [&quot;python3&quot;, &quot;/Users/mbolin/.codex/notify.py&quot;]
+</code></pre>
+<blockquote>
+<p>[!NOTE]
+Use <code>notify</code> for automation and integrations: Codex invokes your external program with a single JSON argument for each event, independent of the TUI. If you only want lightweight desktop notifications while using the TUI, prefer <code>tui.notifications</code>, which uses terminal escape codes and requires no external program. You can enable both; <code>tui.notifications</code> covers in‑TUI alerts (e.g., approval prompts), while <code>notify</code> is best for system‑level hooks or custom notifiers. Currently, <code>notify</code> emits only <code>agent-turn-complete</code>, whereas <code>tui.notifications</code> supports <code>agent-turn-complete</code> and <code>approval-requested</code> with optional filtering.</p>
+</blockquote>
+<h2 id="history">history</h2>
+<p>By default, Codex CLI records messages sent to the model in <code>$CODEX_HOME/history.jsonl</code>. Note that on UNIX, the file permissions are set to <code>o600</code>, so it should only be readable and writable by the owner.</p>
+<p>To disable this behavior, configure <code>[history]</code> as follows:</p>
+<pre><code class="language-toml">[history]
+persistence = &quot;none&quot;  # &quot;save-all&quot; is the default value
+</code></pre>
+<h2 id="fileopener">file_opener</h2>
+<p>Identifies the editor/URI scheme to use for hyperlinking citations in model output. If set, citations to files in the model output will be hyperlinked using the specified URI scheme so they can be ctrl/cmd-clicked from the terminal to open them.</p>
+<p>For example, if the model output includes a reference such as <code>【F:/home/user/project/main.py†L42-L50】</code>, then this would be rewritten to link to the URI <code>vscode://file/home/user/project/main.py:42</code>.</p>
+<p>Note this is <strong>not</strong> a general editor setting (like <code>$EDITOR</code>), as it only accepts a fixed set of values:</p>
+<ul>
+<li><code>"vscode"</code> (default)</li>
+<li><code>"vscode-insiders"</code></li>
+<li><code>"windsurf"</code></li>
+<li><code>"cursor"</code></li>
+<li><code>"none"</code> to explicitly disable this feature</li>
+</ul>
+<p>Currently, <code>"vscode"</code> is the default, though Codex does not verify VS Code is installed. As such, <code>file_opener</code> may default to <code>"none"</code> or something else in the future.</p>
+<h2 id="hideagentreasoning">hide_agent_reasoning</h2>
+<p>Codex intermittently emits "reasoning" events that show the model's internal "thinking" before it produces a final answer. Some users may find these events distracting, especially in CI logs or minimal terminal output.</p>
+<p>Setting <code>hide_agent_reasoning</code> to <code>true</code> suppresses these events in <strong>both</strong> the TUI as well as the headless <code>exec</code> sub-command:</p>
+<pre><code class="language-toml">hide_agent_reasoning = true   # defaults to false
+</code></pre>
+<h2 id="showrawagentreasoning">show_raw_agent_reasoning</h2>
+<p>Surfaces the model’s raw chain-of-thought ("raw reasoning content") when available.</p>
+<p>Notes:</p>
+<ul>
+<li>Only takes effect if the selected model/provider actually emits raw reasoning content. Many models do not. When unsupported, this option has no visible effect.</li>
+<li>Raw reasoning may include intermediate thoughts or sensitive context. Enable only if acceptable for your workflow.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">show_raw_agent_reasoning = true  # defaults to false
+</code></pre>
+<h2 id="modelcontextwindow">model_context_window</h2>
+<p>The size of the context window for the model, in tokens.</p>
+<p>In general, Codex knows the context window for the most common OpenAI models, but if you are using a new model with an old version of the Codex CLI, then you can use <code>model_context_window</code> to tell Codex what value to use to determine how much context is left during a conversation.</p>
+<h2 id="modelmaxoutputtokens">model_max_output_tokens</h2>
+<p>This is analogous to <code>model_context_window</code>, but for the maximum number of output tokens for the model.</p>
+<h2 id="projectdocmaxbytes">project_doc_max_bytes</h2>
+<p>Maximum number of bytes to read from an <code>AGENTS.md</code> file to include in the instructions sent with the first turn of a session. Defaults to 32 KiB.</p>
+<h2 id="projectdocfallbackfilenames">project_doc_fallback_filenames</h2>
+<p>Ordered list of additional filenames to look for when <code>AGENTS.md</code> is missing at a given directory level. The CLI always checks <code>AGENTS.md</code> first; the configured fallbacks are tried in the order provided. This lets monorepos that already use alternate instruction files (for example, <code>CLAUDE.md</code>) work out of the box while you migrate to <code>AGENTS.md</code> over time.</p>
+<pre><code class="language-toml">project_doc_fallback_filenames = [&quot;CLAUDE.md&quot;, &quot;.exampleagentrules.md&quot;]
+</code></pre>
+<p>We recommend migrating instructions to AGENTS.md; other filenames may reduce model performance.</p>
+<h2 id="tui">tui</h2>
+<p>Options that are specific to the TUI.</p>
+<pre><code class="language-toml">[tui]
+# Send desktop notifications when approvals are required or a turn completes.
+# Defaults to false.
+notifications = true
+
+# You can optionally filter to specific notification types.
+# Available types are &quot;agent-turn-complete&quot; and &quot;approval-requested&quot;.
+notifications = [ &quot;agent-turn-complete&quot;, &quot;approval-requested&quot; ]
+</code></pre>
+<blockquote>
+<p>[!NOTE]
+Codex emits desktop notifications using terminal escape codes. Not all terminals support these (notably, macOS Terminal.app and VS Code's terminal do not support custom notifications. iTerm2, Ghostty and WezTerm do support these notifications).</p>
+<p>[!NOTE] &gt; <code>tui.notifications</code> is built‑in and limited to the TUI session. For programmatic or cross‑environment notifications—or to integrate with OS‑specific notifiers—use the top‑level <code>notify</code> option to run an external program that receives event JSON. The two settings are independent and can be used together.</p>
+</blockquote>
+<h2 id="config-reference">Config reference</h2>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type / Values</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>model</code></td>
+<td>string</td>
+<td>Model to use (e.g., <code>gpt-5-codex</code>).</td>
+</tr>
+<tr>
+<td><code>model_provider</code></td>
+<td>string</td>
+<td>Provider id from <code>model_providers</code> (default: <code>openai</code>).</td>
+</tr>
+<tr>
+<td><code>model_context_window</code></td>
+<td>number</td>
+<td>Context window tokens.</td>
+</tr>
+<tr>
+<td><code>model_max_output_tokens</code></td>
+<td>number</td>
+<td>Max output tokens.</td>
+</tr>
+<tr>
+<td><code>approval_policy</code></td>
+<td><code>untrusted</code> | <code>on-failure</code> | <code>on-request</code> | <code>never</code></td>
+<td>When to prompt for approval.</td>
+</tr>
+<tr>
+<td><code>sandbox_mode</code></td>
+<td><code>read-only</code> | <code>workspace-write</code> | <code>danger-full-access</code></td>
+<td>OS sandbox policy.</td>
+</tr>
+<tr>
+<td><code>sandbox_workspace_write.writable_roots</code></td>
+<td>array<string></td>
+<td>Extra writable roots in workspace‑write.</td>
+</tr>
+<tr>
+<td><code>sandbox_workspace_write.network_access</code></td>
+<td>boolean</td>
+<td>Allow network in workspace‑write (default: false).</td>
+</tr>
+<tr>
+<td><code>sandbox_workspace_write.exclude_tmpdir_env_var</code></td>
+<td>boolean</td>
+<td>Exclude <code>$TMPDIR</code> from writable roots (default: false).</td>
+</tr>
+<tr>
+<td><code>sandbox_workspace_write.exclude_slash_tmp</code></td>
+<td>boolean</td>
+<td>Exclude <code>/tmp</code> from writable roots (default: false).</td>
+</tr>
+<tr>
+<td><code>disable_response_storage</code></td>
+<td>boolean</td>
+<td>Required for ZDR orgs.</td>
+</tr>
+<tr>
+<td><code>notify</code></td>
+<td>array<string></td>
+<td>External program for notifications.</td>
+</tr>
+<tr>
+<td><code>instructions</code></td>
+<td>string</td>
+<td>Currently ignored; use <code>experimental_instructions_file</code> or <code>AGENTS.md</code>.</td>
+</tr>
+<tr>
+<td><code>mcp_servers.&lt;id&gt;.command</code></td>
+<td>string</td>
+<td>MCP server launcher command.</td>
+</tr>
+<tr>
+<td><code>mcp_servers.&lt;id&gt;.args</code></td>
+<td>array<string></td>
+<td>MCP server args.</td>
+</tr>
+<tr>
+<td><code>mcp_servers.&lt;id&gt;.env</code></td>
+<td>map<string,string></td>
+<td>MCP server env vars.</td>
+</tr>
+<tr>
+<td><code>mcp_servers.&lt;id&gt;.startup_timeout_sec</code></td>
+<td>number</td>
+<td>Startup timeout in seconds (default: 10). Timeout is applied both for initializing MCP server and initially listing tools.</td>
+</tr>
+<tr>
+<td><code>mcp_servers.&lt;id&gt;.tool_timeout_sec</code></td>
+<td>number</td>
+<td>Per-tool timeout in seconds (default: 60). Accepts fractional values; omit to use the default.</td>
+</tr>
+<tr>
+<td><code>model_providers.&lt;id&gt;.name</code></td>
+<td>string</td>
+<td>Display name.</td>
+</tr>
+<tr>
+<td><code>model_providers.&lt;id&gt;.base_url</code></td>
+<td>string</td>
+<td>API base URL.</td>
+</tr>
+<tr>
+<td><code>model_providers.&lt;id&gt;.env_key</code></td>
+<td>string</td>
+<td>Env var for API key.</td>
+</tr>
+<tr>
+<td><code>model_providers.&lt;id&gt;.wire_api</code></td>
+<td><code>chat</code> | <code>responses</code></td>
+<td>Protocol used (default: <code>chat</code>).</td>
+</tr>
+<tr>
+<td><code>model_providers.&lt;id&gt;.query_params</code></td>
+<td>map<string,string></td>
+<td>Extra query params (e.g., Azure <code>api-version</code>).</td>
+</tr>
+<tr>
+<td><code>model_providers.&lt;id&gt;.http_headers</code></td>
+<td>map<string,string></td>
+<td>Additional static headers.</td>
+</tr>
+<tr>
+<td><code>model_providers.&lt;id&gt;.env_http_headers</code></td>
+<td>map<string,string></td>
+<td>Headers sourced from env vars.</td>
+</tr>
+<tr>
+<td><code>model_providers.&lt;id&gt;.request_max_retries</code></td>
+<td>number</td>
+<td>Per‑provider HTTP retry count (default: 4).</td>
+</tr>
+<tr>
+<td><code>model_providers.&lt;id&gt;.stream_max_retries</code></td>
+<td>number</td>
+<td>SSE stream retry count (default: 5).</td>
+</tr>
+<tr>
+<td><code>model_providers.&lt;id&gt;.stream_idle_timeout_ms</code></td>
+<td>number</td>
+<td>SSE idle timeout (ms) (default: 300000).</td>
+</tr>
+<tr>
+<td><code>project_doc_max_bytes</code></td>
+<td>number</td>
+<td>Max bytes to read from <code>AGENTS.md</code>.</td>
+</tr>
+<tr>
+<td><code>profile</code></td>
+<td>string</td>
+<td>Active profile name.</td>
+</tr>
+<tr>
+<td><code>profiles.&lt;name&gt;.*</code></td>
+<td>various</td>
+<td>Profile‑scoped overrides of the same keys.</td>
+</tr>
+<tr>
+<td><code>history.persistence</code></td>
+<td><code>save-all</code> | <code>none</code></td>
+<td>History file persistence (default: <code>save-all</code>).</td>
+</tr>
+<tr>
+<td><code>history.max_bytes</code></td>
+<td>number</td>
+<td>Currently ignored (not enforced).</td>
+</tr>
+<tr>
+<td><code>file_opener</code></td>
+<td><code>vscode</code> | <code>vscode-insiders</code> | <code>windsurf</code> | <code>cursor</code> | <code>none</code></td>
+<td>URI scheme for clickable citations (default: <code>vscode</code>).</td>
+</tr>
+<tr>
+<td><code>tui</code></td>
+<td>table</td>
+<td>TUI‑specific options.</td>
+</tr>
+<tr>
+<td><code>tui.notifications</code></td>
+<td>boolean | array<string></td>
+<td>Enable desktop notifications in the tui (default: false).</td>
+</tr>
+<tr>
+<td><code>hide_agent_reasoning</code></td>
+<td>boolean</td>
+<td>Hide model reasoning events.</td>
+</tr>
+<tr>
+<td><code>show_raw_agent_reasoning</code></td>
+<td>boolean</td>
+<td>Show raw reasoning (when available).</td>
+</tr>
+<tr>
+<td><code>model_reasoning_effort</code></td>
+<td><code>minimal</code> | <code>low</code> | <code>medium</code> | <code>high</code></td>
+<td>Responses API reasoning effort.</td>
+</tr>
+<tr>
+<td><code>model_reasoning_summary</code></td>
+<td><code>auto</code> | <code>concise</code> | <code>detailed</code> | <code>none</code></td>
+<td>Reasoning summaries.</td>
+</tr>
+<tr>
+<td><code>model_verbosity</code></td>
+<td><code>low</code> | <code>medium</code> | <code>high</code></td>
+<td>GPT‑5 text verbosity (Responses API).</td>
+</tr>
+<tr>
+<td><code>model_supports_reasoning_summaries</code></td>
+<td>boolean</td>
+<td>Force‑enable reasoning summaries.</td>
+</tr>
+<tr>
+<td><code>model_reasoning_summary_format</code></td>
+<td><code>none</code> | <code>experimental</code></td>
+<td>Force reasoning summary format.</td>
+</tr>
+<tr>
+<td><code>chatgpt_base_url</code></td>
+<td>string</td>
+<td>Base URL for ChatGPT auth flow.</td>
+</tr>
+<tr>
+<td><code>experimental_resume</code></td>
+<td>string (path)</td>
+<td>Resume JSONL path (internal/experimental).</td>
+</tr>
+<tr>
+<td><code>experimental_instructions_file</code></td>
+<td>string (path)</td>
+<td>Replace built‑in instructions (experimental).</td>
+</tr>
+<tr>
+<td><code>experimental_use_exec_command_tool</code></td>
+<td>boolean</td>
+<td>Use experimental exec command tool.</td>
+</tr>
+<tr>
+<td><code>responses_originator_header_internal_override</code></td>
+<td>string</td>
+<td>Override <code>originator</code> header value.</td>
+</tr>
+<tr>
+<td><code>projects.&lt;path&gt;.trust_level</code></td>
+<td>string</td>
+<td>Mark project/worktree as trusted (only <code>"trusted"</code> is recognized).</td>
+</tr>
+<tr>
+<td><code>tools.web_search</code></td>
+<td>boolean</td>
+<td>Enable web search tool (alias: <code>web_search_request</code>) (default: false).</td>
+</tr>
+</tbody>
+</table>
+    </main>
+  </div>
+  <script defer src="https://file-cdn-hw.onlinetool.cc/webres_2025/otmin.js"></script>
+</body>
+</html>

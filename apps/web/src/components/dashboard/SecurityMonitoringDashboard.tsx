@@ -184,7 +184,7 @@ export default function SecurityMonitoringDashboard() {
       critical: 'bg-red-100 text-red-800 border-red-200',
       high: 'bg-orange-100 text-orange-800 border-orange-200',
       medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      low: 'bg-blue-100 text-blue-800 border-blue-200',
+      low: 'bg-gray-100 text-gray-800 border-gray-200',
       info: 'bg-gray-100 text-gray-800 border-gray-200'
     };
     return colors[severity as keyof typeof colors] || colors.info;
@@ -192,7 +192,7 @@ export default function SecurityMonitoringDashboard() {
 
   const getStatusColor = (status: string): string => {
     const colors = {
-      healthy: 'text-green-600 bg-green-100',
+      healthy: 'text-orange-600 bg-orange-100',
       degraded: 'text-yellow-600 bg-yellow-100',
       unhealthy: 'text-red-600 bg-red-100'
     };
@@ -280,7 +280,7 @@ export default function SecurityMonitoringDashboard() {
             variant="outline"
             size="sm"
             onClick={() => setAutoRefresh(!autoRefresh)}
-            className={autoRefresh ? 'bg-blue-50' : ''}
+            className={autoRefresh ? 'bg-primary-50' : ''}
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${autoRefresh ? 'animate-spin' : ''}`} />
             Auto-refresh
@@ -306,7 +306,7 @@ export default function SecurityMonitoringDashboard() {
             onClick={() => setSelectedTab(key as any)}
             className={`px-4 py-2 text-sm font-medium rounded-t-lg flex items-center ${
               selectedTab === key
-                ? 'bg-white border-b-2 border-blue-500 text-blue-600'
+                ? 'bg-white border-b-2 border-primary-500 text-primary-600'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -335,7 +335,7 @@ export default function SecurityMonitoringDashboard() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Active Alerts</CardTitle>
-                {data.summary.activeAlerts > 0 ? <AlertCircle className="w-4 h-4 text-red-500" /> : <CheckCircle className="w-4 h-4 text-green-500" />}
+                {data.summary.activeAlerts > 0 ? <AlertCircle className="w-4 h-4 text-red-500" /> : <CheckCircle className="w-4 h-4 text-orange-500" />}
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{data.summary.activeAlerts}</div>
@@ -517,7 +517,7 @@ export default function SecurityMonitoringDashboard() {
                       <TableCell>{new Date(alert.timestamp).toLocaleString()}</TableCell>
                       <TableCell>
                         {alert.resolved ? (
-                          <Badge variant="outline" className="text-green-600 border-green-200">
+                          <Badge variant="outline" className="text-orange-600 border-orange-200">
                             Resolved
                           </Badge>
                         ) : (
@@ -812,7 +812,7 @@ export default function SecurityMonitoringDashboard() {
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="text-center">
-                  <div className="text-3xl font-bold text-blue-600">{data.sessionManagement.activeSessions}</div>
+                  <div className="text-3xl font-bold text-primary-600">{data.sessionManagement.activeSessions}</div>
                   <p className="text-sm text-gray-600">Active Sessions</p>
                 </div>
                 <div className="text-center">

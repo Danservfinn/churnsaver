@@ -1,0 +1,23 @@
+<svg role="img" aria-labelledby="error-title error-desc" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+  <title id="error-title">Error Occurred</title>
+  <desc id="error-desc">A friendly error illustration with a sad cloud</desc>
+  <defs>
+    <linearGradient id="error-primary" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9e9e9e" />
+      <stop offset="100%" stop-color="#616161" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Cloud -->
+  <ellipse cx="200" cy="200" rx="120" ry="80" fill="url(#error-primary)" opacity="0.3" />
+  <ellipse cx="150" cy="180" rx="60" ry="50" fill="url(#error-primary)" opacity="0.3" />
+  <ellipse cx="250" cy="180" rx="60" ry="50" fill="url(#error-primary)" opacity="0.3" />
+  
+  <!-- Sad face -->
+  <circle cx="180" cy="200" r="15" fill="#424242" />
+  <circle cx="220" cy="200" r="15" fill="#424242" />
+  <path d="M 170 230 Q 200 240 230 230" stroke="#424242" stroke-width="4" fill="none" stroke-linecap="round" />
+</svg>
+
+
+

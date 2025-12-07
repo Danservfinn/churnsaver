@@ -1,126 +1,200 @@
 'use client';
 
+import { useState } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Bell, MessageSquare, Gift, TrendingUp, ArrowRight, Settings } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect } from 'react';
+import { useWhop } from '@/lib/context/whop';
 
-export default function Home() {
-  useEffect(() => {
-    // Initialize accessibility features
-    if (typeof window !== 'undefined') {
-      import('@/lib/accessibility').then(({ AccessibilityUtils }) => {
-        AccessibilityUtils.initialize({
-          announcePageChanges: true,
-          announceFormErrors: true,
-          focusManagement: true,
-          keyboardNavigation: true,
-          screenReaderSupport: true,
-          colorContrast: true,
-          reducedMotion: true
-        });
-      });
+export default function HomePage() {
+  const { companyId } = useWhop();
+  const [showSettings, setShowSettings] = useState(false);
 
-      // Initialize Web Vitals monitoring
-      import('web-vitals').then(({ onCLS, onINP, onFCP, onLCP, onTTFB }) => {
-        import('@/lib/metrics').then(({ metrics }) => {
-          // Web Vitals v5 API - FID replaced by INP
-          onCLS((metric) => metrics.recordWebVitals('cls', metric.value));
-          onINP((metric) => metrics.recordWebVitals('inp', metric.value));
-          onFCP((metric) => metrics.recordWebVitals('fcp', metric.value));
-          onLCP((metric) => metrics.recordWebVitals('lcp', metric.value));
-          onTTFB((metric) => metrics.recordWebVitals('ttfb', metric.value));
-        });
-      });
-    }
-  }, []);
+  const features = [
+    {
+      icon: Bell,
+      title: 'Push Notifications',
+      description: 'Automatically notify customers when payments fail, keeping them engaged and informed.',
+    },
+    {
+      icon: MessageSquare,
+      title: 'Direct Messages',
+      description: 'Send personalized recovery messages directly through your platform.',
+    },
+    {
+      icon: Gift,
+      title: 'Smart Incentives',
+      description: 'Offer free days automatically to encourage customers to update their payment method.',
+    },
+    {
+      icon: TrendingUp,
+      title: 'Analytics & Insights',
+      description: 'Track recovery rates, revenue saved, and optimize your strategy with detailed metrics.',
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900" role="main" aria-labelledby="main-heading">
-      <div className="container mx-auto px-4 py-8">
-        <header className="text-center mb-12" role="banner">
-          <h1 id="main-heading" className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
-            Churn Saver
-          </h1>
-          <p className="text-lg text-gray-600 dark:text-gray-300">
-            Recover lost customers with smart nudges and incentives
-          </p>
-        </header>
-
-        <main className="max-w-4xl mx-auto">
-          <div className="grid md:grid-cols-2 gap-8 mb-12">
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow" role="region" aria-labelledby="dashboard-card">
-              <h2 id="dashboard-card" className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
-                Dashboard
-              </h2>
-              <p className="text-gray-600 dark:text-gray-300 mb-4">
-                View recovery cases, KPIs, and manage at-risk memberships
-              </p>
-              <Link
-                href="/dashboard"
-                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                aria-label="Navigate to Dashboard"
-              >
-                Go to Dashboard
-              </Link>
+    <div className="min-h-screen bg-background">
+      {/* Hero Section */}
+      <section className="py-20 px-4">
+        <div className="container mx-auto max-w-5xl">
+          <div className="text-center space-y-6">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-muted border border-border">
+              <span className="text-sm font-medium text-muted-foreground">
+                Join 1,000+ creators recovering revenue
+              </span>
             </div>
 
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow" role="region" aria-labelledby="settings-card">
-              <h2 id="settings-card" className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
-                Settings
-              </h2>
-              <p className="text-gray-600 dark:text-gray-300 mb-4">
-                Configure nudge channels, incentives, and reminder timing
-              </p>
-              <Link
-                href="/settings"
-                className="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
-                aria-label="Navigate to Settings"
-              >
-                Configure Settings
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-foreground">
+              Stop Churn,{' '}
+              <span className="text-primary">Save Revenue</span>
+            </h1>
+
+            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
+              Automatically recover failed payments with smart notifications, incentives, and personalized outreach. 
+              Turn payment failures into successful recoveries.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
+              <Link href={companyId ? `/dashboard/${companyId}` : '/dashboard'}>
+                <Button size="lg" className="gap-2">
+                  View Dashboard
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
               </Link>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => setShowSettings(!showSettings)}
+                className="gap-2"
+              >
+                <Settings className="h-4 w-4" />
+                {showSettings ? 'Hide' : 'Configure'} Settings
+              </Button>
             </div>
           </div>
+        </div>
+      </section>
 
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow" role="region" aria-labelledby="getting-started">
-            <h2 id="getting-started" className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
-              Getting Started
+      {/* Feature Showcase */}
+      <section className="py-16 px-4 bg-muted/50">
+        <div className="container mx-auto max-w-5xl">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-foreground mb-4">
+              Everything You Need
             </h2>
-            <ol className="space-y-4" role="list">
-              <li className="flex items-start space-x-3" role="listitem">
-                <div className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-medium" aria-hidden="true">
-                  1
-                </div>
-                <p className="text-gray-600 dark:text-gray-300">
-                  Configure your Whop app credentials in environment variables
-                </p>
-              </li>
-              <li className="flex items-start space-x-3" role="listitem">
-                <div className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-medium" aria-hidden="true">
-                  2
-                </div>
-                <p className="text-gray-600 dark:text-gray-300">
-                  Set up Supabase database and run migrations
-                </p>
-              </li>
-              <li className="flex items-start space-x-3" role="listitem">
-                <div className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-medium" aria-hidden="true">
-                  3
-                </div>
-                <p className="text-gray-600 dark:text-gray-300">
-                  Configure webhook URLs in Whop dashboard
-                </p>
-              </li>
-              <li className="flex items-start space-x-3" role="listitem">
-                <div className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-medium" aria-hidden="true">
-                  4
-                </div>
-                <p className="text-gray-600 dark:text-gray-300">
-                  Start processing events and recovering customers!
-                </p>
-              </li>
-            </ol>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Powerful features designed to maximize recovery rates and minimize manual work
+            </p>
           </div>
-        </main>
-      </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {features.map((feature) => {
+              const Icon = feature.icon;
+              return (
+                <Card key={feature.title} className="text-center">
+                  <CardHeader>
+                    <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                      <Icon className="h-6 w-6 text-primary" />
+                    </div>
+                    <CardTitle className="text-lg">{feature.title}</CardTitle>
+                    <CardDescription className="text-sm mt-2">
+                      {feature.description}
+                    </CardDescription>
+                  </CardHeader>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Settings Preview Section */}
+      {showSettings && (
+        <section className="py-12 px-4">
+          <div className="container mx-auto max-w-3xl">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl mb-2">Quick Settings</CardTitle>
+                    <CardDescription>
+                      Configure your recovery strategy. Full settings available in the settings page.
+                    </CardDescription>
+                  </div>
+                  <Link href="/settings">
+                    <Button variant="outline" size="sm" className="gap-2">
+                      Full Settings
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Bell className="h-5 w-5 text-primary" />
+                      <span className="font-medium">Push Notifications</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Enabled by default
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Gift className="h-5 w-5 text-primary" />
+                      <span className="font-medium">Incentives</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      3 days free
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="h-5 w-5 text-primary" />
+                      <span className="font-medium">Direct Messages</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Enabled by default
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+      )}
+
+      {/* CTA Section */}
+      <section className="py-16 px-4">
+        <div className="container mx-auto max-w-3xl text-center">
+          <Card className="bg-muted/50">
+            <CardContent className="py-12">
+              <h2 className="text-2xl font-bold mb-4 text-foreground">
+                Ready to <span className="text-primary">Save Revenue</span>?
+              </h2>
+              <p className="text-muted-foreground mb-8 max-w-xl mx-auto">
+                Start recovering failed payments automatically. No credit card required to get started.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Link href={companyId ? `/dashboard/${companyId}` : '/dashboard'}>
+                  <Button size="lg" className="gap-2">
+                    Get Started
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </Link>
+                <Link href="/settings">
+                  <Button variant="outline" size="lg">
+                    Configure Settings
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
     </div>
   );
 }

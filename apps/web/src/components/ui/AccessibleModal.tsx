@@ -413,7 +413,6 @@ const AccessibleModalTrigger = forwardRef<HTMLButtonElement, React.ButtonHTMLAtt
 );
 
 AccessibleModalTrigger.displayName = 'AccessibleModalTrigger';
-
 export { 
   AccessibleModal, 
   AccessibleModalHeader, 

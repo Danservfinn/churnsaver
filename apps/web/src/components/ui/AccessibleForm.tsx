@@ -312,7 +312,7 @@ const AccessibleForm = forwardRef<HTMLFormElement, AccessibleFormProps>(
           >
             <div className="bg-white p-6 rounded-lg shadow-lg">
               <div className="flex items-center space-x-3">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-500"></div>
                 <span>Validating form...</span>
               </div>
             </div>

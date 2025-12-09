@@ -2,7 +2,6 @@
 // Handles payment_failed → recovery case mapping and merging
 
 import { randomUUID } from 'crypto';
-import { sql } from '@/lib/db';
 import { sqlWithRLS } from '@/lib/db-rls';
 import { logger } from '@/lib/logger';
 import { env, additionalEnv } from '@/lib/env';
@@ -10,6 +9,7 @@ import { getMembershipManageUrlResult, terminateMembership as terminateMembershi
 import { getSettingsForCompany } from './settings';
 import { ReminderChannelSettings } from './reminders/notifier';
 import { ReminderNotifier } from './shared/reminderNotifier';
+import { checkRecoveryAllowed, recordRecoveryWithClient } from './subscriptions';
 import {
   errorHandler,
   ErrorCode,
@@ -20,29 +20,74 @@ import {
   AppError
 } from '@/lib/errorHandler';
 
-// Helper function to execute database operations with RLS context
-async function executeWithRLS<T>(
-  operation: (companyId: string) => Promise<T>,
-  companyId: string
-): Promise<T> {
-  // Set RLS context for this operation
-  // Note: setRequestContext is not imported - this appears to be a placeholder
-  // that should be implemented or removed based on actual RLS middleware
-
-  try {
-    return await operation(companyId);
-  } finally {
-    // Clear context after operation
-    // Note: In a real implementation, this would be handled by middleware
-  }
-}
-
 // Constants for better maintainability
 const DEFAULT_ATTEMPT_COUNT = 0;
 const DEFAULT_INCENTIVE_DAYS = 0;
 const OPEN_CASE_STATUS = 'open';
 const RECOVERED_STATUS = 'recovered';
 const CLOSED_NO_RECOVERY_STATUS = 'closed_no_recovery';
+const EXPIRED_STATUS = 'expired';
+const CLICK_THROUGH = 'CLICK_THROUGH';
+const ORGANIC = 'ORGANIC';
+const LEGACY_UNKNOWN = 'LEGACY_UNKNOWN';
+const UNIQUE_OPEN_CASE_INDEX = 'idx_recovery_cases_one_open_per_membership';
+
+interface QualifyingClick {
+  id: string;
+  clicked_at: Date;
+  is_bot_suspected: boolean;
+}
+
+async function findOpenCaseForMembership(
+  companyId: string,
+  membershipId: string,
+  paymentTime: Date,
+  attributionWindowDays: number = additionalEnv.KPI_ATTRIBUTION_WINDOW_DAYS
+): Promise<RecoveryCase | null> {
+  const cutoffDate = new Date(paymentTime);
+  cutoffDate.setDate(cutoffDate.getDate() - attributionWindowDays);
+
+  const cases = await sqlWithRLS.select<RecoveryCase>(
+    `SELECT id, company_id, membership_id, user_id, first_failure_at, status
+     FROM recovery_cases
+     WHERE company_id = $1
+       AND membership_id = $2
+       AND status = 'open'
+       AND first_failure_at >= $3
+     ORDER BY first_failure_at DESC
+     LIMIT 1`,
+    [companyId, membershipId, cutoffDate],
+    { companyId }
+  );
+  return cases[0] || null;
+}
+
+async function findQualifyingClick(
+  caseId: string,
+  membershipId: string,
+  paymentTime: Date,
+  attributionWindowDays: number,
+  companyId: string
+): Promise<QualifyingClick | null> {
+  const windowStart = new Date(paymentTime.getTime() - attributionWindowDays * 24 * 60 * 60 * 1000);
+
+  const clicks = await sqlWithRLS.select<QualifyingClick>(
+    `SELECT c.id, c.clicked_at, c.is_bot_suspected
+     FROM recovery_click_events c
+     INNER JOIN recovery_link_sends ls ON c.link_send_id = ls.id
+     WHERE ls.membership_id = $1
+       AND ls.case_id = $2
+       AND ls.company_id = $5
+       AND c.clicked_at < $3
+       AND c.clicked_at >= $4
+     ORDER BY c.clicked_at DESC
+     LIMIT 1`,
+    [membershipId, caseId, paymentTime, windowStart, companyId],
+    { companyId }
+  );
+
+  return clicks[0] || null;
+}
 
 /**
  * Logs recovery action audit events to the database
@@ -68,7 +113,8 @@ export async function logRecoveryAction(
     await sqlWithRLS.execute(
       `INSERT INTO recovery_actions (company_id, case_id, membership_id, user_id, type, channel, metadata)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [companyId, caseId, membershipId, userId, type, channel || null, JSON.stringify(metadata || {})]
+      [companyId, caseId, membershipId, userId, type, channel || null, JSON.stringify(metadata || {})],
+      { companyId }
     );
   } catch (error) {
     logger.error('Failed to log recovery action', {
@@ -108,7 +154,7 @@ export interface RecoveryCase {
    last_nudge_at: Date | null;
    attempts: number;
    incentive_days: number;
-   status: 'open' | 'recovered' | 'closed_no_recovery';
+  status: 'open' | 'recovered' | 'closed_no_recovery' | 'expired';
    failure_reason: string | null;
    recovered_amount_cents: number;
    created_at: Date;
@@ -125,6 +171,7 @@ export interface PaymentFailedEvent {
    amount?: number;
    currency?: string;
    companyId?: string; // May need to be derived from context
+   occurredAt?: Date;
 }
 
 export interface PaymentSucceededEvent {
@@ -132,14 +179,6 @@ export interface PaymentSucceededEvent {
   membershipId: string;
   userId: string;
   amount: number; // Amount that was successfully collected
-/**
- * createRecoveryCase function
- *
- * Creates a new recovery case from a payment failure event
- * @param event - The payment failed event data
- * @param companyId - The company ID associated with the case
- * @returns The created recovery case or null if creation failed
- */
   currency?: string;
   companyId?: string; // May need to be derived from context
 }
@@ -156,6 +195,7 @@ export interface MembershipInvalidEvent {
    membershipId: string;
    userId: string;
    companyId?: string; // May need to be derived from context
+   occurredAt?: Date;
 }
 /**
  * Creates a new recovery case from a payment failure event
@@ -166,27 +206,31 @@ export interface MembershipInvalidEvent {
 
 // Find existing open recovery case for membership within attribution window
 export async function findExistingCase(
+  companyId: string,
   membershipId: string,
-  attributionWindowDays: number = additionalEnv.KPI_ATTRIBUTION_WINDOW_DAYS
+  attributionWindowDays: number = additionalEnv.KPI_ATTRIBUTION_WINDOW_DAYS,
+  referenceTime: Date = new Date()
 ): Promise<RecoveryCase | null> {
   const result = await errorHandler.wrapAsync(
     async () => {
-      const cutoffDate = calculateCutoffDate(attributionWindowDays);
+      const cutoffDate = calculateCutoffDate(attributionWindowDays, referenceTime);
 
-      const cases = await sql.select<RecoveryCase>(
+      const cases = await sqlWithRLS.select<RecoveryCase>(
         `SELECT * FROM recovery_cases
-         WHERE membership_id = $1
-           AND status = $2
-           AND first_failure_at >= $3
+         WHERE company_id = $1
+           AND membership_id = $2
+           AND status = $3
+           AND first_failure_at >= $4
          ORDER BY first_failure_at DESC
          LIMIT 1`,
-        [membershipId, OPEN_CASE_STATUS, cutoffDate]
+        [companyId, membershipId, OPEN_CASE_STATUS, cutoffDate],
+        { companyId }
       );
 
       return cases[0] || null;
     },
     ErrorCode.DATABASE_QUERY_ERROR,
-    { membershipId, attributionWindowDays }
+    { companyId, membershipId, attributionWindowDays }
   );
 
   if (!result.success) {
@@ -197,9 +241,44 @@ export async function findExistingCase(
   return result.data!;
 }
 
+// Fetch the most recent open case for a membership without an attribution window filter
+async function findAnyOpenCase(
+  companyId: string,
+  membershipId: string
+): Promise<RecoveryCase | null> {
+  const cases = await sqlWithRLS.select<RecoveryCase>(
+    `SELECT * FROM recovery_cases
+     WHERE company_id = $1
+       AND membership_id = $2
+       AND status = 'open'
+     ORDER BY first_failure_at DESC
+     LIMIT 1`,
+    [companyId, membershipId],
+    { companyId }
+  );
+
+  return cases[0] || null;
+}
+
+function isUniqueOpenCaseViolation(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const pgError = error as { code?: string; constraint?: string; detail?: string };
+  if (pgError.code !== '23505') {
+    return false;
+  }
+
+  const matchesConstraint = pgError.constraint === UNIQUE_OPEN_CASE_INDEX;
+  const matchesDetail = pgError.detail?.includes(UNIQUE_OPEN_CASE_INDEX);
+
+  return matchesConstraint || Boolean(matchesDetail);
+}
+
 // Helper function to calculate cutoff date
-function calculateCutoffDate(attributionWindowDays: number): Date {
-  const cutoffDate = new Date();
+function calculateCutoffDate(attributionWindowDays: number, referenceTime: Date = new Date()): Date {
+  const cutoffDate = new Date(referenceTime);
   cutoffDate.setDate(cutoffDate.getDate() - attributionWindowDays);
   return cutoffDate;
 }
@@ -214,34 +293,65 @@ export async function createRecoveryCase(
       // Generate a proper UUID for the case ID
       const caseId = randomUUID();
 
-      const newCase = await sql.insert<RecoveryCase>(
-        `INSERT INTO recovery_cases (
-          id, company_id, membership_id, user_id, first_failure_at,
-          status, failure_reason, attempts
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        RETURNING *`,
-        [
-          caseId,
-          companyId,
-          event.membershipId,
-          event.userId,
-          new Date(), // first_failure_at
-          'open',
-          event.reason || 'payment_failed',
-          0 // attempts start at 0, will be incremented when first nudge is sent
-        ]
-      );
+      try {
+        const newCase = await sqlWithRLS.insert<RecoveryCase>(
+          `INSERT INTO recovery_cases (
+            id, company_id, membership_id, user_id, first_failure_at,
+            status, failure_reason, attempts
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          ON CONFLICT (company_id, membership_id) WHERE status = 'open'
+          DO NOTHING
+          RETURNING *`,
+          [
+            caseId,
+            companyId,
+            event.membershipId,
+            event.userId,
+            event.occurredAt || new Date(), // Use event time, fallback to now
+            'open',
+            event.reason || 'payment_failed',
+            0 // attempts start at 0, will be incremented when first nudge is sent
+          ],
+          { companyId }
+        );
 
-      if (newCase) {
-        logger.info('Created new recovery case', {
-          caseId: newCase.id,
-          membershipId: event.membershipId,
-          userId: event.userId,
-          reason: event.reason
-        });
+        if (newCase) {
+          logger.info('Created new recovery case', {
+            caseId: newCase.id,
+            membershipId: event.membershipId,
+            userId: event.userId,
+            reason: event.reason
+          });
+        } else {
+          logger.warn('Open recovery case already exists, returning existing', {
+            membershipId: event.membershipId,
+            companyId,
+            constraint: UNIQUE_OPEN_CASE_INDEX,
+          });
+
+          const existingOpenCase = await findAnyOpenCase(companyId, event.membershipId);
+          if (existingOpenCase) {
+            return existingOpenCase;
+          }
+        }
+
+        return newCase;
+      } catch (error) {
+        if (isUniqueOpenCaseViolation(error)) {
+          logger.warn('Race detected: open recovery case already exists', {
+            membershipId: event.membershipId,
+            companyId,
+            constraint: UNIQUE_OPEN_CASE_INDEX,
+          });
+
+          const existingOpenCase = await findAnyOpenCase(companyId, event.membershipId);
+          if (existingOpenCase) {
+            return existingOpenCase;
+          }
+        }
+
+        throw error;
       }
-
-      return newCase;
     },
     ErrorCode.DATABASE_QUERY_ERROR,
     {
@@ -267,7 +377,7 @@ export async function updateRecoveryCase(
 ): Promise<RecoveryCase | null> {
   const result = await errorHandler.wrapAsync(
     async () => {
-      const updatedCase = await sql.insert<RecoveryCase>(
+      const updatedCase = await sqlWithRLS.insert<RecoveryCase>(
         `UPDATE recovery_cases
          SET attempts = attempts + 1,
              last_nudge_at = $2,
@@ -279,7 +389,8 @@ export async function updateRecoveryCase(
           existingCase.id,
           new Date(),
           event.reason || null
-        ]
+        ],
+        { companyId: existingCase.company_id }
       );
 
       if (updatedCase) {
@@ -322,7 +433,12 @@ export async function processPaymentFailedEvent(
     });
 
     // Check for existing open case within attribution window
-    const existingCase = await findExistingCase(event.membershipId);
+    const existingCase = await findExistingCase(
+      companyId,
+      event.membershipId,
+      additionalEnv.KPI_ATTRIBUTION_WINDOW_DAYS,
+      event.occurredAt || new Date()
+    );
 
     let recoveryCase: RecoveryCase | null;
 
@@ -382,20 +498,22 @@ export async function processPaymentFailedEvent(
 // Mark case as recovered with amount attribution
 export async function markCaseRecovered(
   caseId: string,
-  amountCents: number
+  amountCents: number,
+  companyId: string
 ): Promise<boolean> {
   const result = await errorHandler.wrapAsync(
     async () => {
-      const dbResult = await sql.execute(
+      const dbResult = await sqlWithRLS.execute(
         `UPDATE recovery_cases
          SET status = $1,
              recovered_amount_cents = $2,
              updated_at = NOW()
-         WHERE id = $3 AND status = $4`,
-        [RECOVERED_STATUS, amountCents, caseId, OPEN_CASE_STATUS]
+         WHERE id = $3 AND status = $4 AND company_id = $5`,
+        [RECOVERED_STATUS, amountCents, caseId, OPEN_CASE_STATUS, companyId],
+        { companyId }
       );
 
-      const success = dbResult > 0;
+      const success = dbResult.rowCount > 0;
       if (success) {
         logger.info('Marked case as recovered', { caseId, amountCents });
       }
@@ -423,7 +541,7 @@ export async function getRecoveryCases(
 ): Promise<RecoveryCase[]> {
   try {
     const { query, params } = buildRecoveryCasesQuery(companyId, status, limit, offset);
-    return await sql.select<RecoveryCase>(query, params);
+    return await sqlWithRLS.select<RecoveryCase>(query, params, { companyId });
   } catch (error) {
     logger.error('Failed to get recovery cases', {
       companyId,
@@ -460,12 +578,13 @@ export async function getCaseByMembershipId(
   companyId: string
 ): Promise<RecoveryCase | null> {
   try {
-    const cases = await sql.select<RecoveryCase>(
+    const cases = await sqlWithRLS.select<RecoveryCase>(
       `SELECT * FROM recovery_cases
        WHERE membership_id = $1 AND company_id = $2
        ORDER BY first_failure_at DESC
        LIMIT 1`,
-      [membershipId, companyId]
+      [membershipId, companyId],
+      { companyId }
     );
 
     return cases[0] || null;
@@ -489,114 +608,201 @@ export async function getCaseManageUrl(
 
 // Mark a recovery case as recovered by membership ID (successful payment attribution)
 export async function markCaseRecoveredByMembership(
+  companyId: string,
   membershipId: string,
   recoveredAmountCents: number,
   successTime?: Date,
-  attributionWindowDays: number = additionalEnv.KPI_ATTRIBUTION_WINDOW_DAYS
+  attributionWindowDays: number = additionalEnv.KPI_ATTRIBUTION_WINDOW_DAYS,
+  eventId?: string
 ): Promise<boolean> {
   try {
     logger.info('Marking case as recovered by membership', {
+      companyId,
       membershipId,
       recoveredAmountCents,
       successTime: successTime?.toISOString(),
-      attributionWindowDays
+      attributionWindowDays,
+      eventId
     });
 
-    // If successTime is provided, enforce the attribution window based on the time difference
-    if (successTime) {
-      // Find the open case for this membership
-      const cases = await sql.select<RecoveryCase>(
-        `SELECT id, membership_id, user_id, first_failure_at, status
-         FROM recovery_cases
-         WHERE membership_id = $1 AND status = 'open'
-         ORDER BY first_failure_at DESC
-         LIMIT 1`,
-        [membershipId]
+    const paymentTime = successTime ?? new Date();
+    const openCase = await findOpenCaseForMembership(
+      companyId,
+      membershipId,
+      paymentTime,
+      attributionWindowDays
+    );
+
+    if (!openCase) {
+      logger.warn('No open case found for membership', { membershipId, companyId });
+      return false;
+    }
+
+    const expiryCutoff = new Date(paymentTime.getTime() - additionalEnv.CASE_EXPIRY_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+
+    // If the open case is outside expiry window, treat as organic/late and skip usage updates
+    if (openCase.first_failure_at < expiryCutoff) {
+      await sqlWithRLS.execute(
+        `UPDATE recovery_cases
+         SET status = 'expired',
+             recovery_type = 'ORGANIC',
+             updated_at = NOW()
+         WHERE id = $1 AND company_id = $2 AND status = 'open'`,
+        [openCase.id, companyId],
+        { companyId }
       );
 
-      if (cases.length === 0) {
-        logger.warn('No open case found for membership', { membershipId });
-        return false;
-      }
+      logger.info('Late success outside expiry window treated as organic (case expired)', {
+        companyId,
+        membershipId,
+        eventId,
+        caseId: openCase.id,
+        firstFailureAt: openCase.first_failure_at,
+        paymentTime: paymentTime.toISOString(),
+        expiryCutoff: expiryCutoff.toISOString()
+      });
+      return true;
+    }
 
-      const case_ = cases[0];
-      const firstFailureTime = new Date(case_.first_failure_at);
-      const timeDiffDays = (successTime.getTime() - firstFailureTime.getTime()) / (1000 * 60 * 60 * 24);
+    const qualifyingClick = await findQualifyingClick(
+      openCase.id,
+      membershipId,
+      paymentTime,
+      attributionWindowDays,
+      companyId
+    );
 
-      if (timeDiffDays > attributionWindowDays) {
-        logger.warn('Success event outside attribution window', {
-          caseId: case_.id,
+    let recoveryType: string =
+      qualifyingClick && !qualifyingClick.is_bot_suspected ? CLICK_THROUGH : ORGANIC;
+    let attributedClickId: string | null =
+      qualifyingClick && !qualifyingClick.is_bot_suspected ? qualifyingClick.id : null;
+    let allowance:
+      | {
+          allowed: boolean;
+          reason?: string;
+        }
+      | null = null;
+
+    if (recoveryType === CLICK_THROUGH) {
+      try {
+        allowance = await checkRecoveryAllowed(openCase.company_id, recoveredAmountCents);
+        if (!allowance.allowed) {
+          logger.warn('Recovery exceeds current tier limits, downgrading to ORGANIC', {
+            companyId: openCase.company_id,
+            membershipId,
+            reason: allowance.reason,
+            amountCents: recoveredAmountCents,
+          });
+          recoveryType = ORGANIC;
+          attributedClickId = null;
+        }
+      } catch (error) {
+        logger.error('Failed to check recovery allowance; aborting recovery to allow retry', {
+          error: error instanceof Error ? error.message : String(error),
+          companyId: openCase.company_id,
           membershipId,
-          firstFailureAt: firstFailureTime.toISOString(),
-          successTime: successTime.toISOString(),
-          timeDiffDays,
-          attributionWindowDays
         });
-        return false;
-      }
-
-      // Update the specific case that matches the attribution window
-      const result = await sql.select<{
-        id: string;
-        membership_id: string;
-        status: string;
-        recovered_amount_cents: number;
-      }>(
-        `UPDATE recovery_cases
-         SET status = 'recovered',
-             recovered_amount_cents = $1
-         WHERE id = $2 AND status = 'open'
-         RETURNING id, membership_id, status, recovered_amount_cents`,
-        [recoveredAmountCents, case_.id]
-      );
-
-      if (result.length > 0) {
-        logger.info('Case marked as recovered by membership with time validation', {
-          caseId: result[0].id,
-          membershipId: result[0].membership_id,
-          recoveredAmountCents: result[0].recovered_amount_cents,
-          timeDiffDays
-        });
-        return true;
-      }
-    } else {
-      // Fallback to original logic if no successTime provided
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - attributionWindowDays);
-
-      const result = await sql.select<{
-        id: string;
-        membership_id: string;
-        status: string;
-        recovered_amount_cents: number;
-      }>(
-        `UPDATE recovery_cases
-         SET status = 'recovered',
-             recovered_amount_cents = $1
-         WHERE membership_id = $2
-           AND status = 'open'
-           AND first_failure_at >= $3
-         RETURNING id, membership_id, status, recovered_amount_cents`,
-        [recoveredAmountCents, membershipId, cutoffDate]
-      );
-
-      if (result.length > 0) {
-        logger.info('Case marked as recovered by membership (fallback)', {
-          caseId: result[0].id,
-          membershipId: result[0].membership_id,
-          recoveredAmountCents: result[0].recovered_amount_cents,
-        });
-        return true;
+        // Propagate to allow caller/job retry instead of silently closing case
+        throw error;
       }
     }
 
-    logger.warn('No open case found to recover', {
+    const amountToPersist = recoveryType === CLICK_THROUGH ? recoveredAmountCents : 0;
+
+    const transactionResult = await sqlWithRLS.transaction(
+      async (client) => {
+      // Idempotency check inside transaction to prevent races
+      if (eventId) {
+        const existingSource = await client.query<{ exists: boolean }>(
+          `SELECT 1 FROM recovery_cases WHERE company_id = $1 AND recovery_source_event_id = $2 LIMIT 1`,
+          [companyId, eventId]
+        );
+
+        if ((existingSource.rowCount ?? 0) > 0) {
+          return { success: true as const, alreadyProcessed: true as const };
+        }
+      }
+
+        const updateResult = await client.query<{
+          id: string;
+          membership_id: string;
+          status: string;
+          recovered_amount_cents: number;
+          recovery_type: string | null;
+          attributed_click_id: string | null;
+          attribution_window_days: number | null;
+          recovery_source_event_id: string | null;
+        }>(
+          `UPDATE recovery_cases
+           SET status = 'recovered',
+               recovered_amount_cents = $1,
+               recovery_type = $2,
+               attributed_click_id = $3,
+               attribution_window_days = $4,
+               recovery_source_event_id = $5,
+               updated_at = NOW()
+           WHERE id = $6
+             AND company_id = $7
+             AND status = 'open'
+             AND first_failure_at >= $8
+           RETURNING id, membership_id, status, recovered_amount_cents, recovery_type, attributed_click_id, attribution_window_days, recovery_source_event_id`,
+          [
+            amountToPersist,
+            recoveryType,
+            attributedClickId,
+            attributionWindowDays,
+            eventId ?? null,
+            openCase.id,
+            companyId,
+            expiryCutoff,
+          ]
+        );
+
+        const updatedCase = updateResult.rows[0];
+        if (!updatedCase) {
+        return { success: false as const, alreadyProcessed: false as const };
+        }
+
+        if (recoveryType === CLICK_THROUGH && allowance?.allowed) {
+          await recordRecoveryWithClient(client, openCase.company_id, recoveredAmountCents);
+        }
+
+        return {
+          success: true as const,
+        alreadyProcessed: false as const,
+          updatedCase,
+        };
+      },
+      { companyId }
+    );
+
+  if (transactionResult.alreadyProcessed) {
+    logger.info('Recovery source event already processed inside transaction', {
+      companyId,
+      membershipId,
+      eventId,
+    });
+    return true;
+  }
+
+  if (transactionResult.success) {
+      logger.info('Case marked as recovered with attribution', {
+        caseId: transactionResult.updatedCase.id,
+        membershipId: transactionResult.updatedCase.membership_id,
+        recoveredAmountCents: transactionResult.updatedCase.recovered_amount_cents,
+        recoveryType: transactionResult.updatedCase.recovery_type,
+        attributedClickId: transactionResult.updatedCase.attributed_click_id,
+        attributionWindowDays,
+      });
+      return true;
+    }
+
+    logger.warn('No open case found to recover during update', {
       membershipId,
       successTime: successTime?.toISOString(),
-      attributionWindowDays
+      attributionWindowDays,
     });
     return false;
-
   } catch (error) {
     logger.error('Failed to mark case as recovered by membership', {
       membershipId,
@@ -608,8 +814,40 @@ export async function markCaseRecoveredByMembership(
   }
 }
 
+export async function isEventAlreadyUsedForRecovery(
+  companyId: string,
+  eventId: string
+): Promise<boolean> {
+  if (!eventId) {
+    return false;
+  }
+
+  try {
+    const existing = await sqlWithRLS.select<{ exists: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM recovery_cases
+         WHERE company_id = $1
+           AND recovery_source_event_id = $2
+       ) AS exists`,
+      [companyId, eventId],
+      { companyId }
+    );
+
+    return existing.length > 0 && existing[0].exists === true;
+  } catch (error) {
+    logger.error('Failed to check if event already used for recovery', {
+      companyId,
+      eventId,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return false;
+  }
+}
+
 // Check if a membership has an active recovery case
 export async function hasActiveRecoveryCase(
+  companyId: string,
   membershipId: string,
   attributionWindowDays: number = additionalEnv.KPI_ATTRIBUTION_WINDOW_DAYS
 ): Promise<boolean> {
@@ -617,13 +855,15 @@ export async function hasActiveRecoveryCase(
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - attributionWindowDays);
 
-    const result = await sql.select<{ count: number }>(
+    const result = await sqlWithRLS.select<{ count: number }>(
       `SELECT COUNT(*) as count
        FROM recovery_cases
-       WHERE membership_id = $1
+       WHERE company_id = $1
+         AND membership_id = $2
          AND status = 'open'
-         AND first_failure_at >= $2`,
-      [membershipId, cutoffDate]
+         AND first_failure_at >= $3`,
+      [companyId, membershipId, cutoffDate],
+      { companyId }
     );
 
     return result[0].count > 0;
@@ -639,6 +879,7 @@ export async function hasActiveRecoveryCase(
 // Process payment succeeded event (recovery attribution)
 export async function processPaymentSucceededEvent(
   event: PaymentSucceededEvent,
+  companyId: string,
   successTime?: Date
 ): Promise<boolean> {
   try {
@@ -656,9 +897,12 @@ export async function processPaymentSucceededEvent(
 
     // Mark the case as recovered with proper attribution window check
     const recovered = await markCaseRecoveredByMembership(
+      companyId,
       event.membershipId,
       amountCents,
-      successTime
+      successTime,
+      additionalEnv.KPI_ATTRIBUTION_WINDOW_DAYS,
+      event.eventId
     );
 
     if (recovered) {
@@ -692,6 +936,7 @@ export async function processPaymentSucceededEvent(
 // Process membership went valid event (recovery attribution)
 export async function processMembershipValidEvent(
   event: MembershipValidEvent,
+  companyId: string,
   successTime?: Date
 ): Promise<boolean> {
   try {
@@ -704,6 +949,7 @@ export async function processMembershipValidEvent(
 
     // Mark the case as recovered (no amount attribution for valid events)
     const recovered = await markCaseRecoveredByMembership(
+      companyId,
       event.membershipId,
       0,
       successTime
@@ -748,7 +994,12 @@ export async function processMembershipInvalidEvent(
     });
 
     // Check if there's already an active case
-    const existingCase = await findExistingCase(event.membershipId);
+    const existingCase = await findExistingCase(
+      companyId,
+      event.membershipId,
+      additionalEnv.KPI_ATTRIBUTION_WINDOW_DAYS,
+      event.occurredAt || new Date()
+    );
 
     if (existingCase) {
       logger.info('Membership invalid event processed - case already exists', {
@@ -820,15 +1071,16 @@ export async function processMembershipInvalidEvent(
 // Record a reminder attempt on a case
 export async function recordReminderAttempt(caseId: string, attemptNumber: number, companyId: string): Promise<boolean> {
   try {
-    const result = await sql.execute(
+    const result = await sqlWithRLS.execute(
       `UPDATE recovery_cases
        SET attempts = $1,
            last_nudge_at = NOW()
        WHERE id = $2 AND company_id = $3`,
-      [attemptNumber, caseId, companyId]
+      [attemptNumber, caseId, companyId],
+      { companyId }
     );
 
-    const success = result > 0;
+    const success = result.rowCount > 0;
     if (success) {
       logger.info('Recorded reminder attempt', { caseId, attemptNumber, companyId });
     } else {
@@ -869,6 +1121,25 @@ export async function sendImmediateRecoveryNudge(
     await recordReminderAttempt(case_.id, 1, case_.company_id);
   }
 
+  await logRecoveryAction(
+    case_.company_id,
+    case_.id,
+    case_.membership_id,
+    case_.user_id,
+    't0_nudge_status',
+    undefined,
+    {
+      pushSent: result.pushSent,
+      dmSent: result.dmSent,
+      incentiveApplied: result.incentiveApplied,
+      error: result.error
+    }
+  );
+
+  if (!(result.pushSent || result.dmSent || result.incentiveApplied)) {
+    logger.warn('T+0 nudge sent no channels', { caseId: case_.id });
+  }
+
   return {
     pushSent: result.pushSent,
     dmSent: result.dmSent,
@@ -888,11 +1159,12 @@ export async function nudgeCaseAgain(
 ): Promise<boolean> {
   try {
     // Get the case details and validate company ownership
-    const cases = await sql.select<RecoveryCase>(
+    const cases = await sqlWithRLS.select<RecoveryCase>(
       `SELECT id, membership_id, user_id, status, attempts, company_id
        FROM recovery_cases
        WHERE id = $1 AND company_id = $2 AND status = 'open'`,
-      [caseId, companyId]
+      [caseId, companyId],
+      { companyId }
     );
 
     if (cases.length === 0) {
@@ -980,21 +1252,23 @@ export async function nudgeCaseAgain(
 export async function cancelRecoveryCase(caseId: string, companyId: string, actorType: string = 'user', actorId: string = 'anonymous'): Promise<boolean> {
   try {
     // Get case details first for audit logging
-    const cases = await sql.select<RecoveryCase>(
+    const cases = await sqlWithRLS.select<RecoveryCase>(
       `SELECT id, membership_id, user_id FROM recovery_cases WHERE id = $1 AND company_id = $2 AND status = 'open'`,
-      [caseId, companyId]
+      [caseId, companyId],
+      { companyId }
     );
 
-    const result = await sql.execute(
+    const result = await sqlWithRLS.execute(
       `UPDATE recovery_cases
        SET status = 'closed_no_recovery'
        WHERE id = $1 AND company_id = $2 AND status = 'open'`,
-      [caseId, companyId]
+      [caseId, companyId],
+      { companyId }
     );
 
     // Check if update was successful (sql.execute returns number of affected rows)
-    if (typeof result === 'number' && result > 0) {
-      logger.info('Recovery case cancelled', { caseId, affectedRows: result });
+    if (typeof result === 'object' && result.rowCount > 0) {
+      logger.info('Recovery case cancelled', { caseId, affectedRows: result.rowCount });
 
       // Log cancellation
       if (cases.length > 0) {
@@ -1023,11 +1297,12 @@ export async function cancelRecoveryCase(caseId: string, companyId: string, acto
 export async function terminateMembership(caseId: string, companyId: string, actorType: string = 'user', actorId: string = 'anonymous'): Promise<boolean> {
   try {
     // Get the case details and validate company ownership
-    const cases = await sql.select<RecoveryCase>(
+    const cases = await sqlWithRLS.select<RecoveryCase>(
       `SELECT id, membership_id, user_id, status, company_id
        FROM recovery_cases
        WHERE id = $1 AND company_id = $2`,
-      [caseId, companyId]
+      [caseId, companyId],
+      { companyId }
     );
 
     if (cases.length === 0) {
@@ -1042,11 +1317,12 @@ export async function terminateMembership(caseId: string, companyId: string, act
 
     if (terminated) {
       // Update case status to reflect termination
-      await sql.execute(
+      await sqlWithRLS.execute(
         `UPDATE recovery_cases
          SET status = 'closed_no_recovery'
          WHERE id = $1`,
-        [caseId]
+        [caseId],
+        { companyId }
       );
 
       logger.info('Membership terminated successfully', {

@@ -5,6 +5,12 @@ import { Pool, PoolClient } from 'pg';
 import { env, isProductionLikeEnvironment } from './env';
 import { logger } from './logger';
 import { getRequestContextSDK } from './whop-sdk';
+import {
+  clearRequestContext as clearALSRequestContext,
+  getRequestContext as getALSRequestContext,
+  RequestContextData,
+  setRequestContext as setALSRequestContext
+} from './requestContext';
 
 // Conditionally import Node.js modules only when available (not in Edge Runtime)
 let readFileSync: (path: string, encoding?: string) => string;
@@ -51,36 +57,18 @@ function getSSLConfiguration(): SSLConfig | undefined {
 
   // Security enhancement: Always validate certificates in production-like environments
   // Only allow insecure SSL in explicit development mode with additional safeguards
-  const isDevelopment = process.env.NODE_ENV === 'development';
-  const allowInsecureSSL = isDevelopment &&
-                           process.env.ALLOW_INSECURE_SSL === 'true' &&
-                           !isProductionLikeEnvironment();
-
   // Security logging: Log SSL configuration decisions
   logger.info('SSL Configuration Decision', {
     sslEnabled,
-    isDevelopment,
+    isDevelopment: process.env.NODE_ENV === 'development',
     isProductionLike: isProductionLikeEnvironment(),
-    allowInsecureSSL,
-    secureValidation: !allowInsecureSSL,
+    secureValidation: true,
     databaseProvider: isSupabase ? 'supabase' : 'other'
   });
 
-  // Alert if insecure SSL is used in production-like environment
-  if (isProductionLikeEnvironment() && allowInsecureSSL) {
-    logger.security('SECURITY ALERT: Insecure SSL configuration detected in production-like environment', {
-      category: 'database-security',
-      severity: 'critical',
-      environment: process.env.NODE_ENV,
-      vercelEnv: process.env.VERCEL_ENV,
-      databaseUrl: env.DATABASE_URL ? '[REDACTED]' : 'not set',
-      sslRejectUnauthorized: false
-    });
-  }
-
   // Certificate pinning support for production deployments
   const sslConfig: SSLConfig = {
-    rejectUnauthorized: !allowInsecureSSL,
+    rejectUnauthorized: true,
   };
 
   // Load custom CA certificate if specified (for certificate pinning)
@@ -144,28 +132,6 @@ function validateSSLConfiguration(): void {
     }
   }
 
-  // Critical security check: Prevent deployment with insecure SSL in production
-  if (sslConfig && !sslConfig.rejectUnauthorized && isProductionLikeEnvironment()) {
-    const error = new Error(
-      'CRITICAL SECURITY VIOLATION: Insecure SSL configuration detected in production environment. ' +
-      'rejectUnauthorized is set to false, which allows man-in-the-middle attacks. ' +
-      'This configuration is not allowed in production deployments. ' +
-      'Remove ALLOW_INSECURE_SSL=true from environment variables or ensure proper SSL certificates are configured.'
-    );
-
-    logger.security('CRITICAL SECURITY ALERT: Insecure SSL in production deployment', {
-      category: 'database-security',
-      severity: 'critical',
-      environment: process.env.NODE_ENV,
-      vercelEnv: process.env.VERCEL_ENV,
-      rejectUnauthorized: sslConfig.rejectUnauthorized,
-      databaseUrl: env.DATABASE_URL ? '[REDACTED]' : 'not set',
-      error: error.message
-    });
-
-    throw error;
-  }
-
   // Additional validation: Ensure certificate pinning is used when specified
   if (process.env.DB_SSL_CA_CERT && sslConfig && !sslConfig.ca && typeof readFileSync === 'function' && typeof join === 'function') {
     logger.warn('Certificate pinning configured but CA certificate not loaded', {
@@ -176,13 +142,6 @@ function validateSSLConfiguration(): void {
 
 // Global database connection with RLS support
 let dbWithRLS: DatabaseWithRLS | null = null;
-
-// Request context storage for the current request
-let currentRequestContext: {
-  companyId?: string;
-  userId?: string;
-  isAuthenticated: boolean;
-} | null = null;
 
 export function getDbWithRLS(): DatabaseWithRLS {
   if (!dbWithRLS) {
@@ -208,10 +167,18 @@ export async function initDbWithRLS(): Promise<void> {
 
   const pool = new Pool({
     connectionString: env.DATABASE_URL,
-    max: 10, // Maximum number of clients in pool
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+    max: 20, // Increased for serverless concurrency
+    idleTimeoutMillis: 10000, // Shorter idle timeout for serverless
+    connectionTimeoutMillis: 5000, // More tolerant for cold starts
     ssl: sslConfig,
+  });
+
+  // Monitor pool errors (helps detect exhaustion or network issues)
+  pool.on('error', (err) => {
+    logger.error('Postgres pool error', {
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
   });
 
   // Validate SSL configuration before testing connection
@@ -246,12 +213,8 @@ export async function closeDbWithRLS(): Promise<void> {
  * Set request context for the current operation
  * This should be called at the beginning of each request
  */
-export function setRequestContext(context: {
-  companyId?: string;
-  userId?: string;
-  isAuthenticated: boolean;
-}): void {
-  currentRequestContext = context;
+export function setRequestContext(context: RequestContextData): void {
+  setALSRequestContext(context);
   logger.debug('Request context set', {
     companyId: context.companyId,
     userId: context.userId,
@@ -262,19 +225,55 @@ export function setRequestContext(context: {
 /**
  * Get current request context
  */
-export function getRequestContext(): {
-  companyId?: string;
-  userId?: string;
-  isAuthenticated: boolean;
-} | null {
-  return currentRequestContext;
+export function getRequestContext(): RequestContextData | undefined {
+  return getALSRequestContext();
 }
 
 /**
  * Clear request context (typically at end of request)
  */
 export function clearRequestContext(): void {
-  currentRequestContext = null;
+  clearALSRequestContext();
+}
+
+/**
+ * Execute a callback with an explicit company RLS context set on the session.
+ * Ensures the context is reset even if the callback throws.
+ */
+export async function withCompanyContext<T>(
+  companyId: string,
+  callback: (client: PoolClient) => Promise<T>
+): Promise<T> {
+  if (!companyId) {
+    throw new Error('companyId is required for RLS context');
+  }
+
+  const pool = getDbWithRLS().pool;
+  const pgClient = await pool.connect();
+
+  try {
+    const isValid = await validateCompanyContext(companyId);
+    if (!isValid) {
+      throw new Error(`Invalid company context: ${companyId}`);
+    }
+
+    await pgClient.query('SELECT set_company_context($1)', [companyId]);
+    logger.debug('withCompanyContext: RLS context set', { companyId });
+
+    const result = await callback(pgClient);
+
+    return result;
+  } finally {
+    try {
+      await pgClient.query('RESET app.current_company_id');
+    } catch (error) {
+      logger.warn('Failed to reset company context after operation', {
+        companyId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+    pgClient.release();
+  }
 }
 
 /**
@@ -290,14 +289,6 @@ export async function extractCompanyContext(request: {
     if (context.companyId && context.companyId !== 'unknown') {
       return context.companyId;
     }
-    
-    // Fallback to environment variable for system operations
-    const fallbackCompanyId = env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID;
-    if (fallbackCompanyId && fallbackCompanyId !== 'unknown') {
-      logger.debug('Using fallback company context', { companyId: fallbackCompanyId });
-      return fallbackCompanyId;
-    }
-    
     return null;
   } catch (error) {
     logger.error('Failed to extract company context', {
@@ -342,8 +333,12 @@ async function validateCompanyContext(companyId?: string): Promise<boolean> {
   }
 
   try {
-    const client = getDbWithRLS().pool;
-    const result = await client.query('SELECT id FROM companies WHERE id = $1', [companyId]);
+    // Company existence check is not tenant-scoped data access; skip RLS to avoid false negatives
+    const result = await sqlWithRLS.query(
+      'SELECT id FROM companies WHERE id = $1',
+      [companyId],
+      { skipRLS: true, enforceCompanyContext: false }
+    );
     
     if (result.rows.length === 0) {
       logger.error('Company validation failed - company not found', { companyId });
@@ -378,7 +373,7 @@ export const sqlWithRLS = {
   ): Promise<{ rows: T[]; rowCount: number }> {
     const client = getDbWithRLS().pool;
     const skipRLS = options?.skipRLS === true;
-    const enforceCompanyContext = options?.enforceCompanyContext !== false;
+    const enforceCompanyContext = options?.enforceCompanyContext ?? true;
     
     try {
       // Acquire connection
@@ -389,16 +384,13 @@ export const sqlWithRLS = {
         
         // Set RLS context if not explicitly skipped
         if (!skipRLS) {
-          // Use provided companyId, then request context, then extract from headers
-          if (!effectiveCompanyId) {
-            if (currentRequestContext?.companyId) {
-              effectiveCompanyId = currentRequestContext.companyId;
-            } else {
-              // For backward compatibility, try to extract from headers
-              // This is a fallback for code that doesn't use setRequestContext
-              logger.warn('Using fallback company context extraction - consider using setRequestContext');
-              effectiveCompanyId = env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID;
-            }
+          const requestContext = getALSRequestContext();
+          if (!effectiveCompanyId && requestContext?.companyId) {
+            effectiveCompanyId = requestContext.companyId;
+          }
+
+          if (enforceCompanyContext && !effectiveCompanyId) {
+            throw new Error('Company context required for tenant-scoped operation');
           }
         }
 
@@ -430,7 +422,7 @@ export const sqlWithRLS = {
         query: text,
         params,
         skipRLS,
-        companyId: options?.companyId || currentRequestContext?.companyId,
+        companyId: options?.companyId || getALSRequestContext()?.companyId,
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
@@ -480,9 +472,9 @@ export const sqlWithRLS = {
       companyId?: string;
       enforceCompanyContext?: boolean;
     }
-  ): Promise<number> {
+  ): Promise<{ rowCount: number }> {
     const result = await this.query(text, params, options);
-    return result.rowCount;
+    return { rowCount: result.rowCount };
   },
 
   /**
@@ -498,7 +490,7 @@ export const sqlWithRLS = {
   ): Promise<T> {
     const client = getDbWithRLS().pool;
     const skipRLS = options?.skipRLS === true;
-    const enforceCompanyContext = options?.enforceCompanyContext !== false;
+    const enforceCompanyContext = options?.enforceCompanyContext ?? true;
     
     try {
       const pgClient = await client.connect();
@@ -510,10 +502,13 @@ export const sqlWithRLS = {
         
         // Set RLS context if not explicitly skipped
         if (!skipRLS) {
-          if (!effectiveCompanyId) {
-            effectiveCompanyId = currentRequestContext?.companyId || 
-                            env.NEXT_PUBLIC_WHOP_APP_ID || 
-                            env.WHOP_APP_ID;
+          const requestContext = getALSRequestContext();
+          if (!effectiveCompanyId && requestContext?.companyId) {
+            effectiveCompanyId = requestContext.companyId;
+          }
+
+          if (enforceCompanyContext && !effectiveCompanyId) {
+            throw new Error('Company context required for tenant-scoped operation');
           }
 
           // Validate company context if required
@@ -544,7 +539,7 @@ export const sqlWithRLS = {
     } catch (error) {
       logger.error('Database transaction failed', {
         skipRLS,
-        companyId: options?.companyId || currentRequestContext?.companyId,
+        companyId: options?.companyId || getALSRequestContext()?.companyId,
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;

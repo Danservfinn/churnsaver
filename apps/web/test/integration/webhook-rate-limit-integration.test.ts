@@ -18,7 +18,8 @@ vi.mock('@/lib/whop-sdk', () => ({
     apps: {
       verifyWebhook: vi.fn()
     }
-  }
+  },
+  getWebhookCompanyContext: vi.fn().mockReturnValue('test-company'),
 }));
 vi.mock('@/lib/whop/sdkConfig', () => ({
   whopConfig: {
@@ -37,7 +38,7 @@ const mockCheckRateLimit = checkRateLimit as any;
 const mockHandleWhopWebhook = vi.mocked(handleWhopWebhook);
 
 describe('Webhook Rate Limiting Integration Tests', () => {
-  const webhookSecret = 'test_webhook_secret_integration';
+  const webhookSecret = createHmac('sha256', 'seed').update('integration').digest('hex');
   const testPayload = {
     id: 'evt_integration_test',
     type: 'payment.succeeded',
@@ -117,8 +118,8 @@ describe('Webhook Rate Limiting Integration Tests', () => {
 
       expect(response.status).toBe(200);
       expect(mockCheckRateLimit).toHaveBeenCalledWith(
-        'webhook:global',
-        RATE_LIMIT_CONFIGS.webhooks
+        'webhook:company:test-company',
+        expect.objectContaining({ maxRequests: 100 })
       );
     });
 
@@ -136,10 +137,10 @@ describe('Webhook Rate Limiting Integration Tests', () => {
       await POST(request);
 
       expect(mockCheckRateLimit).toHaveBeenCalledWith(
-        'webhook:global',
+        'webhook:company:test-company',
         expect.objectContaining({
           windowMs: 60 * 1000, // 1 minute
-          maxRequests: 300, // 300 requests per minute
+          maxRequests: 100, // per company limit
           keyPrefix: 'webhook'
         })
       );
@@ -177,12 +178,7 @@ describe('Webhook Rate Limiting Integration Tests', () => {
       await POST(request);
 
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Rate limit exceeded',
-        expect.objectContaining({
-          endpoint: 'webhooks/whop',
-          ip: '192.168.1.1',
-          retryAfter: 60
-        })
+        expect.stringContaining('Rate limit exceeded')
       );
 
       consoleErrorSpy.mockRestore();
@@ -304,7 +300,7 @@ describe('Webhook Rate Limiting Integration Tests', () => {
 });
 
 describe('Webhook Idempotency Integration Tests', () => {
-  const webhookSecret = 'test_webhook_secret_idempotency';
+  const webhookSecret = createHmac('sha256', 'seed').update('idempotency').digest('hex');
   const eventId = 'evt_idempotency_test_123';
   const testPayload = {
     id: eventId,

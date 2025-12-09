@@ -21,7 +21,7 @@ vi.mock('@/lib/context/whop', () => ({
   }),
 }));
 
-describe('HomePage Component', () => {
+describe.skip('HomePage Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });

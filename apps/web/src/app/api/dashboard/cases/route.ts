@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sql, initDb } from '@/lib/db';
+import { initDbWithRLS, sqlWithRLS, setRequestContext, clearRequestContext } from '@/lib/db-rls';
 import { logger } from '@/lib/logger';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { errorResponses, apiSuccess } from '@/lib/apiResponse';
+import { requireAuthContext } from '@/lib/auth/requireAuth';
 
 export interface RecoveryCaseSummary {
   id: string;
@@ -14,6 +15,8 @@ export interface RecoveryCaseSummary {
   incentive_days: number;
   recovered_amount_cents: number;
   failure_reason: string | null;
+  recovery_type: string | null;
+  attributed_click_id: string | null;
   first_failure_at: string;
   last_nudge_at: string | null;
   created_at: string;
@@ -37,23 +40,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   try {
     // Initialize database connection
-    await initDb();
+    await initDbWithRLS();
 
-    // Get company context from middleware headers (set by authentication middleware)
-    const companyId = request.headers.get('x-company-id');
-    const userId = request.headers.get('x-user-id');
-    const isAuthenticated = request.headers.get('x-authenticated') === 'true';
-
-    // Validate required context
-    if (!companyId) {
-      logger.error('Missing company context in dashboard cases request');
-      return errorResponses.unauthorizedResponse('Company context required');
+    const auth = await requireAuthContext(request);
+    if (!auth.success || !auth.context) {
+      return auth.response ?? errorResponses.unauthorizedResponse(auth.error || 'Authentication required');
     }
 
-    // Enforce authentication in production for creator-facing endpoints
-    if (process.env.NODE_ENV === 'production' && !isAuthenticated) {
-      logger.warn('Unauthorized request to dashboard cases - missing valid auth token');
-      return errorResponses.unauthorizedResponse('Authentication required');
+    const { companyId, userId, isAuthenticated } = auth.context;
+    if (!companyId) {
+      logger.warn('Dashboard cases request missing companyId in auth context');
+      return errorResponses.badRequestResponse('Company context is required');
     }
 
     // Apply rate limiting for creator-facing case actions (30/min per company)
@@ -77,9 +74,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const offset = (page - 1) * limit;
 
     // Parse filters
-    const status = searchParams.get('status'); // 'open', 'recovered', 'closed_no_recovery'
-    const startDate = searchParams.get('startDate'); // ISO date string
-    const endDate = searchParams.get('endDate'); // ISO date string
+    const status = searchParams.get('status') ?? undefined; // 'open', 'recovered', 'closed_no_recovery'
+    const startDate = searchParams.get('startDate') ?? undefined; // ISO date string
+    const endDate = searchParams.get('endDate') ?? undefined; // ISO date string
 
     // Build WHERE clause conditions (always include company_id)
     const conditions: string[] = [];
@@ -121,25 +118,31 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       filters: { status, startDate, endDate }
     });
 
-    // Query cases and total count in parallel
+    setRequestContext({
+      companyId,
+      userId: userId ?? undefined,
+      isAuthenticated
+    });
+
+    // Query cases and total count in parallel with enforced RLS
     const [casesResult, totalResult] = await Promise.all([
-      // Get paginated cases
-      sql.select<RecoveryCaseSummary>(
+      sqlWithRLS.select<RecoveryCaseSummary>(
         `SELECT
           id, membership_id, user_id, company_id, status, attempts,
-          incentive_days, recovered_amount_cents, failure_reason,
+          incentive_days, recovered_amount_cents, failure_reason, recovery_type, attributed_click_id,
           first_failure_at, last_nudge_at, created_at
          FROM recovery_cases
          ${whereClause}
          ORDER BY first_failure_at DESC
          LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
-        [...params, limit, offset]
+        [...params, limit, offset],
+        { companyId }
       ),
 
-      // Get total count
-      sql.select<{ count: number }>(
+      sqlWithRLS.select<{ count: number }>(
         `SELECT COUNT(*) as count FROM recovery_cases ${whereClause}`,
-        params
+        params,
+        { companyId }
       )
     ]);
 
@@ -177,5 +180,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     });
 
     return errorResponses.internalServerErrorResponse('Failed to fetch cases');
+  } finally {
+    clearRequestContext();
   }
 }

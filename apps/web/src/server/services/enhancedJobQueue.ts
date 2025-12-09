@@ -1,6 +1,7 @@
 // Enhanced Job Queue Service
 // Extends existing job queue with circuit breaker, exponential backoff, dead letter queue, and comprehensive error handling
 
+import { randomInt } from 'crypto';
 import PgBoss from 'pg-boss';
 import { logger } from '@/lib/logger';
 import { sql } from '@/lib/db';
@@ -11,6 +12,7 @@ import { jobQueueMetrics, JobQueueMetricsService } from '@/lib/jobQueueMetrics';
 import { errorMonitoringIntegration } from '@/lib/errorMonitoringIntegration';
 import { AppError, ErrorCode, ErrorCategory, ErrorSeverity } from '@/lib/apiResponse';
 import { CategorizedError, categorizeAndLogError } from '@/lib/errorCategorization';
+import { sqlWithRLS } from '@/lib/db-rls';
 import { processWebhookEvent, ProcessedEvent } from './eventProcessor';
 import { processPendingReminders } from '../cron/processReminders';
 import {
@@ -27,6 +29,7 @@ import {
   createProcessedEvent,
   calculateJobMetrics
 } from './shared/jobHelpers';
+import { acquireEventLockWithClient } from './shared/advisoryLock';
 
 // Enhanced job interface
 export interface EnhancedJob {
@@ -222,6 +225,10 @@ export class EnhancedJobQueueService {
   async enqueueWebhookJob(data: JobData): Promise<string> {
     if (!this.boss) await this.init();
 
+    if (!data.companyId) {
+      throw new Error('companyId is required to enqueue webhook job');
+    }
+
     try {
       const maxRetries = this.config.retry.maxAttempts[this.WEBHOOK_PROCESSING_JOB] || 
                         this.config.retry.maxAttempts.default;
@@ -388,48 +395,106 @@ export class EnhancedJobQueueService {
         return { success: true, eventId: data.eventId, skipped: true };
       }
 
-      // Process with circuit breaker
-      const result = await this.executeWithCircuitBreaker(
-        async () => {
-          const processedEvent = createProcessedEvent(
-            data.eventId,
-            data.eventType,
-            data.membershipId,
-            data.payload,
-            data.eventCreatedAt
+      const processingResult = await sqlWithRLS.transaction(
+        async (client) => {
+          if (!data.companyId) {
+            throw new Error('Missing companyId for webhook processing job');
+          }
+          const companyId = data.companyId;
+
+          const lockAcquired = await acquireEventLockWithClient(client, companyId, data.eventId);
+          if (!lockAcquired) {
+            return { skipped: true as const, success: true as const, lockContended: true as const };
+          }
+
+          const existing = await client.query<{ processed: boolean }>(
+            `SELECT processed
+             FROM events
+             WHERE whop_event_id = $1
+               AND company_id = $2
+               AND company_resolution_status = 'resolved'
+             FOR UPDATE`,
+            [data.eventId, companyId]
           );
 
-          return await processWebhookEvent(processedEvent, data.companyId || 'unknown');
-        },
-        this.WEBHOOK_PROCESSING_JOB,
-        enhancedJob
-      );
+          if ((existing.rowCount ?? 0) === 0) {
+            throw new Error(`Event ${data.eventId} not found for processing`);
+          }
 
-      // Update event processing status
-      await updateEventProcessingStatus(
-        data.eventId,
-        data.companyId!,
-        result,
-        result ? undefined : 'processing_failed'
+          if (existing.rows[0].processed) {
+            return { skipped: true as const, success: true as const };
+          }
+
+          const result = await this.executeWithCircuitBreaker(
+            async () => {
+              const processedEvent = createProcessedEvent(
+                data.eventId,
+                data.eventType,
+                data.membershipId,
+                data.payload,
+                data.eventCreatedAt
+              );
+
+              return await processWebhookEvent(processedEvent, companyId);
+            },
+            this.WEBHOOK_PROCESSING_JOB,
+            enhancedJob
+          );
+
+          await client.query(
+            `UPDATE events
+             SET processed = $1,
+                 error = $2,
+                 processed_at = NOW()
+             WHERE whop_event_id = $3
+               AND company_id = $4`,
+            [
+              result,
+              result ? null : 'processing_failed',
+              data.eventId,
+              companyId
+            ]
+          );
+
+          return { skipped: false as const, success: result };
+        },
+      { companyId: data.companyId, enforceCompanyContext: false }
       );
 
       const duration = Date.now() - startTime;
       this.processingTimes.push(duration);
 
+      if (processingResult.skipped) {
+        await this.recordJobMetrics(enhancedJob, 'completed', duration, undefined, {
+          skipped: true,
+          duplicate: false,
+          lockContention: (processingResult as any).lockContended === true
+        });
+
+        logger.info('Skipping webhook processing - event lock not acquired or already processed', {
+          jobId,
+          eventId: data.eventId,
+          companyId: data.companyId,
+          lockContended: (processingResult as any).lockContended === true
+        });
+
+        return { success: true, eventId: data.eventId, skipped: true };
+      }
+
       await this.recordJobMetrics(enhancedJob, 'completed', duration, undefined, {
         eventId: data.eventId,
-        success: result
+        success: processingResult.success
       });
 
       logger.info('Enhanced webhook job completed', {
         jobId,
         eventId: data.eventId,
-        success: result,
+        success: processingResult.success,
         duration,
         attempts: enhancedJob.attempts
       });
 
-      return { success: result, eventId: data.eventId };
+      return { success: processingResult.success, eventId: data.eventId };
 
     } catch (error) {
       const duration = Date.now() - startTime;
@@ -603,10 +668,12 @@ export class EnhancedJobQueueService {
     let delay = baseDelay * Math.pow(backoffMultiplier, attempt);
     delay = Math.min(delay, maxDelay);
 
-    // Add jitter to prevent thundering herd
+    // Add jitter to prevent thundering herd (using crypto for security compliance)
     if (this.config.retry.jitter) {
-      const jitterRange = delay * 0.1;
-      delay += Math.random() * jitterRange - jitterRange / 2;
+      const jitterRange = Math.floor(delay * 0.1);
+      // randomInt generates a secure random integer in [0, max)
+      const jitter = jitterRange > 0 ? randomInt(jitterRange) - Math.floor(jitterRange / 2) : 0;
+      delay += jitter;
     }
 
     return Math.floor(delay);
@@ -833,6 +900,9 @@ export class EnhancedJobQueueService {
       type: this.WEBHOOK_PROCESSING_JOB,
       handler: async (job) => {
         const data = job.payload as JobData;
+        if (!data.companyId) {
+          throw new Error('companyId missing on webhook job payload');
+        }
         const processedEvent = createProcessedEvent(
           data.eventId,
           data.eventType,
@@ -840,7 +910,7 @@ export class EnhancedJobQueueService {
           data.payload,
           data.eventCreatedAt
         );
-        return await processWebhookEvent(processedEvent, job.companyId || 'unknown');
+        return await processWebhookEvent(processedEvent, data.companyId);
       },
       options: {
         maxRetries: this.config.retry.maxAttempts[this.WEBHOOK_PROCESSING_JOB],

@@ -296,7 +296,7 @@ describe('A/B Testing Service Unit Tests', () => {
       const companyId = 'company_123';
       const membershipId = 'mem_123';
 
-      vi.mocked(sql.execute).mockResolvedValue(1);
+      vi.mocked(sql.execute).mockResolvedValue({ rowCount: 1 });
 
       await abTesting.logVariantUsage(variantId, caseId, channel, companyId, membershipId);
 
@@ -334,7 +334,7 @@ describe('A/B Testing Service Unit Tests', () => {
       const caseId = 'case_123';
       const eventType: 'click' | 'convert' = 'convert';
 
-      vi.mocked(sql.execute).mockResolvedValue(1);
+      vi.mocked(sql.execute).mockResolvedValue({ rowCount: 1 });
 
       await abTesting.logConversion(variantId, caseId, eventType);
 

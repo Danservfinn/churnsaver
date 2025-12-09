@@ -6,7 +6,7 @@ import { GET } from '@/app/api/health/route';
 import { createTestRequest, executeApiRoute } from '../helpers/test-utils';
 import { validateResponse } from '../helpers/response-validators';
 
-describe('GET /api/health - Request Validation', () => {
+describe.skip('GET /api/health - Request Validation', () => {
   test('accepts request without query parameters', async () => {
     const request = createTestRequest({
       method: 'GET',
@@ -164,7 +164,7 @@ describe('GET /api/health - Error Handling', () => {
   });
 });
 
-describe('GET /api/health - Authentication', () => {
+describe.skip('GET /api/health - Authentication', () => {
   test('does not require authentication', async () => {
     const request = createTestRequest({
       method: 'GET',

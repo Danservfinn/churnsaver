@@ -24,12 +24,12 @@ export function createMockQueryResult<T>(rows: T[]): MockQueryResult<T> {
 /**
  * Mock the database sql module
  */
-export function mockDatabase(overrides: {
+export async function mockDatabase(overrides: {
   select?: <T>(query: string, params?: any[]) => Promise<T[]>;
   execute?: (query: string, params?: any[]) => Promise<void>;
   selectOne?: <T>(query: string, params?: any[]) => Promise<T | null>;
 } = {}) {
-  const sqlModule = require('@/lib/db');
+  const sqlModule = await import('@/lib/db');
   
   const defaultMocks = {
     select: vi.fn().mockResolvedValue([]),
@@ -51,8 +51,8 @@ export function mockDatabase(overrides: {
 /**
  * Mock database init
  */
-export function mockDbInit(shouldSucceed: boolean = true) {
-  const dbModule = require('@/lib/db');
+export async function mockDbInit(shouldSucceed: boolean = true) {
+  const dbModule = await import('@/lib/db');
   
   if (shouldSucceed) {
     return vi.spyOn(dbModule, 'initDb').mockResolvedValue(undefined);

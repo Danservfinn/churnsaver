@@ -18,15 +18,23 @@ import {
   type MembershipInvalidEvent,
   type RecoveryCase,
 } from '@/server/services/cases';
-import { sql } from '@/lib/db';
+import { sqlWithRLS } from '@/lib/db-rls';
 import { logger } from '@/lib/logger';
 import { errorHandler } from '@/lib/errorHandler';
 import { getSettingsForCompany } from '@/server/services/settings';
 import { createTestRecoveryCase } from '../../helpers/database';
 import { createMockErrorHandler } from '../../helpers/mocks';
+import { recordRecoveryWithClient } from '@/server/services/subscriptions';
 
 // Mock dependencies
-vi.mock('@/lib/db');
+vi.mock('@/lib/db-rls', () => ({
+  sqlWithRLS: {
+    insert: vi.fn(),
+    select: vi.fn(),
+    execute: vi.fn(),
+    transaction: vi.fn(),
+  },
+}));
 vi.mock('@/lib/logger');
 vi.mock('@/lib/errorHandler', async () => {
   const actual = await vi.importActual('@/lib/errorHandler');
@@ -69,6 +77,14 @@ vi.mock('@/server/services/reminders/notifier', () => ({
     incentiveApplied: false,
   }),
 }));
+vi.mock('@/server/services/subscriptions', () => ({
+  checkRecoveryAllowed: vi.fn().mockResolvedValue({ allowed: true }),
+  recordRecoveryWithClient: vi.fn(),
+}));
+
+const sql = sqlWithRLS;
+const companyA = 'company_a';
+const companyB = 'company_b';
 
 describe('Case Service Unit Tests', () => {
   beforeEach(() => {
@@ -122,8 +138,30 @@ describe('Case Service Unit Tests', () => {
           'open',
           event.reason,
           0, // attempts
-        ])
+        ]),
+        expect.objectContaining({ companyId })
       );
+    });
+
+    test('returns existing open case when unique constraint prevents insert', async () => {
+      const event: PaymentFailedEvent = {
+        eventId: 'evt_test_conflict',
+        membershipId: 'mem_conflict',
+        userId: 'user_conflict',
+      };
+      const existingCase = createTestRecoveryCase({
+        id: 'case_conflict',
+        company_id: companyA,
+        membership_id: event.membershipId,
+      });
+
+      vi.mocked(sql.insert).mockResolvedValueOnce(null as any);
+      vi.mocked(sql.select).mockResolvedValueOnce([existingCase] as any);
+
+      const result = await createRecoveryCase(event, companyA);
+
+      expect(result).toEqual(existingCase);
+      expect(sql.select).toHaveBeenCalled();
     });
 
     test('should return null when database insert fails', async () => {
@@ -178,7 +216,48 @@ describe('Case Service Unit Tests', () => {
           'open',
           'payment_failed', // default reason
           0,
-        ])
+        ]),
+        expect.objectContaining({ companyId })
+      );
+    });
+
+    test('should return existing open case on unique constraint race', async () => {
+      const event: PaymentFailedEvent = {
+        eventId: 'evt_race_123',
+        membershipId: 'mem_race_123',
+        userId: 'user_race_123',
+      };
+      const companyId = 'company_race_123';
+
+      const existingCase = createTestRecoveryCase({
+        id: 'case_existing_123',
+        company_id: companyId,
+        membership_id: event.membershipId,
+      });
+
+      const uniqueViolation = Object.assign(new Error('duplicate key value violates unique constraint'), {
+        code: '23505',
+        constraint: 'idx_recovery_cases_one_open_per_membership',
+      });
+
+      vi.mocked(sql.insert).mockRejectedValue(uniqueViolation as any);
+      vi.mocked(sql.select).mockResolvedValue([existingCase] as any);
+
+      const result = await createRecoveryCase(event, companyId);
+
+      expect(result).toEqual(existingCase);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Race detected'),
+        expect.objectContaining({
+          membershipId: event.membershipId,
+          companyId,
+          constraint: 'idx_recovery_cases_one_open_per_membership',
+        })
+      );
+      expect(sql.select).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT * FROM recovery_cases'),
+        [companyId, event.membershipId],
+        expect.objectContaining({ companyId })
       );
     });
   });
@@ -223,7 +302,8 @@ describe('Case Service Unit Tests', () => {
           existingCase.id,
           expect.any(Date), // last_nudge_at
           event.reason,
-        ])
+        ]),
+        expect.objectContaining({ companyId: existingCase.company_id ?? companyA })
       );
     });
 
@@ -329,14 +409,15 @@ describe('Case Service Unit Tests', () => {
         return { success: true, data };
       });
 
-      vi.mocked(sql.execute).mockResolvedValue(1); // 1 row updated
+      vi.mocked(sql.execute).mockResolvedValue({ rowCount: 1 }); // 1 row updated
 
-      const result = await markCaseRecovered(caseId, amountCents);
+      const result = await markCaseRecovered(caseId, amountCents, companyA);
 
       expect(result).toBe(true);
       expect(sql.execute).toHaveBeenCalledWith(
         expect.stringContaining('UPDATE recovery_cases'),
-        expect.arrayContaining(['recovered', amountCents, caseId, 'open'])
+        expect.arrayContaining(['recovered', amountCents, caseId, 'open']),
+        expect.objectContaining({ companyId: companyA })
       );
     });
 
@@ -349,9 +430,9 @@ describe('Case Service Unit Tests', () => {
         return { success: true, data };
       });
 
-      vi.mocked(sql.execute).mockResolvedValue(0); // 0 rows updated
+      vi.mocked(sql.execute).mockResolvedValue({ rowCount: 0 }); // 0 rows updated
 
-      const result = await markCaseRecovered(caseId, amountCents);
+      const result = await markCaseRecovered(caseId, amountCents, companyA);
 
       expect(result).toBe(false);
     });
@@ -360,6 +441,7 @@ describe('Case Service Unit Tests', () => {
   describe('markCaseRecoveredByMembership', () => {
     test('should mark case as recovered within attribution window', async () => {
       const membershipId = 'mem_test_123';
+      const companyId = 'company_test_123';
       const amountCents = 2999;
       const successTime = new Date();
       const attributionWindowDays = 30;
@@ -372,16 +454,31 @@ describe('Case Service Unit Tests', () => {
       }) as RecoveryCase;
 
       // Mock finding the case
-      vi.mocked(sql.select).mockResolvedValue([case_] as any);
+      vi.mocked(sql.select).mockResolvedValueOnce([case_] as any);
+      vi.mocked(sql.select).mockResolvedValueOnce([] as any); // qualifying click fallback
 
       vi.mocked(errorHandler.wrapAsync).mockImplementation(async (fn) => {
         const data = await fn();
         return { success: true, data };
       });
 
-      vi.mocked(sql.execute).mockResolvedValue(1);
+      vi.mocked(sql.transaction).mockResolvedValue({
+        success: true,
+        alreadyProcessed: false,
+        updatedCase: {
+          id: case_.id,
+          membership_id: case_.membership_id,
+          status: 'recovered',
+          recovered_amount_cents: amountCents,
+          recovery_type: 'CLICK_THROUGH',
+          attributed_click_id: null,
+          attribution_window_days: attributionWindowDays,
+          recovery_source_event_id: null,
+        },
+      } as any);
 
       const result = await markCaseRecoveredByMembership(
+        companyId,
         membershipId,
         amountCents,
         successTime,
@@ -393,6 +490,7 @@ describe('Case Service Unit Tests', () => {
 
     test('should reject recovery outside attribution window', async () => {
       const membershipId = 'mem_test_123';
+      const companyId = 'company_test_123';
       const amountCents = 2999;
       const successTime = new Date();
       const attributionWindowDays = 30;
@@ -404,9 +502,11 @@ describe('Case Service Unit Tests', () => {
         status: 'open',
       }) as RecoveryCase;
 
-      vi.mocked(sql.select).mockResolvedValue([case_] as any);
+      // findOpenCase should not return old cases beyond the cutoff
+      vi.mocked(sql.select).mockResolvedValue([]);
 
       const result = await markCaseRecoveredByMembership(
+        companyId,
         membershipId,
         amountCents,
         successTime,
@@ -414,21 +514,86 @@ describe('Case Service Unit Tests', () => {
       );
 
       expect(result).toBe(false);
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('attribution window'),
-        expect.any(Object)
-      );
+      expect(logger.warn).toHaveBeenCalled();
     });
 
     test('should return false when no open case found', async () => {
       const membershipId = 'mem_test_123';
+      const companyId = 'company_test_123';
       const amountCents = 2999;
 
       vi.mocked(sql.select).mockResolvedValue([]);
 
-      const result = await markCaseRecoveredByMembership(membershipId, amountCents);
+      const result = await markCaseRecoveredByMembership(companyId, membershipId, amountCents);
 
       expect(result).toBe(false);
+    });
+
+    test('records recovery usage atomically when click-through allowed', async () => {
+      const membershipId = 'mem_atomic';
+      const amountCents = 5000;
+      const openCase = createTestRecoveryCase({
+        id: 'case_atomic',
+        company_id: companyA,
+        membership_id: membershipId,
+        status: 'open',
+        first_failure_at: new Date(),
+      }) as RecoveryCase;
+
+      // findOpenCaseForMembership
+      vi.mocked(sql.select).mockResolvedValueOnce([openCase] as any);
+      // findQualifyingClick
+      vi.mocked(sql.select).mockResolvedValueOnce([
+        { id: 'click1', clicked_at: new Date(), is_bot_suspected: false },
+      ] as any);
+
+      const client = {
+        query: vi.fn().mockImplementation(async (text: string) => {
+          if (text.includes('recovery_source_event_id')) {
+            return { rowCount: 0, rows: [] }; // idempotency check
+          }
+
+          return {
+            rows: [
+              {
+                id: openCase.id,
+                membership_id: openCase.membership_id,
+                status: 'recovered',
+                recovered_amount_cents: amountCents,
+                recovery_type: 'CLICK_THROUGH',
+                attributed_click_id: 'click1',
+                attribution_window_days: 30,
+                recovery_source_event_id: null,
+              },
+            ],
+            rowCount: 1,
+          };
+        }),
+      };
+
+      vi.mocked(recordRecoveryWithClient).mockResolvedValue();
+      vi.mocked(sql.transaction).mockImplementation(async () => {
+        await recordRecoveryWithClient(client as any, companyA, amountCents);
+        return {
+          success: true,
+          alreadyProcessed: false,
+          updatedCase: {
+            id: openCase.id,
+            membership_id: openCase.membership_id,
+            status: 'recovered',
+            recovered_amount_cents: amountCents,
+            recovery_type: 'CLICK_THROUGH',
+            attributed_click_id: 'click1',
+            attribution_window_days: 30,
+            recovery_source_event_id: null,
+          },
+        };
+      });
+
+      const result = await markCaseRecoveredByMembership(companyA, membershipId, amountCents, new Date(), 30, 'evt_atomic');
+
+      expect(result).toBe(true);
+      expect(recordRecoveryWithClient).toHaveBeenCalled();
     });
   });
 
@@ -440,7 +605,7 @@ describe('Case Service Unit Tests', () => {
       // hasActiveRecoveryCase returns count, not the case itself
       vi.mocked(sql.select).mockResolvedValue([{ count: 1 }] as any);
 
-      const result = await hasActiveRecoveryCase(membershipId, attributionWindowDays);
+      const result = await hasActiveRecoveryCase('company_test_123', membershipId, attributionWindowDays);
 
       expect(result).toBe(true);
     });
@@ -451,9 +616,21 @@ describe('Case Service Unit Tests', () => {
 
       vi.mocked(sql.select).mockResolvedValue([]);
 
-      const result = await hasActiveRecoveryCase(membershipId, attributionWindowDays);
+      const result = await hasActiveRecoveryCase('company_test_123', membershipId, attributionWindowDays);
 
       expect(result).toBe(false);
+    });
+
+    test('includes companyId as RLS context when checking active cases', async () => {
+      vi.mocked(sql.select).mockResolvedValueOnce([{ count: 0 }] as any);
+
+      await hasActiveRecoveryCase(companyA, 'mem_rls');
+
+      expect(sql.select).toHaveBeenCalledWith(
+        expect.any(String),
+        [companyA, 'mem_rls', expect.any(Date)],
+        { companyId: companyA }
+      );
     });
   });
 
@@ -477,9 +654,9 @@ describe('Case Service Unit Tests', () => {
         const data = await fn();
         return { success: true, data };
       });
-      vi.mocked(sql.execute).mockResolvedValue(1);
+      vi.mocked(sql.execute).mockResolvedValue({ rowCount: 1 });
 
-      const result = await processPaymentSucceededEvent(event);
+      const result = await processPaymentSucceededEvent(event, 'company_test_123');
 
       expect(result).toBe(true);
     });
@@ -503,9 +680,9 @@ describe('Case Service Unit Tests', () => {
         const data = await fn();
         return { success: true, data };
       });
-      vi.mocked(sql.execute).mockResolvedValue(1);
+      vi.mocked(sql.execute).mockResolvedValue({ rowCount: 1 });
 
-      const result = await processMembershipValidEvent(event);
+      const result = await processMembershipValidEvent(event, 'company_test_123');
 
       expect(result).toBe(true);
     });

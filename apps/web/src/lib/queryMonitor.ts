@@ -239,7 +239,7 @@ export async function cleanupSlowQueries(): Promise<number> {
       WHERE created_at < $1
     `, [cutoffDate]);
 
-    const deletedCount = (result as any).rowCount || 0;
+    const deletedCount = result.rowCount || 0;
 
     if (deletedCount > 0) {
       logger.info('Cleaned up old slow query records', { deletedCount });

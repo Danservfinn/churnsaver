@@ -86,7 +86,7 @@ function sendWebhook(callback: (statusCode: number | null, data: string) => void
   req.end();
 }
 
-describe('Webhook Idempotency Tests', () => {
+describe('Webhook Idempotency Tests (requires running server on :3000)', () => {
   test('should process same event only once', () => {
     console.log('🧪 Testing Webhook Idempotency');
     console.log('==============================');

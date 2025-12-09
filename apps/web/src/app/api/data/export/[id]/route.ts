@@ -37,11 +37,11 @@ export async function GET(
 
     // Get company context from request
     const sdkContext = await getRequestContextSDK(request);
-    const companyId = sdkContext.companyId;
-    const userId = sdkContext.userId;
+    const companyId = sdkContext.companyId ?? null;
+    const userId = sdkContext.userId ?? null;
 
     // Enforce authentication in production
-    if (process.env.NODE_ENV === 'production' && !sdkContext.isAuthenticated) {
+    if (process.env.NODE_ENV === 'production' && (!sdkContext.isAuthenticated || !companyId || !userId)) {
       logger.security('Unauthorized request to get export details - missing valid auth token', {
         requestId: context.requestId,
         ip: context.ip,
@@ -51,6 +51,10 @@ export async function GET(
         errors.unauthorized('Authentication required'),
         context
       );
+    }
+
+    if (!companyId || !userId) {
+      return apiError(errors.unauthorized('Company context required'), context);
     }
 
     // Get export request
@@ -139,11 +143,11 @@ export async function DELETE(
 
     // Get company context from request
     const sdkContext = await getRequestContextSDK(request);
-    const companyId = sdkContext.companyId;
-    const userId = sdkContext.userId;
+    const companyId = sdkContext.companyId ?? null;
+    const userId = sdkContext.userId ?? null;
 
     // Enforce authentication in production
-    if (process.env.NODE_ENV === 'production' && !sdkContext.isAuthenticated) {
+    if (process.env.NODE_ENV === 'production' && (!sdkContext.isAuthenticated || !companyId || !userId)) {
       logger.security('Unauthorized request to delete export - missing valid auth token', {
         requestId: context.requestId,
         ip: context.ip,
@@ -153,6 +157,10 @@ export async function DELETE(
         errors.unauthorized('Authentication required'),
         context
       );
+    }
+
+    if (!companyId || !userId) {
+      return apiError(errors.unauthorized('Company context required'), context);
     }
 
     // Apply rate limiting for delete operations

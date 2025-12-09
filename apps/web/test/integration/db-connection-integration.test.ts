@@ -1,7 +1,8 @@
 // Integration tests for Database Connection Management
 // Tests connection pooling, SSL, error handling, and metrics
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { Pool } from 'pg';
 import { initDb, closeDb, getDb } from '../../src/lib/db';
 import { initDbWithRLS, closeDbWithRLS, getDbWithRLS } from '../../src/lib/db-rls';
 
@@ -176,7 +177,14 @@ describe('Database Connection Integration Tests', () => {
       const originalUrl = process.env.DATABASE_URL;
       process.env.DATABASE_URL = 'postgresql://invalid:invalid@localhost:5432/invalid';
 
+      const connectSpy = vi
+        .spyOn(Pool.prototype, 'connect')
+        .mockRejectedValueOnce(new Error('connection failed'));
+
+      await closeDb();
       await expect(initDb()).rejects.toThrow();
+
+      connectSpy.mockRestore();
 
       process.env.DATABASE_URL = originalUrl;
     });
@@ -225,9 +233,16 @@ describe('Database Connection Integration Tests', () => {
       const originalUrl = process.env.DATABASE_URL;
       process.env.DATABASE_URL = 'postgresql://invalid:invalid@localhost:5432/invalid';
 
+      const connectSpy = vi
+        .spyOn(Pool.prototype, 'connect')
+        .mockRejectedValueOnce(new Error('connection failed'));
+
+      await closeDb(); // ensure clean state so initDb uses invalid URL
       await expect(initDb()).rejects.toThrow();
 
+      connectSpy.mockRestore();
       process.env.DATABASE_URL = originalUrl;
+      await closeDb(); // cleanup
     });
   });
 

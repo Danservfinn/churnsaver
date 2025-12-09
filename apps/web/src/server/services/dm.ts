@@ -4,6 +4,7 @@
 import { logger } from '@/lib/logger';
 import { notificationDispatcher, DirectMessagePayload, NotificationResult } from './shared/notificationDispatcher';
 import { logRecoveryAction } from './cases';
+import { createRecoveryLink } from './recoveryLinks';
 
 // Re-export types for backward compatibility
 export type { DirectMessagePayload, NotificationResult };
@@ -38,7 +39,29 @@ export async function sendRecoveryNudgeDM(
   caseId?: string,
   companyId?: string
 ): Promise<NotificationResult> {
-  const message = createRecoveryNudgeMessage(manageUrl, attemptNumber);
+  let trackedUrl = manageUrl;
+
+  if (caseId && companyId) {
+    try {
+      const link = await createRecoveryLink({
+        caseId,
+        companyId,
+        membershipId,
+        userId,
+        channel: 'dm',
+        whopManageUrl: manageUrl,
+      });
+      trackedUrl = link.trackingUrl;
+    } catch (error) {
+      logger.warn('Failed to create tracked DM recovery link, falling back to raw URL', {
+        error: error instanceof Error ? error.message : String(error),
+        caseId,
+        membershipId,
+      });
+    }
+  }
+
+  const message = createRecoveryNudgeMessage(trackedUrl, attemptNumber);
 
   const result = await sendDirectMessage({
     userId,
@@ -51,7 +74,7 @@ export async function sendRecoveryNudgeDM(
     await logRecoveryAction(companyId, caseId, membershipId, userId, 'nudge_dm', 'dm', {
       attemptNumber,
       messageId: result.messageId,
-      manageUrl
+      manageUrl: trackedUrl
     });
   }
 

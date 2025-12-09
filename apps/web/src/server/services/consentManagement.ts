@@ -692,11 +692,11 @@ export class ConsentManagementService {
       const result = await sql.execute('SELECT check_expired_consents()');
 
       logger.info('Expired consents check completed', {
-        updatedCount: result,
+        updatedCount: result.rowCount,
         requestId: context?.requestId
       });
 
-      return result || 0;
+      return result.rowCount || 0;
     } catch (error) {
       logger.error('Failed to check expired consents', {
         error: error instanceof Error ? error.message : String(error),

@@ -281,7 +281,7 @@ After any rollback, verify:
 3. **Managed workflow engine**
    - Pros: Advanced features (observability, at-least-once delivery, retries)
    - Cons: Cost/complexity, overkill for current scale
-   - Options: Temporal Cloud, AWS EventBridge, Cloud Tasks
+   - Options: Temporal Cloud, Cloud Tasks
 
 **Recommended: Option 2 (External cron + secure endpoint) for Vercel/production hosting**
 - Least risky migration from current approach

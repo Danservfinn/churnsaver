@@ -17,10 +17,21 @@ process.env.NODE_ENV = 'test';
 import { vi } from 'vitest';
 
 // Mock any global dependencies if needed
-vi.mock('@/src/lib/env', () => ({
-  DATABASE_URL: 'postgresql://test:test@localhost:5432/test',
-  ENCRYPTION_KEY: 'dGVzdGVkZXlZWJfa2V0NvQ==', // base64 for 'test-key-32-bytes'
-  WHOP_API_KEY: 'test-api-key-for-testing',
+vi.mock('@/lib/env', () => ({
+  env: {
+    DATABASE_URL: 'postgresql://test:test@localhost:5432/test',
+    ENCRYPTION_KEY: 'dGVzdGVkZXlZWJfa2V0NvQ==', // base64 for 'test-key-32-bytes'
+    WHOP_API_KEY: 'test-api-key',
+    WHOP_APP_ID: 'test-app-id',
+    WHOP_WEBHOOK_SECRET: 'whsec_test_secret',
+    NODE_ENV: 'test',
+  },
+  additionalEnv: {
+    KPI_ATTRIBUTION_WINDOW_DAYS: 30,
+    CASE_EXPIRY_WINDOW_DAYS: 90,
+  },
+  isProductionLikeEnvironment: () => false,
+  validateWebhookTimestampSkew: () => {},
 }));
 
 // Mock whop auth service to prevent initialization errors during tests
@@ -87,6 +98,70 @@ WhopAuthService: {
     list: vi.fn().mockResolvedValue([{ id: 'test-subscription-id' }]),
   },
 },
+}));
+
+// Mock Whop SDK config to avoid runtime validation errors
+vi.mock('@/lib/whop/sdkConfig', () => {
+  const config = {
+    appId: 'test-app-id',
+    apiKey: 'test-api-key-for-testing',
+    webhookSecret: 'whsec_test_secret',
+    apiBaseUrl: 'https://api.whop.com/api/v1',
+    requestTimeout: 30000,
+    maxRetries: 0,
+    retryDelay: 0,
+    enableMetrics: false,
+    enableLogging: false,
+    enableRetry: false,
+    environment: 'development',
+    debugMode: false,
+  };
+
+  return {
+    whopConfig: {
+      get: () => config,
+      validate: () => ({ isValid: true, errors: [], warnings: [], config }),
+      isDevelopment: () => true,
+      isStaging: () => false,
+      isProduction: () => false,
+      getCurrentEnvironment: () => 'development',
+    },
+    getWhopSdkConfig: () => config,
+    validateWhopSdkConfig: () => ({ isValid: true, errors: [], warnings: [], config }),
+    isDevelopment: () => true,
+    isStaging: () => false,
+    isProduction: () => false,
+    getCurrentEnvironment: () => 'development',
+  };
+});
+
+// Global mock for Whop SDK to avoid network calls and API key requirements
+vi.mock('@/lib/whop-sdk', () => ({
+  whopsdk: {
+    verifyUserToken: vi.fn().mockResolvedValue({ userId: 'test-user' }),
+    users: {
+      checkAccess: vi.fn().mockResolvedValue({ has_access: true }),
+      retrieve: vi.fn().mockResolvedValue({ id: 'test-user' }),
+    },
+    companies: {
+      retrieve: vi.fn().mockResolvedValue({ id: 'test-company' }),
+    },
+    experiences: {
+      retrieve: vi.fn().mockResolvedValue({ id: 'test-experience' }),
+    },
+  },
+  getRequestContextSDK: vi.fn().mockResolvedValue({
+    companyId: 'test-company',
+    userId: 'test-user',
+    isAuthenticated: true,
+  }),
+  getWebhookCompanyContext: vi.fn().mockReturnValue('test-company'),
+  verifyUserToken: vi.fn().mockResolvedValue({ userId: 'test-user' }),
+  checkUserAccess: vi.fn().mockResolvedValue({ hasAccess: true }),
+  retrieveUser: vi.fn().mockResolvedValue({ id: 'test-user' }),
+  retrieveCompany: vi.fn().mockResolvedValue({ id: 'test-company' }),
+  retrieveExperience: vi.fn().mockResolvedValue({ id: 'test-experience' }),
+  default: {},
 }));
 
 // Setup testing-library/jest-dom matchers for Vitest

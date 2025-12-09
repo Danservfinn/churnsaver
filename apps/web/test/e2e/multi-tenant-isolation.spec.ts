@@ -2,8 +2,23 @@
 import { test, expect } from '@playwright/test';
 import { loginAsUser, setAuthContext } from './helpers/auth';
 import { TEST_COMPANIES } from './helpers/test-data';
+import { seedTestCases, cleanupTestCases } from './helpers/seed-test-data';
 
 test.describe('Multi-Tenant Isolation', () => {
+  test.beforeAll(async () => {
+    await Promise.all([
+      seedTestCases(TEST_COMPANIES.COMPANY_A.id, 2),
+      seedTestCases(TEST_COMPANIES.COMPANY_B.id, 2)
+    ]);
+  });
+
+  test.afterAll(async () => {
+    await Promise.all([
+      cleanupTestCases(TEST_COMPANIES.COMPANY_A.id),
+      cleanupTestCases(TEST_COMPANIES.COMPANY_B.id)
+    ]);
+  });
+
   test('company A cannot access company B data', async ({ page, context }) => {
     // Set Company A context
     await setAuthContext(page, {

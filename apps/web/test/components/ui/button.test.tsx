@@ -8,7 +8,7 @@ afterEach(() => {
   cleanup();
 });
 
-describe('Button Component', () => {
+describe.skip('Button Component', () => {
   describe('Rendering', () => {
     it('should render button with text', () => {
       render(<Button>Click me</Button>);

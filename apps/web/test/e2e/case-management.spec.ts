@@ -1,9 +1,19 @@
 // E2E test: Case Management Workflow
 import { test, expect } from '@playwright/test';
 import { loginAsUser } from './helpers/auth';
-import { createTestCase } from './helpers/test-data';
+import { seedTestCases, cleanupTestCases } from './helpers/seed-test-data';
 
 test.describe('Case Management Workflow', () => {
+  const TEST_COMPANY_ID = 'e2e-test-company';
+
+  test.beforeAll(async () => {
+    await seedTestCases(TEST_COMPANY_ID, 3);
+  });
+
+  test.afterAll(async () => {
+    await cleanupTestCases(TEST_COMPANY_ID);
+  });
+
   test.beforeEach(async ({ page }) => {
     // Login before each test
     await page.goto('/dashboard');
@@ -60,15 +70,7 @@ test.describe('Case Management Workflow', () => {
     await page.goto('/dashboard/cases');
     await page.waitForSelector('[data-testid=case-list]', { timeout: 10000 });
 
-    // Find first case or create one if none exist
     const caseItems = page.locator('[data-testid=case-item]');
-    const caseCount = await caseItems.count();
-
-    if (caseCount === 0) {
-      // Create a case first (you might want to use API or webhook here)
-      test.skip();
-      return;
-    }
 
     // Click on first case
     await caseItems.first().click();
@@ -98,12 +100,6 @@ test.describe('Case Management Workflow', () => {
     await page.waitForSelector('[data-testid=case-list]', { timeout: 10000 });
 
     const caseItems = page.locator('[data-testid=case-item]');
-    const caseCount = await caseItems.count();
-
-    if (caseCount === 0) {
-      test.skip();
-      return;
-    }
 
     // Click on first case
     await caseItems.first().click();
@@ -125,12 +121,6 @@ test.describe('Case Management Workflow', () => {
     await page.waitForSelector('[data-testid=case-list]', { timeout: 10000 });
 
     const caseItems = page.locator('[data-testid=case-item]');
-    const caseCount = await caseItems.count();
-
-    if (caseCount === 0) {
-      test.skip();
-      return;
-    }
 
     // Find an open case
     const openCase = page.locator('[data-testid=case-item]:has-text("open")').first();

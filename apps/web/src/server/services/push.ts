@@ -4,6 +4,7 @@
 import { logger } from '@/lib/logger';
 import { notificationDispatcher, PushNotificationPayload, NotificationResult } from './shared/notificationDispatcher';
 import { logRecoveryAction } from './cases';
+import { createRecoveryLink } from './recoveryLinks';
 
 // Re-export types for backward compatibility
 export type { PushNotificationPayload, NotificationResult };
@@ -36,6 +37,28 @@ export async function sendRecoveryNudgePush(
   caseId?: string,
   companyId?: string
 ): Promise<NotificationResult> {
+  let trackedUrl = manageUrl;
+
+  if (caseId && companyId) {
+    try {
+      const link = await createRecoveryLink({
+        caseId,
+        companyId,
+        membershipId,
+        userId,
+        channel: 'push',
+        whopManageUrl: manageUrl,
+      });
+      trackedUrl = link.trackingUrl;
+    } catch (error) {
+      logger.warn('Failed to create tracked push recovery link, falling back to raw URL', {
+        error: error instanceof Error ? error.message : String(error),
+        caseId,
+        membershipId,
+      });
+    }
+  }
+
   const title = attemptNumber === 1
     ? "Payment Failed - Fix Now to Avoid Pause"
     : `Payment Failed - Action Required (${attemptNumber}x reminder)`;
@@ -51,7 +74,7 @@ export async function sendRecoveryNudgePush(
     body,
     data: {
       type: 'payment_recovery',
-      manageUrl,
+      manageUrl: trackedUrl,
       membershipId,
       attemptNumber,
       caseId,
@@ -64,7 +87,7 @@ export async function sendRecoveryNudgePush(
     await logRecoveryAction(companyId, caseId, membershipId, userId, 'nudge_push', 'push', {
       attemptNumber,
       messageId: result.messageId,
-      manageUrl
+      manageUrl: trackedUrl
     });
   }
 

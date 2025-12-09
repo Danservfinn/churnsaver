@@ -34,8 +34,8 @@ export async function getRequestContext(request: { headers: { get: (key: string)
     });
 
     return {
-      companyId: env.WHOP_APP_ID || env.NEXT_PUBLIC_WHOP_APP_ID || 'unknown',
-      userId: 'anonymous',
+      companyId: null,
+      userId: null,
       isAuthenticated: false
     };
   }

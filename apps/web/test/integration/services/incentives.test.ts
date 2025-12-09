@@ -55,7 +55,7 @@ describe('Incentive Service Integration Tests', () => {
         attempts: 1,
       });
 
-      vi.mocked(sql.execute).mockResolvedValue(1);
+      vi.mocked(sql.execute).mockResolvedValue({ rowCount: 1 });
 
       const result = await applyRecoveryIncentive(membershipId, caseId, companyId);
 
@@ -83,7 +83,7 @@ describe('Incentive Service Integration Tests', () => {
         attempts: 1,
       });
 
-      vi.mocked(sql.execute).mockResolvedValue(1);
+      vi.mocked(sql.execute).mockResolvedValue({ rowCount: 1 });
 
       const result = await applyRecoveryIncentive(membershipId, caseId, companyId);
 
@@ -107,7 +107,7 @@ describe('Incentive Service Integration Tests', () => {
         attempts: 1,
       });
 
-      vi.mocked(sql.execute).mockResolvedValue(1);
+      vi.mocked(sql.execute).mockResolvedValue({ rowCount: 1 });
 
       await applyRecoveryIncentive(membershipId, caseId, companyId);
 
@@ -161,12 +161,12 @@ describe('Incentive Service Integration Tests', () => {
       });
 
       // First application succeeds
-      vi.mocked(sql.execute).mockResolvedValueOnce(1);
+      vi.mocked(sql.execute).mockResolvedValueOnce({ rowCount: 1 });
       const result1 = await applyRecoveryIncentive(membershipId, caseId, companyId);
       expect(result1.success).toBe(true);
 
       // Second application - database check prevents duplicate
-      vi.mocked(sql.execute).mockResolvedValueOnce(0); // Already applied
+      vi.mocked(sql.execute).mockResolvedValueOnce({ rowCount: 0 }); // Already applied
       const result2 = await applyRecoveryIncentive(membershipId, caseId, companyId);
 
       // API call still happens, but database update fails (idempotency check)
@@ -192,7 +192,7 @@ describe('Incentive Service Integration Tests', () => {
         attempts: 3,
       });
 
-      vi.mocked(sql.execute).mockResolvedValue(1); // Log failure
+      vi.mocked(sql.execute).mockResolvedValue({ rowCount: 1 }); // Log failure
 
       const result = await applyRecoveryIncentive(membershipId, caseId, companyId);
 

@@ -278,27 +278,12 @@ export function generateRandomString(length: number = 16): string {
  * @returns A derived key buffer
  */
 export async function deriveKey(password: string, salt: string): Promise<Buffer> {
-  console.log('[DEBUG deriveKey] Input parameters:', {
-    passwordLength: password.length,
-    saltLength: salt.length,
-    expectedKeyLength: DEFAULT_CONFIG.keyLength,
-    configIterations: DEFAULT_CONFIG.iterations,
-    thirdParameterBeingPassed: DEFAULT_CONFIG.iterations
-  });
-  
   return new Promise((resolve, reject) => {
     scrypt(password, salt, DEFAULT_CONFIG.keyLength, { N: DEFAULT_CONFIG.iterations }, (err: Error | null, derivedKey: Buffer) => {
       if (err) {
         reject(err);
         return;
       }
-      
-      console.log('[DEBUG deriveKey] Result:', {
-        actualKeyLength: (derivedKey as Buffer).length,
-        expectedKeyLength: DEFAULT_CONFIG.keyLength,
-        mismatch: (derivedKey as Buffer).length !== DEFAULT_CONFIG.keyLength
-        });
-      
       resolve(derivedKey as Buffer);
     });
   });

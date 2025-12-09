@@ -58,7 +58,7 @@ describe('DebugService', () => {
     });
 
     mockSql.select = jest.fn().mockResolvedValue([]);
-    mockSql.execute = jest.fn().mockResolvedValue(1);
+    mockSql.execute = jest.fn().mockResolvedValue({ rowCount: 1 });
   });
 
   afterEach(() => {

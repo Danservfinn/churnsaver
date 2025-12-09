@@ -33,11 +33,11 @@ export async function GET(
 
     // Get company context from request
     const sdkContext = await getRequestContextSDK(request);
-    const companyId = sdkContext.companyId;
-    const userId = sdkContext.userId;
+    const companyId = sdkContext.companyId ?? null;
+    const userId = sdkContext.userId ?? null;
 
     // Enforce authentication in production
-    if (process.env.NODE_ENV === 'production' && !sdkContext.isAuthenticated) {
+    if (process.env.NODE_ENV === 'production' && (!sdkContext.isAuthenticated || !companyId || !userId)) {
       logger.security('Unauthorized request to download export file - missing valid auth token', {
         requestId: context.requestId,
         ip: context.ip,
@@ -49,9 +49,13 @@ export async function GET(
       );
     }
 
+    if (!companyId || !userId) {
+      return apiError(errors.unauthorized('Company context required'), context);
+    }
+
     // Apply rate limiting for file downloads
     const rateLimitResult = await checkRateLimit(
-      `data_export_download:${userId}:${id}`,
+      `data_export_download:${userId ?? 'unknown'}:${id}`,
       RATE_LIMIT_CONFIGS.dataExportDownload
     );
 

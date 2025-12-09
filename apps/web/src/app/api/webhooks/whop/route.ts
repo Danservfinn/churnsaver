@@ -5,39 +5,55 @@ import { handleWhopWebhook } from '@/server/webhooks/whop';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { errors } from '@/lib/apiResponse';
 import { getWebhookCompanyContext } from '@/lib/whop-sdk';
+import { logger } from '@/lib/logger';
+import { env, isProductionLikeEnvironment, validateWebhookTimestampSkew } from '@/lib/env';
 
 // Disable middleware for this route
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+// Validate webhook timestamp skew configuration at module load (fail-fast in prod-like envs)
+validateWebhookTimestampSkew();
+
 // Only allow POST requests with rate limiting
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
+    const debugLoggingEnabled = env.DEBUG_MODE && !isProductionLikeEnvironment();
+
     // === DEBUG LOGGING START ===
-    console.log('[DEBUG_WEBHOOK] === Webhook Request Start ===');
-    console.log('[DEBUG_WEBHOOK] Method:', request.method);
-    console.log('[DEBUG_WEBHOOK] URL:', request.url);
+    if (debugLoggingEnabled) {
+      logger.debug('Webhook Request Start', {
+        method: request.method,
+        url: request.url,
+      });
+    }
     
     const headersObj: Record<string, string> = {};
     request.headers.forEach((value, key) => {
       headersObj[key] = value;
     });
     
-    console.log('[DEBUG_WEBHOOK] Headers:', {
-      'content-type': request.headers.get('content-type'),
-      'user-agent': request.headers.get('user-agent'),
-      'x-whop-signature': request.headers.get('x-whop-signature') ? '[PRESENT]' : '[MISSING]',
-      'x-whop-timestamp': request.headers.get('x-whop-timestamp'),
-      'x-whop-event-type': request.headers.get('x-whop-event-type'),
-    });
+    if (debugLoggingEnabled) {
+      logger.debug('Webhook headers snapshot', {
+        'content-type': request.headers.get('content-type'),
+        'user-agent': request.headers.get('user-agent'),
+        'x-whop-signature': request.headers.get('x-whop-signature') ? '[PRESENT]' : '[MISSING]',
+        'x-whop-timestamp': request.headers.get('x-whop-timestamp'),
+        'x-whop-event-type': request.headers.get('x-whop-event-type'),
+      });
+    }
     // === DEBUG LOGGING END ===
 
     // Get raw body first for rate limiting and signature validation
     const body = await request.text();
     
     // === DEBUG LOGGING START ===
-    console.log('[DEBUG_WEBHOOK] Body string length:', body.length);
-    console.log('[DEBUG_WEBHOOK] Body string preview:', body.substring(0, 500));
+    if (debugLoggingEnabled) {
+      logger.debug('Webhook body preview', {
+        length: body.length,
+        preview: '[REDACTED]',
+      });
+    }
     // === DEBUG LOGGING END ===
     
     // Extract company ID from payload BEFORE processing webhook for rate limiting
@@ -51,20 +67,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       // This ensures fair usage across tenants and prevents one company's testing from affecting others
       companyId = getWebhookCompanyContext(headersObj, payload);
       
-      console.log('[DEBUG_WEBHOOK] CompanyId extraction result', {
-        companyId: companyId || 'undefined',
-        hasPayload: !!payload,
-        payloadType: payload?.type,
-        payloadKeys: payload ? Object.keys(payload) : [],
-        dataKeys: payload?.data ? Object.keys(payload.data) : [],
-        // Log full payload structure for debugging (truncated)
-        fullPayload: payload ? JSON.stringify(payload).substring(0, 1000) : 'no payload',
-        membershipKeys: payload?.data?.membership ? Object.keys(payload.data.membership) : [],
-        paymentKeys: payload?.data?.payment ? Object.keys(payload.data.payment) : []
-      });
+      if (debugLoggingEnabled) {
+        logger.debug('CompanyId extraction result', {
+          companyId: companyId || 'undefined',
+          hasPayload: !!payload,
+          payloadType: payload?.type,
+          payloadKeys: payload ? Object.keys(payload) : [],
+          dataKeys: payload?.data ? Object.keys(payload.data) : [],
+          // Log full payload structure for debugging (truncated)
+          fullPayload: payload ? JSON.stringify(payload).substring(0, 1000) : 'no payload',
+          membershipKeys: payload?.data?.membership ? Object.keys(payload.data.membership) : [],
+          paymentKeys: payload?.data?.payment ? Object.keys(payload.data.payment) : []
+        });
+      }
     } catch (e) {
       // If we can't parse the body or extract company ID, we'll use IP-based rate limiting as fallback
-      console.warn('[DEBUG_WEBHOOK] Failed to extract company ID for rate limiting', {
+      logger.warn('Failed to extract company ID for rate limiting', {
         error: e instanceof Error ? e.message : String(e),
         bodyPreview: body.substring(0, 200)
       });
@@ -82,7 +100,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     if (isDashboardTestEvent) {
       const action = dashboardPayload.action as string;
-      console.log('[DEBUG_WEBHOOK] Detected Whop dashboard test event', {
+      logger.debug('Detected Whop dashboard test event', {
         action,
         hasData: false,
         note: 'Bypassing rate limiting and returning acknowledgement'
@@ -119,7 +137,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     if (!rateLimitResult.allowed) {
       // Log rate limit violation for security monitoring
-      console.error('[DEBUG_WEBHOOK] Rate limit exceeded', {
+      logger.error('Rate limit exceeded', {
         endpoint: 'webhooks/whop',
         ip: clientIP,
         companyId: companyId || 'unknown',
@@ -157,9 +175,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return webhookResult;
   } catch (error) {
     // === DEBUG LOGGING START ===
-    console.log('[DEBUG_WEBHOOK] === ERROR IN POST HANDLER ===');
-    console.log('[DEBUG_WEBHOOK] Error message:', error instanceof Error ? error.message : String(error));
-    console.log('[DEBUG_WEBHOOK] Error stack:', error instanceof Error ? error.stack : 'No stack');
+    logger.error('Error in webhook POST handler', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : 'No stack',
+    });
     // === DEBUG LOGGING END ===
 
     // In production, fail-closed for security
@@ -168,7 +187,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
                        request.headers.get('x-real-ip') ||
                        'unknown';
       
-      console.error('Rate limiting service error - blocking request', {
+      logger.error('Rate limiting service error - blocking request', {
         endpoint: 'webhooks/whop',
         ip: clientIP,
         error: error instanceof Error ? error.message : String(error),
@@ -182,7 +201,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // In development, allow the request but log the error
-    console.error('Rate limiting error in development - allowing request', {
+    logger.error('Rate limiting error in development - allowing request', {
       error: error instanceof Error ? error.message : String(error)
     });
     

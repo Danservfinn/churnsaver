@@ -2,6 +2,7 @@
 // Ensures Row Level Security context is set for all database operations
 
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { setRequestContext, clearRequestContext, extractCompanyContext } from './db-rls';
 import { getRequestContextSDK } from './whop-sdk';
 import { logger } from './logger';
@@ -19,16 +20,18 @@ export async function withRLSContext(
     let contextSet = false;
     
     try {
-      // Extract company context from request
-      const companyId = await extractCompanyContext(request);
-      
       // Get full request context from authentication
       const authContext = await getRequestContextSDK(request);
       
+      // Extract company context from request
+      const rawCompanyId = await extractCompanyContext(request);
+      const companyId: string | undefined = rawCompanyId ?? undefined;
+      const userId = authContext.userId ?? undefined;
+      
       // Create RLS context
       const rlsContext: RLSContext = {
-        companyId: companyId || undefined,
-        userId: authContext.userId,
+        companyId,
+        userId,
         isAuthenticated: authContext.isAuthenticated,
         requestId: request.headers.get('x-request-id') || crypto.randomUUID(),
         path: request.nextUrl.pathname,

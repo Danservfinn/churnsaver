@@ -12,13 +12,21 @@ export async function POST(
    const { alertId } = await params;
    
    try {
-     // Authenticate request
-     const context = await getRequestContextSDK(request);
+    // Authenticate request
+    const context = await getRequestContextSDK(request);
+    const userId = context.userId ?? null;
 
     // Require authentication for alert resolution
     if (!context.isAuthenticated) {
       return NextResponse.json(
         { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'User context required' },
         { status: 401 }
       );
     }
@@ -40,7 +48,7 @@ export async function POST(
 
     // Apply rate limiting for alert resolution actions
     const rateLimitResult = await checkRateLimit(
-      `alert_resolve:${context.userId}`,
+      `alert_resolve:${userId}`,
       RATE_LIMIT_CONFIGS.alertActions
     );
 
@@ -60,17 +68,17 @@ export async function POST(
     }
 
     // Attempt to resolve the alert
-    await securityMonitor.resolveAlert(alertId, context.userId);
+    await securityMonitor.resolveAlert(alertId, userId);
 
     // Audit log the resolution
     logger.security('Security alert resolved via dashboard', {
       category: 'security_management',
       severity: 'info',
       operation: 'alert_resolved',
-      userId: context.userId,
+      userId,
       userRole,
       alertId,
-      resolvedBy: context.userId,
+      resolvedBy: userId,
       timestamp: new Date().toISOString()
     });
 

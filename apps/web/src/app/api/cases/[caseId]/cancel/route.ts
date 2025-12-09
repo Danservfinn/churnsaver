@@ -7,6 +7,7 @@ import { logger } from '@/lib/logger';
 import { getRequestContextSDK } from '@/lib/whop-sdk';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { errors } from '@/lib/apiResponse';
+import { isProductionLikeEnvironment } from '@/lib/env';
 
 export async function POST(
   request: NextRequest,
@@ -19,13 +20,21 @@ export async function POST(
   try {
     // Get company context from request
     const context = await getRequestContextSDK(request);
-    const companyId = context.companyId;
+    const companyId = context.companyId ?? undefined;
 
     // Enforce authentication in production for creator-facing endpoints
-    if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
+    if (isProductionLikeEnvironment() && !context.isAuthenticated) {
       logger.warn('Unauthorized request to cancel case - missing valid auth token');
       return NextResponse.json(
         { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    if (!companyId) {
+      logger.warn('Missing company context for cancel case request');
+      return NextResponse.json(
+        { error: 'Company context required' },
         { status: 401 }
       );
     }

@@ -771,6 +771,11 @@ export class SecurityMonitor {
       const authService = await getWhopAuthService();
       if (!authService) {
         logger.warn('Cannot invalidate sessions in Edge Runtime', { userId, reason });
+        logger.metric('security.session_invalidation_skipped', 1, {
+          reason,
+          invalidationType: 'user_sessions',
+          environment: process.env.NEXT_RUNTIME || 'node'
+        });
         return;
       }
       await authService.revokeAllUserSessions(userId);

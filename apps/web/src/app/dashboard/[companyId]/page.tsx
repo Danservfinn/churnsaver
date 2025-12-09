@@ -11,12 +11,15 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/components/ui/toast';
 import { Download, RefreshCw, Settings, TrendingUp, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+import { logger } from '@/lib/logger';
 
 interface DashboardKPIs {
   activeCases: number;
   recoveries: number;
+  organicRecoveries: number;
   recoveryRate: number;
   recoveredRevenueCents: number;
+  organicRevenueCents: number;
   totalCases: number;
   windowDays: number;
   calculatedAt: string;
@@ -32,6 +35,7 @@ interface RecoveryCase {
   incentive_days: number;
   recovered_amount_cents: number;
   failure_reason: string | null;
+  recovery_type: string | null;
   first_failure_at: string;
   last_nudge_at: string | null;
   created_at: string;
@@ -108,7 +112,9 @@ export default function DashboardCompanyPage({
         title: 'Failed to load KPIs',
         message: 'Unable to fetch dashboard metrics. Please try again.',
       });
-      console.error('Failed to fetch KPIs:', error);
+      logger.error('Failed to fetch KPIs', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       setIsLoadingKpis(false);
     }
@@ -140,7 +146,9 @@ export default function DashboardCompanyPage({
         title: 'Failed to load cases',
         message: 'Unable to fetch recovery cases. Please try again.',
       });
-      console.error('Failed to fetch cases:', error);
+      logger.error('Failed to fetch cases', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       setIsLoadingCases(false);
     }

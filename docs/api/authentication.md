@@ -193,16 +193,13 @@ CHURN_SAVER_API_KEY=sk_live_1234567890abcdef
 
 **Secure Key Management:**
 ```typescript
-// Using AWS Secrets Manager
-import { SecretsManager } from '@aws-sdk/client-secrets-manager';
-
-const secretsManager = new SecretsManager({ region: 'us-east-1' });
-
-async function getApiKey() {
-  const secret = await secretsManager.getSecretValue({
-    SecretId: 'churn-saver/api-key'
-  });
-  return secret.SecretString;
+// Using environment variables (recommended for Vercel)
+function getApiKey(): string {
+  const key = process.env.CHURN_SAVER_API_KEY;
+  if (!key) {
+    throw new Error('CHURN_SAVER_API_KEY not configured');
+  }
+  return key;
 }
 ```
 

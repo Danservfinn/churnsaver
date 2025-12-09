@@ -4,6 +4,7 @@
 import PgBoss from 'pg-boss';
 import { logger } from '@/lib/logger';
 import { sql } from '@/lib/db';
+import { sqlWithRLS } from '@/lib/db-rls';
 import { processWebhookEvent, ProcessedEvent } from '@/server/services/eventProcessor';
 // Import processPendingReminders from processReminders directly to avoid circular dependency
 import { processPendingReminders } from '../cron/processReminders';
@@ -16,16 +17,16 @@ import {
 } from './shared/jobTypes';
 import { 
   assertCompanyContext, 
-  updateEventProcessingStatus, 
-  isEventProcessed,
   createProcessedEvent,
   calculateJobMetrics
 } from './shared/jobHelpers';
+import { acquireEventLockWithClient } from './shared/advisoryLock';
 
 class JobQueueService {
   private boss: PgBoss | null = null;
   private initialized = false;
   private processingTimes: number[] = [];
+  private readonly pgBossEnabled = process.env.ENABLE_PG_BOSS === 'true';
 
   // Job queue names
   private readonly WEBHOOK_PROCESSING_JOB = 'webhook-processing';
@@ -33,6 +34,12 @@ class JobQueueService {
 
   async init() {
     if (this.initialized) return;
+
+    if (!this.pgBossEnabled) {
+      logger.info('pg-boss disabled (cron-only mode enabled via ENABLE_PG_BOSS!=true)');
+      this.initialized = true;
+      return;
+    }
 
     try {
       // Initialize pg-boss with PostgreSQL connection
@@ -65,8 +72,20 @@ class JobQueueService {
   /**
    * Enqueue a webhook processing job
    */
-  async enqueueWebhookJob(data: JobData) {
+  async enqueueWebhookJob(data: JobData): Promise<string | null> {
     if (!this.boss) await this.init();
+
+    if (!this.pgBossEnabled) {
+      logger.info('Skipping webhook job enqueue because pg-boss is disabled; rely on cron processor', {
+        eventId: data.eventId,
+        companyId: data.companyId
+      });
+      return null;
+    }
+
+    if (!data.companyId) {
+      throw new Error('companyId is required to enqueue webhook job');
+    }
 
     try {
       const jobId = await this.boss!.send(this.WEBHOOK_PROCESSING_JOB, data, {
@@ -76,7 +95,7 @@ class JobQueueService {
         priority: 1, // High priority for webhooks
         // singletonKey prevents duplicate processing of same webhook event
         // Uses whop_event_id to ensure only one job per unique event is processed
-        singletonKey: data.eventId,
+        singletonKey: `${data.companyId}:${data.eventId}`,
       });
 
       logger.info('Webhook job enqueued', {
@@ -99,8 +118,16 @@ class JobQueueService {
   /**
    * Enqueue a reminder processing job for a specific company
    */
-  async enqueueReminderJob(companyId: string, scheduleTime?: Date) {
+  async enqueueReminderJob(companyId: string, scheduleTime?: Date): Promise<string | null> {
     if (!this.boss) await this.init();
+
+    if (!this.pgBossEnabled) {
+      logger.info('Skipping reminder job enqueue because pg-boss is disabled; rely on cron processor', {
+        companyId,
+        scheduleTime: scheduleTime?.toISOString()
+      });
+      return null;
+    }
 
     const data = { companyId };
 
@@ -154,47 +181,84 @@ class JobQueueService {
         throw new Error(companyContext.error || 'Company validation failed');
       }
 
-      // Check if this event has already been processed using shared helper
-      const alreadyProcessed = await isEventProcessed(data.eventId, data.companyId!);
-      if (alreadyProcessed) {
-        logger.info('Skipping duplicate webhook processing - event already processed', {
-          jobId: job.id,
-          eventId: data.eventId
-        });
-        this.processingTimes.push(Date.now() - startTime);
-        return { success: true, eventId: data.eventId, skipped: true };
-      }
+      const processingResult = await sqlWithRLS.transaction(
+        async (client) => {
+          if (!data.companyId) {
+            throw new Error('Missing companyId for webhook processing job');
+          }
 
-      // Create processed event using shared helper
-      const processedEvent: ProcessedEvent = createProcessedEvent(
-        data.eventId,
-        data.eventType,
-        data.membershipId,
-        data.payload,
-        data.eventCreatedAt
-      );
+          const lockAcquired = await acquireEventLockWithClient(client, data.companyId!, data.eventId);
+          if (!lockAcquired) {
+            return { skipped: true as const, success: true as const, lockContended: true as const };
+          }
 
-      // Process webhook event
-      const success = await processWebhookEvent(processedEvent, data.companyId || 'unknown');
+          const existing = await client.query<{ processed: boolean }>(
+            `SELECT processed
+             FROM events
+             WHERE whop_event_id = $1
+               AND company_id = $2
+               AND company_resolution_status = 'resolved'
+             FOR UPDATE`,
+            [data.eventId, data.companyId]
+          );
 
-      // Update event processing status using shared helper
-      await updateEventProcessingStatus(
-        data.eventId,
-        data.companyId!,
-        success,
-        success ? undefined : 'processing_failed'
+          if ((existing.rowCount ?? 0) === 0) {
+            throw new Error(`Event ${data.eventId} not found for processing`);
+          }
+
+          if (existing.rows[0].processed) {
+            return { skipped: true as const, success: true as const };
+          }
+
+          const processedEvent: ProcessedEvent = createProcessedEvent(
+            data.eventId,
+            data.eventType,
+            data.membershipId,
+            data.payload,
+            data.eventCreatedAt
+          );
+
+          const success = await processWebhookEvent(processedEvent, data.companyId);
+
+          await client.query(
+            `UPDATE events
+             SET processed = $1,
+                 error = $2,
+                 processed_at = NOW()
+             WHERE whop_event_id = $3
+               AND company_id = $4`,
+            [
+              success,
+              success ? null : 'processing_failed',
+              data.eventId,
+              data.companyId
+            ]
+          );
+
+          return { skipped: false as const, success };
+        },
+      { companyId: data.companyId, enforceCompanyContext: true }
       );
 
       this.processingTimes.push(Date.now() - startTime);
 
+      if (processingResult.skipped) {
+        logger.info('Skipping webhook processing - lock not acquired or already processed', {
+          jobId: job.id,
+          eventId: data.eventId,
+          lockContended: (processingResult as any).lockContended === true
+        });
+        return { success: true, eventId: data.eventId, skipped: true };
+      }
+
       logger.info('Webhook job completed', {
         jobId: job.id,
         eventId: data.eventId,
-        success,
+        success: processingResult.success,
         duration_ms: Date.now() - startTime
       });
 
-      return { success, eventId: data.eventId };
+      return { success: processingResult.success, eventId: data.eventId };
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

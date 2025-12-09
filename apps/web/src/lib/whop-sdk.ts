@@ -1,16 +1,18 @@
 import { Whop } from "@whop/sdk";
-import { env } from "@/lib/env";
+import { env, isProductionLikeEnvironment } from "@/lib/env";
 import { jwtVerify, importPKCS8, SignJWT } from 'jose';
 import { makeWebhookValidator, type PaymentWebhookData } from '@whop/api';
+import { logger } from '@/lib/logger';
 
 /**
  * Request context interface for authentication
  */
 export interface RequestContext {
-  companyId: string;
-  userId: string;
+  companyId: string | null;
+  userId: string | null;
   isAuthenticated: boolean;
   role?: string;
+  devBypass?: boolean;
 }
 
 /**
@@ -34,8 +36,8 @@ export async function getRequestContextSDK(request: { headers: { get: (key: stri
     
     if (!token) {
       return {
-        companyId: env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'unknown',
-        userId: 'anonymous',
+        companyId: null,
+        userId: null,
         isAuthenticated: false
       };
     }
@@ -43,9 +45,10 @@ export async function getRequestContextSDK(request: { headers: { get: (key: stri
     // In development, skip verification if no secret is set
     if (process.env.NODE_ENV === 'development' && !env.WHOP_APP_SECRET) {
       return {
-        companyId: env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'dev',
-        userId: 'dev-user',
-        isAuthenticated: true
+        companyId: null,
+        userId: null,
+        isAuthenticated: false,
+        devBypass: true,
       };
     }
 
@@ -54,9 +57,12 @@ export async function getRequestContextSDK(request: { headers: { get: (key: stri
       const secretKey = await importPKCS8(env.WHOP_APP_SECRET, 'RS256');
       const { payload } = await jwtVerify(token, secretKey);
       
+      const resolvedCompanyId = typeof payload.companyId === 'string' ? (payload.companyId as string) : null;
+      const resolvedUserId = typeof payload.userId === 'string' ? (payload.userId as string) : null;
+
       return {
-        companyId: payload.companyId as string || env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'unknown',
-        userId: payload.userId as string || 'unknown',
+        companyId: resolvedCompanyId,
+        userId: resolvedUserId,
         isAuthenticated: true
       };
     }
@@ -70,15 +76,15 @@ export async function getRequestContextSDK(request: { headers: { get: (key: stri
     }
     const result = await whopsdk.verifyUserToken(headersObj);
     return {
-      companyId: env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'unknown',
-      userId: result.userId,
+      companyId: (result as any).companyId ?? null,
+      userId: result.userId ?? null,
       isAuthenticated: true
     };
   } catch (error) {
     // Return anonymous context on verification failure
     return {
-      companyId: env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'unknown',
-      userId: 'anonymous',
+      companyId: null,
+      userId: null,
       isAuthenticated: false
     };
   }
@@ -149,28 +155,25 @@ export async function retrieveExperience(experienceId: string) {
  * Get company context from webhook headers or payload
  */
 export function getWebhookCompanyContext(headers: Record<string, string>, payload?: any): string | undefined {
-  // DEBUG: Log full payload structure for troubleshooting
-  console.log('[DEBUG] getWebhookCompanyContext called', {
-    hasHeader: !!headers['x-whop-company-id'],
-    hasPayload: !!payload,
-    payloadKeys: payload ? Object.keys(payload) : [],
-    dataKeys: payload?.data ? Object.keys(payload.data) : [],
-    // Log full payload structure (truncated for safety)
-    payloadStructure: payload ? JSON.stringify(payload).substring(0, 500) : 'no payload'
-  });
+  const debugEnabled = !isProductionLikeEnvironment();
 
-  // First try to extract from headers (for backward compatibility)
-  const headerCompanyId = headers['x-whop-company-id'] || headers['X-Whop-Company-Id'];
-  if (headerCompanyId) {
-    console.log('[DEBUG] CompanyId extracted from header:', headerCompanyId);
-    return headerCompanyId;
+  // DEBUG: Log payload structure only in non-production-like environments
+  if (debugEnabled) {
+    logger.debug('getWebhookCompanyContext called', {
+      hasHeader: !!headers['x-whop-company-id'],
+      hasPayload: !!payload,
+      payloadKeys: payload ? Object.keys(payload) : [],
+      dataKeys: payload?.data ? Object.keys(payload.data) : [],
+      // Log full payload structure (tightly truncated to avoid leaking PII)
+      payloadStructure: payload ? JSON.stringify(payload).substring(0, 100) : 'no payload'
+    });
   }
 
-  // If payload is provided and no header company ID, extract from payload
+  // If payload is provided, extract companyId only from signed payload content (headers are not trusted)
   if (payload) {
     // Try top-level company_id first (some webhook formats)
     if (typeof payload.company_id === 'string' && payload.company_id) {
-      console.log('[DEBUG] CompanyId extracted from payload.company_id:', payload.company_id);
+      if (debugEnabled) logger.debug('CompanyId extracted from payload.company_id', { companyId: payload.company_id });
       return payload.company_id;
     }
 
@@ -179,18 +182,18 @@ export function getWebhookCompanyContext(headers: Record<string, string>, payloa
     
     // Direct company_id field in data
     if (typeof data.company_id === 'string' && data.company_id) {
-      console.log('[DEBUG] CompanyId extracted from payload.data.company_id:', data.company_id);
+      logger.debug('CompanyId extracted from payload.data.company_id', { companyId: data.company_id });
       return data.company_id;
     }
     
     // Nested company object with id
     if (data.company && typeof data.company === 'object') {
       if (typeof data.company.id === 'string' && data.company.id) {
-        console.log('[DEBUG] CompanyId extracted from payload.data.company.id:', data.company.id);
+        if (debugEnabled) logger.debug('CompanyId extracted from payload.data.company.id', { companyId: data.company.id });
         return data.company.id;
       }
       if (typeof data.company.company_id === 'string' && data.company.company_id) {
-        console.log('[DEBUG] CompanyId extracted from payload.data.company.company_id:', data.company.company_id);
+        if (debugEnabled) logger.debug('CompanyId extracted from payload.data.company.company_id', { companyId: data.company.company_id });
         return data.company.company_id;
       }
     }
@@ -198,16 +201,16 @@ export function getWebhookCompanyContext(headers: Record<string, string>, payloa
     // Membership object with company_id
     if (data.membership && typeof data.membership === 'object') {
       if (typeof data.membership.company_id === 'string' && data.membership.company_id) {
-        console.log('[DEBUG] CompanyId extracted from payload.data.membership.company_id:', data.membership.company_id);
+        if (debugEnabled) logger.debug('CompanyId extracted from payload.data.membership.company_id', { companyId: data.membership.company_id });
         return data.membership.company_id;
       }
       if (data.membership.company && typeof data.membership.company === 'object') {
         if (typeof data.membership.company.id === 'string' && data.membership.company.id) {
-          console.log('[DEBUG] CompanyId extracted from payload.data.membership.company.id:', data.membership.company.id);
+          if (debugEnabled) logger.debug('CompanyId extracted from payload.data.membership.company.id', { companyId: data.membership.company.id });
           return data.membership.company.id;
         }
         if (typeof data.membership.company.company_id === 'string' && data.membership.company.company_id) {
-          console.log('[DEBUG] CompanyId extracted from payload.data.membership.company.company_id:', data.membership.company.company_id);
+          if (debugEnabled) logger.debug('CompanyId extracted from payload.data.membership.company.company_id', { companyId: data.membership.company.company_id });
           return data.membership.company.company_id;
         }
       }
@@ -215,39 +218,41 @@ export function getWebhookCompanyContext(headers: Record<string, string>, payloa
     
     // Payment object might have company_id
     if (data.payment && typeof data.payment === 'object' && typeof data.payment.company_id === 'string' && data.payment.company_id) {
-      console.log('[DEBUG] CompanyId extracted from payload.data.payment.company_id:', data.payment.company_id);
+      if (debugEnabled) logger.debug('CompanyId extracted from payload.data.payment.company_id', { companyId: data.payment.company_id });
       return data.payment.company_id;
     }
     
     // Experience object with company_id
     if (data.experience && typeof data.experience === 'object' && typeof data.experience.company_id === 'string' && data.experience.company_id) {
-      console.log('[DEBUG] CompanyId extracted from payload.data.experience.company_id:', data.experience.company_id);
+      if (debugEnabled) logger.debug('CompanyId extracted from payload.data.experience.company_id', { companyId: data.experience.company_id });
       return data.experience.company_id;
     }
     
     // Product object might have company_id
     if (data.product && typeof data.product === 'object' && typeof data.product.company_id === 'string' && data.product.company_id) {
-      console.log('[DEBUG] CompanyId extracted from payload.data.product.company_id:', data.product.company_id);
+      if (debugEnabled) logger.debug('CompanyId extracted from payload.data.product.company_id', { companyId: data.product.company_id });
       return data.product.company_id;
     }
     
     // Try data.company as a string
     if (typeof data.company === 'string' && data.company) {
-      console.log('[DEBUG] CompanyId extracted from payload.data.company:', data.company);
+      if (debugEnabled) logger.debug('CompanyId extracted from payload.data.company', { companyId: data.company });
       return data.company;
     }
     
-    // Log detailed structure for debugging
-    console.log('[DEBUG] No companyId found in payload. Full structure:', {
-      topLevelKeys: Object.keys(payload),
-      dataKeys: Object.keys(data),
-      membershipKeys: data.membership ? Object.keys(data.membership) : [],
-      paymentKeys: data.payment ? Object.keys(data.payment) : [],
-      samplePayload: JSON.stringify(payload).substring(0, 1000)
-    });
+    // Log detailed structure for debugging (non-production only, tightly truncated)
+    if (debugEnabled) {
+      logger.debug('No companyId found in payload. Full structure', {
+        topLevelKeys: Object.keys(payload),
+        dataKeys: Object.keys(data),
+        membershipKeys: data.membership ? Object.keys(data.membership) : [],
+        paymentKeys: data.payment ? Object.keys(data.payment) : [],
+        samplePayload: JSON.stringify(payload).substring(0, 100)
+      });
+    }
   }
 
-  console.log('[DEBUG] No companyId could be extracted');
+  if (debugEnabled) logger.debug('No companyId could be extracted');
   return undefined;
 }
 

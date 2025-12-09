@@ -14,7 +14,10 @@ import {
   deriveKey
 } from '../src/lib/encryption';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { randomBytes } from 'crypto';
 
+
+const randPassword = () => `pwd-${randomBytes(8).toString('hex')}`;
 describe('Encryption Module', () => {
   let testKey: string;
   let testPassword: string;
@@ -136,7 +139,13 @@ describe('Encryption Module', () => {
       const plaintext = 'Test message';
       
       const encrypted = await encrypt(plaintext, testKey);
-      const tampered = encrypted.slice(0, -1) + 'X'; // Change last character
+      // Corrupt the auth tag by changing characters in the middle (positions 16-32 in base64 correspond to auth tag area)
+      const chars = encrypted.split('');
+      // Change multiple characters to ensure auth tag corruption
+      if (chars[20]) chars[20] = chars[20] === 'A' ? 'B' : 'A';
+      if (chars[21]) chars[21] = chars[21] === 'C' ? 'D' : 'C';
+      if (chars[22]) chars[22] = chars[22] === 'E' ? 'F' : 'E';
+      const tampered = chars.join('');
       
       await expect(decrypt(tampered, testKey)).rejects.toThrow();
     });
@@ -153,7 +162,7 @@ describe('Encryption Module', () => {
 
   describe('Password Hashing with bcrypt', () => {
     it('should hash password correctly', async () => {
-      const password = 'MySecurePassword123';
+      const password = randPassword();
       
       const hash = await hashPassword(password);
       
@@ -165,7 +174,7 @@ describe('Encryption Module', () => {
     });
 
     it('should compare password correctly', async () => {
-      const password = 'MySecurePassword123';
+      const password = randPassword();
       const hash = await hashPassword(password);
       
       const isMatch = await comparePassword(password, hash);
@@ -181,8 +190,8 @@ describe('Encryption Module', () => {
     });
 
     it('should reject wrong password', async () => {
-      const password = 'MySecurePassword123';
-      const wrongPassword = 'WrongPassword456';
+      const password = randPassword();
+      const wrongPassword = randPassword();
       const hash = await hashPassword(password);
       
       const isMatch = await comparePassword(wrongPassword, hash);
@@ -201,7 +210,7 @@ describe('Encryption Module', () => {
     });
 
     it('should use custom salt rounds', async () => {
-      const password = 'TestPassword';
+      const password = randPassword();
       const hash1 = await hashPassword(password, 10);
       const hash2 = await hashPassword(password, 12);
       
@@ -267,7 +276,7 @@ describe('Encryption Module', () => {
 
   describe('Key Derivation', () => {
     it('should derive key from password and salt', async () => {
-      const password = 'TestPassword';
+      const password = randPassword();
       const salt = 'TestSalt';
       
       const derivedKey = await deriveKey(password, salt);
@@ -278,7 +287,7 @@ describe('Encryption Module', () => {
     });
 
     it('should derive same key for same inputs', async () => {
-      const password = 'TestPassword';
+      const password = randPassword();
       const salt = 'TestSalt';
       
       const key1 = await deriveKey(password, salt);
@@ -288,7 +297,7 @@ describe('Encryption Module', () => {
     });
 
     it('should derive different keys for different inputs', async () => {
-      const password = 'TestPassword';
+      const password = randPassword();
       const salt1 = 'Salt1';
       const salt2 = 'Salt2';
       

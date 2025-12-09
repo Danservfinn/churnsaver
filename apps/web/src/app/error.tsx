@@ -6,6 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, RefreshCw, Home } from 'lucide-react';
 import Link from 'next/link';
 import { AppHeader } from '@/components/layouts/AppHeader';
+import { logger } from '@/lib/logger';
 
 export default function Error({
   error,
@@ -16,7 +17,11 @@ export default function Error({
 }) {
   useEffect(() => {
     // Log error to error reporting service
-    console.error('Application error:', error);
+    logger.error('Application error', {
+      error: error.message,
+      digest: error.digest,
+      stack: error.stack,
+    });
   }, [error]);
 
   return (

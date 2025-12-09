@@ -63,7 +63,7 @@ describe('Incentive Service Unit Tests', () => {
       });
 
       // Mock database update
-      vi.mocked(sql.execute).mockResolvedValue(1);
+      vi.mocked(sql.execute).mockResolvedValue({ rowCount: 1 });
 
       const result = await applyRecoveryIncentive(membershipId, caseId, companyId);
 
@@ -122,13 +122,13 @@ describe('Incentive Service Unit Tests', () => {
       });
 
       // First application succeeds
-      vi.mocked(sql.execute).mockResolvedValueOnce(1);
+      vi.mocked(sql.execute).mockResolvedValueOnce({ rowCount: 1 });
 
       const result1 = await applyRecoveryIncentive(membershipId, caseId, companyId);
       expect(result1.success).toBe(true);
 
       // Second application - database update returns 0 (already applied)
-      vi.mocked(sql.execute).mockResolvedValueOnce(0);
+      vi.mocked(sql.execute).mockResolvedValueOnce({ rowCount: 0 });
 
       const result2 = await applyRecoveryIncentive(membershipId, caseId, companyId);
       // The API call still happens, but database update fails silently
@@ -156,7 +156,7 @@ describe('Incentive Service Unit Tests', () => {
         return { success: true, data };
       });
 
-      vi.mocked(sql.execute).mockResolvedValue(1);
+      vi.mocked(sql.execute).mockResolvedValue({ rowCount: 1 });
 
       const result = await applyRecoveryIncentive(membershipId, caseId, companyId);
 
@@ -187,7 +187,7 @@ describe('Incentive Service Unit Tests', () => {
       });
 
       // Mock logging to recovery_actions
-      vi.mocked(sql.execute).mockResolvedValue(1);
+      vi.mocked(sql.execute).mockResolvedValue({ rowCount: 1 });
 
       const result = await applyRecoveryIncentive(membershipId, caseId, companyId);
 
@@ -224,7 +224,7 @@ describe('Incentive Service Unit Tests', () => {
         return { success: true, data };
       });
 
-      vi.mocked(sql.execute).mockResolvedValue(1);
+      vi.mocked(sql.execute).mockResolvedValue({ rowCount: 1 });
 
       await applyRecoveryIncentive(membershipId, caseId, companyId);
 
@@ -258,7 +258,7 @@ describe('Incentive Service Unit Tests', () => {
         return { success: true, data };
       });
 
-      vi.mocked(sql.execute).mockResolvedValue(1);
+      vi.mocked(sql.execute).mockResolvedValue({ rowCount: 1 });
 
       const result = await applyRecoveryIncentive(membershipId, caseId, companyId);
 

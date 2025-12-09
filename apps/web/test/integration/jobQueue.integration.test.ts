@@ -45,7 +45,7 @@ vi.mock('@/lib/db', () => {
     query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
     select: vi.fn().mockResolvedValue([]),
     insert: vi.fn().mockResolvedValue(null),
-    execute: vi.fn().mockResolvedValue(1),
+    execute: vi.fn().mockResolvedValue({ rowCount: 1 }),
     getQueries: vi.fn().mockReturnValue([]),
     clearQueries: vi.fn(),
   };

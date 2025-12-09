@@ -777,10 +777,10 @@ export class DebugService {
       );
 
       logger.info('Expired debug sessions cleanup completed', {
-        affectedSessions: result
+        affectedSessions: result.rowCount
       });
 
-      return result;
+      return result.rowCount;
     } catch (error) {
       logger.error('Failed to cleanup expired debug sessions', {
         error: error instanceof Error ? error.message : String(error)
@@ -801,10 +801,10 @@ export class DebugService {
       );
 
       logger.info('Debug data cleanup completed', {
-        affectedRecords: result
+        affectedRecords: result.rowCount
       });
 
-      return result;
+      return result.rowCount;
     } catch (error) {
       logger.error('Failed to cleanup old debug data', {
         error: error instanceof Error ? error.message : String(error)

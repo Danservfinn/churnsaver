@@ -7,7 +7,7 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { whopConfig, type WhopSdkConfig } from './sdkConfig';
 import { logger } from '@/lib/logger';
 import { AppError, ErrorCode, ErrorCategory, ErrorSeverity } from '@/lib/apiResponse';
-import { env, additionalEnv } from '@/lib/env';
+import { env, additionalEnv, isProductionLikeEnvironment } from '@/lib/env';
 
 /**
  * Webhook validation result interface
@@ -201,9 +201,9 @@ export function validateTimestamp(
   timestampHeader?: string | null,
   toleranceSeconds: number = additionalEnv.WEBHOOK_TIMESTAMP_SKEW_SECONDS || 300
 ): { valid: boolean; error?: string; timestamp?: number } {
-  // Require X-Whop-Timestamp in production
-  if (process.env.NODE_ENV === 'production' && !timestampHeader) {
-    return { valid: false, error: 'Missing X-Whop-Timestamp header in production' };
+  // Require X-Whop-Timestamp in production-like environments
+  if (isProductionLikeEnvironment() && !timestampHeader) {
+    return { valid: false, error: 'Missing X-Whop-Timestamp header in production-like environment' };
   }
 
   // Enforce replay protection if timestamp present

@@ -10,13 +10,19 @@ import { AppError, ErrorCategory, ErrorSeverity, ErrorCode } from '@/lib/apiResp
 import { encrypt, decrypt } from '@/lib/encryption';
 // Conditionally import crypto for Edge Runtime compatibility
 let createHash: (algorithm: string) => any;
+let randomBytes: ((size: number) => Buffer) | undefined;
+let generateUuid: (() => string) | undefined;
 try {
   const crypto = require('crypto');
   createHash = crypto.createHash;
+  randomBytes = crypto.randomBytes;
+  generateUuid = crypto.randomUUID;
 } catch {
   // In Edge Runtime, crypto.createHash may not be available
   // We'll use a fallback or make hash functions conditional
   createHash = undefined as any;
+  randomBytes = undefined;
+  generateUuid = undefined;
 }
 import { isProductionLikeEnvironment, env } from '@/lib/env';
 
@@ -271,7 +277,7 @@ export class WhopAuthService {
               hasProductionVars
             },
             timestamp: new Date().toISOString(),
-            requestId: `auth_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+            requestId: `auth_${Date.now()}_${(generateUuid?.() || randomBytes?.(12)?.toString('hex') || 'unavailable')}`
           };
           
           logger.security('CRITICAL SECURITY ALERT: Authentication bypass attempted in production-like environment', securityContext);
@@ -458,16 +464,19 @@ export class WhopAuthService {
                    request.headers.get('x-whop-user-token');
 
       if (!token) {
-        const context: AuthContext = {
-          isAuthenticated: false,
-          companyId: this.config.appId
-        };
-
-        logger.debug('No token provided in request', {
+        logger.warn('Missing authentication token', {
+          category: 'authentication',
+          severity: 'medium',
           authenticationTimeMs: Date.now() - startTime
         });
 
-        return context;
+        throw new AppError(
+          'Authentication token required',
+          ErrorCode.UNAUTHORIZED,
+          ErrorCategory.AUTHENTICATION,
+          ErrorSeverity.MEDIUM,
+          401
+        );
       }
 
       // Verify token

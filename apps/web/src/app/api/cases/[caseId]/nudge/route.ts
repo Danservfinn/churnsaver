@@ -8,6 +8,7 @@ import { getRequestContextSDK } from '@/lib/whop-sdk';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { CaseIdParamSchema, validateAndTransform } from '@/lib/validation';
 import { errorResponses } from '@/lib/apiResponse';
+import { isProductionLikeEnvironment } from '@/lib/env';
 
 export async function POST(
   request: NextRequest,
@@ -36,12 +37,21 @@ export async function POST(
     const context = await getRequestContextSDK(request);
 
     // Enforce authentication in production for creator-facing endpoints
-    if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
+    if (isProductionLikeEnvironment() && !context.isAuthenticated) {
       logger.warn('Unauthorized request to case nudge - missing/failed SDK auth token');
       return errorResponses.unauthorizedResponse('Authentication required');
     }
 
-    const companyId = context.companyId;
+    const companyId = context.companyId ?? undefined;
+    const userId = context.userId ?? undefined;
+    if (!companyId) {
+      logger.warn('Missing company context for case nudge request', { caseId });
+      return errorResponses.unauthorizedResponse('Company context required');
+    }
+    if (!userId) {
+      logger.warn('Missing user context for case nudge request', { caseId });
+      return errorResponses.unauthorizedResponse('User context required');
+    }
 
     // Validate caseId parameter using zod schema
     const paramValidation = validateAndTransform(CaseIdParamSchema, { caseId });
@@ -54,7 +64,7 @@ export async function POST(
 
     logger.info('API: Nudge case requested (SDK auth)', { caseId, companyId, userId: context.userId });
 
-    const success = await nudgeCaseAgain(validatedCaseId, companyId, 'user', context.userId);
+    const success = await nudgeCaseAgain(validatedCaseId, companyId, 'user', userId);
 
     if (success) {
       logger.info('API: Nudge sent successfully (SDK auth)', { caseId, processingTimeMs: Date.now() - startTime });

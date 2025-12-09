@@ -20,9 +20,7 @@ const BANNED_PATTERNS = [
   /to-(blue|green|cyan|teal|turquoise)-\d+/g,
   /via-(blue|green|cyan|teal|turquoise)-\d+/g,
   // Hex codes (blue/green/cyan/teal/turquoise)
-  /#[0-9a-fA-F]{6}.*(?:00(?:00|ff|80)|00ff|0080|00c0|40e0|80ff|c0ff|e0ff|00(?:80|ff)|0080|00c0|40e0|80ff|c0ff|e0ff)/g,
-  // Specific banned hex codes
-  /#(0000ff|00ff00|008000|00ffff|008080|40e0d0|80ff80|c0ffc0|e0ffe0|00ff80|00c080|40e080|80ffc0|c0ffe0|e0ffff)/gi,
+  /#(0000ff|00ff00|008000|00ffff|008080|40e0d0|80ff80|c0ffc0|e0ffe0|00ff80|00c080|40e080|80ffc0|c0ffe0|e0ffff)(?![0-9a-fA-F])/gi,
   // RGB values
   /rgb\(0,\s*0,\s*255\)/gi, // blue
   /rgb\(0,\s*255,\s*0\)/gi, // green
@@ -77,11 +75,15 @@ function scanFile(filePath) {
     
     lines.forEach((line, index) => {
       // Skip allowed patterns (comments, docs)
-      if (ALLOWED_PATTERNS.some(pattern => pattern.test(line))) {
+      if (ALLOWED_PATTERNS.some(pattern => {
+        pattern.lastIndex = 0; // avoid stateful matches
+        return pattern.test(line);
+      })) {
         return;
       }
       
       BANNED_PATTERNS.forEach(pattern => {
+        pattern.lastIndex = 0; // avoid stateful matches
         const matches = line.match(pattern);
         if (matches) {
           matches.forEach(match => {

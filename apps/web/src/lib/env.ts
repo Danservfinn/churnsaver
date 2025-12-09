@@ -54,6 +54,7 @@ export const additionalEnv = {
   
   // KPI
   KPI_ATTRIBUTION_WINDOW_DAYS: process.env.KPI_ATTRIBUTION_WINDOW_DAYS ? parseInt(process.env.KPI_ATTRIBUTION_WINDOW_DAYS, 10) : 30,
+  CASE_EXPIRY_WINDOW_DAYS: process.env.CASE_EXPIRY_WINDOW_DAYS ? parseInt(process.env.CASE_EXPIRY_WINDOW_DAYS, 10) : 60,
   DEFAULT_INCENTIVE_DAYS: process.env.DEFAULT_INCENTIVE_DAYS ? parseInt(process.env.DEFAULT_INCENTIVE_DAYS, 10) : 7,
   
   // Webhook

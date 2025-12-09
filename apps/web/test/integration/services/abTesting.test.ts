@@ -36,7 +36,7 @@ describe('A/B Testing Integration Tests', () => {
       ];
 
       vi.mocked(sql.select).mockResolvedValue(variants as any);
-      vi.mocked(sql.execute).mockResolvedValue(1);
+      vi.mocked(sql.execute).mockResolvedValue({ rowCount: 1 });
 
       // Load variants
       await abTesting.loadVariants(companyId);
@@ -58,7 +58,7 @@ describe('A/B Testing Integration Tests', () => {
       const variantId = 'variant_1';
       const caseId = 'case_recovery_123';
 
-      vi.mocked(sql.execute).mockResolvedValue(1);
+      vi.mocked(sql.execute).mockResolvedValue({ rowCount: 1 });
 
       await abTesting.logConversion(variantId, caseId, 'convert');
 

@@ -2,6 +2,7 @@
 // Reusable company context validation and event processing status updates
 
 import { sql } from '../../../lib/db';
+import { sqlWithRLS } from '@/lib/db-rls';
 import { logger } from '../../../lib/logger';
 import { CompanyContext } from './jobTypes';
 
@@ -21,9 +22,10 @@ export async function assertCompanyContext(companyId?: string): Promise<CompanyC
 
   try {
     // Validate company exists
-    const company = await sql.select<{ id: string }>(
+    const company = await sqlWithRLS.select<{ id: string }>(
       'SELECT id FROM companies WHERE id = $1',
-      [companyId]
+      [companyId],
+      { skipRLS: true, enforceCompanyContext: false }
     );
 
     if (company.length === 0) {
@@ -69,7 +71,7 @@ export async function updateEventProcessingStatus(
       [success, success ? null : (error || 'processing_failed'), eventId, companyId]
     );
 
-    const updated = result > 0;
+    const updated = result.rowCount > 0;
     if (updated) {
       logger.debug('Event processing status updated', {
         eventId,

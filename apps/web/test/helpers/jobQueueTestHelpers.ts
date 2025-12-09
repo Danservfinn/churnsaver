@@ -271,7 +271,7 @@ export const createMockDatabase = () => {
     }),
     select: vi.fn().mockResolvedValue([]),
     insert: vi.fn().mockResolvedValue(null),
-    execute: vi.fn().mockResolvedValue(1),
+    execute: vi.fn().mockResolvedValue({ rowCount: 1 }),
     getQueries: () => [...queries],
     clearQueries: () => {
       queries.length = 0;

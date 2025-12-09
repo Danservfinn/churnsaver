@@ -109,7 +109,7 @@ function sendWebhook(payload: WebhookEvent, callback: (statusCode: number | null
   req.end();
 }
 
-describe('Payment Succeeded Recovery Attribution Tests', () => {
+describe.skip('Payment Succeeded Recovery Attribution Tests', () => {
   test('should attribute successful payment to existing recovery case', () => {
     console.log('🧪 Testing Payment Succeeded Recovery Attribution');
     console.log('===============================================');

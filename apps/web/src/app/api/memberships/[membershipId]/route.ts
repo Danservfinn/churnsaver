@@ -9,8 +9,7 @@ import {
   validateMembershipAccess
 } from '@/server/services/memberships';
 import { logger } from '@/lib/logger';
-import { getRequestContext } from '@/lib/auth/whop';
-import { errors } from '@/lib/apiResponse';
+import { requireAuthContext } from '@/lib/auth/requireAuth';
 
 // GET /api/memberships/[membershipId] - Get membership details
 export async function GET(
@@ -18,17 +17,9 @@ export async function GET(
   { params }: { params: Promise<{ membershipId: string }> }
 ): Promise<NextResponse> {
   try {
-    // Get company context from request
-    const context = await getRequestContext(request);
-    const companyId = context.companyId;
-
-    // Enforce authentication in production for creator-facing endpoints
-    if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
-      logger.warn('Unauthorized request to membership details - missing valid auth token');
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+    const auth = await requireAuthContext(request);
+    if (!auth.success || !auth.context) {
+      return auth.response ?? NextResponse.json({ error: auth.error || 'Authentication required' }, { status: auth.status || 401 });
     }
 
     const { membershipId } = await params;
@@ -53,7 +44,9 @@ export async function GET(
 
     return NextResponse.json({ membership });
   } catch (error) {
-    console.error('Membership API error:', error);
+    logger.error('Membership API error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

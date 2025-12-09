@@ -2,14 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getRequestContextSDK } from '@/lib/whop-sdk';
 import { securityMonitor, SecurityEvent } from '@/lib/security-monitoring';
 import { errors } from '@/lib/apiResponse';
+import { isProductionLikeEnvironment } from '@/lib/env';
+import { logger } from '@/lib/logger';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     // Authenticate request
     const context = await getRequestContextSDK(request);
+    const companyId = context.companyId ?? undefined;
+    const userId = context.userId ?? undefined;
     
     // In production, require authentication
-    if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
+    if (isProductionLikeEnvironment() && !context.isAuthenticated) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -49,7 +53,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     });
 
   } catch (error) {
-    console.error('Security metrics API error:', error);
+    logger.error('Security metrics API error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: 'Failed to retrieve security metrics' },
       { status: 500 }
@@ -61,9 +67,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     // Authenticate request
     const context = await getRequestContextSDK(request);
+    const companyId = context.companyId ?? undefined;
+    const userId = context.userId ?? undefined;
     
     // In production, require authentication
-    if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
+    if (isProductionLikeEnvironment() && !context.isAuthenticated) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -95,12 +103,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       description,
       ip: clientIP,
       userAgent,
-      userId: context.userId,
-      companyId: context.companyId,
+      userId,
+      companyId,
       endpoint: '/api/security/metrics',
       metadata: {
         ...metadata,
-        reportedBy: context.userId,
+        reportedBy: userId,
         manualReport: true
       }
     });
@@ -111,7 +119,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
 
   } catch (error) {
-    console.error('Security event reporting error:', error);
+    logger.error('Security event reporting error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: 'Failed to report security event' },
       { status: 500 }

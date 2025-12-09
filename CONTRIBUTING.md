@@ -692,6 +692,12 @@ Use established authentication patterns:
 - Session management
 - OAuth integration with Whop
 
+## Local testing quickstart
+
+- From `apps/web`: run `pnpm test` for the default mocked suite (no external services).
+- Server-dependent suites live under `apps/web/test/e2e-server/**`; run them with `pnpm run test:e2e:server` (requires a local API on :3000).
+- Playwright E2E lives under `apps/web/test/e2e`; run with `pnpm test:e2e` and set `E2E_BASE_URL` if not using localhost.
+
 ---
 
 Thank you for contributing to Churn Saver! Your contributions help make this project better for everyone.

@@ -43,10 +43,10 @@ Churn Saver is an intelligent customer retention platform designed to help busin
 - **State Management**: React hooks + Context
 
 ### Infrastructure
-- **Hosting**: AWS (ECS, RDS, ElastiCache, CloudFront)
-- **Monitoring**: DataDog, Sentry, CloudWatch
-- **Security**: AWS WAF, Shield, Certificate Manager
-- **CI/CD**: GitHub Actions
+- **Hosting**: Vercel (serverless functions, edge network)
+- **Database**: Supabase (PostgreSQL with RLS)
+- **Monitoring**: Vercel Analytics, Supabase Dashboard
+- **CI/CD**: GitHub Actions + Vercel
 
 ### External Integrations
 - **Payment Processing**: Whop API

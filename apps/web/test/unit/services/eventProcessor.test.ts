@@ -28,6 +28,15 @@ vi.mock('@/lib/db', () => ({
   },
   initDb: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock('@/lib/db-rls', () => ({
+  sqlWithRLS: {
+    select: vi.fn(),
+    insert: vi.fn(),
+    execute: vi.fn(),
+    transaction: vi.fn(),
+  },
+  initDbWithRLS: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('@/lib/env', () => ({
   env: {},
   additionalEnv: {},
@@ -94,11 +103,14 @@ describe('Event Processor Unit Tests', () => {
       const result = await processWebhookEvent(event, companyId);
 
       expect(result).toBe(true);
-      expect(processPaymentSucceededEvent).toHaveBeenCalled();
-      // Verify it was called with the correct event data structure
-      const callArgs = vi.mocked(processPaymentSucceededEvent).mock.calls[0];
-      expect(callArgs[0]).toHaveProperty('eventId', webhookPayload.id);
-      expect(callArgs[0]).toHaveProperty('membershipId', webhookPayload.data.membership_id);
+      expect(processPaymentSucceededEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventId: webhookPayload.id,
+          membershipId: webhookPayload.data.membership_id,
+        }),
+        companyId,
+        expect.any(Date)
+      );
     });
 
     test('should route membership_went_valid events to recovery attribution', async () => {
@@ -134,6 +146,7 @@ describe('Event Processor Unit Tests', () => {
           eventId: 'evt_test_123',
           membershipId: 'mem_test_123',
         }),
+        companyId,
         event.event_created_at
       );
     });
@@ -298,21 +311,21 @@ describe('Event Processor Unit Tests', () => {
     test('should process multiple unprocessed events', async () => {
       const companyId = 'company_test_123';
 
-      const { sql } = await import('@/lib/db');
+      const { sqlWithRLS } = await import('@/lib/db-rls');
       const events = [
         createTestEvent({ id: 'event_1', type: 'payment_failed', whop_event_id: 'evt_1' }),
         createTestEvent({ id: 'event_2', type: 'payment_succeeded', whop_event_id: 'evt_2' }),
       ];
       
       // First call: get unprocessed events
-      vi.mocked(sql.select).mockResolvedValueOnce(events as any);
+      vi.mocked(sqlWithRLS.select).mockResolvedValueOnce(events as any);
 
       // Mock the underlying case processing functions
       vi.mocked(processPaymentFailedEvent).mockResolvedValue({ id: 'case_1' } as any);
       vi.mocked(processPaymentSucceededEvent).mockResolvedValue(true);
 
       // Mock sql.execute for updating processed flags (called twice, once per event)
-      vi.mocked(sql.execute).mockResolvedValue(1);
+      vi.mocked(sqlWithRLS.execute).mockResolvedValue({ rowCount: 1 });
 
       const result = await processUnprocessedEvents(companyId);
 
@@ -324,21 +337,21 @@ describe('Event Processor Unit Tests', () => {
     test('should handle mixed success and failure', async () => {
       const companyId = 'company_test_123';
 
-      const { sql } = await import('@/lib/db');
+      const { sqlWithRLS } = await import('@/lib/db-rls');
       const events = [
         createTestEvent({ id: 'event_1', type: 'payment_failed', whop_event_id: 'evt_1' }),
         createTestEvent({ id: 'event_2', type: 'payment_failed', whop_event_id: 'evt_2' }),
       ];
       
       // First call: get unprocessed events
-      vi.mocked(sql.select).mockResolvedValueOnce(events as any);
+      vi.mocked(sqlWithRLS.select).mockResolvedValueOnce(events as any);
 
       // Mock one success, one failure
       vi.mocked(processPaymentFailedEvent)
         .mockResolvedValueOnce({ id: 'case_1' } as any)
         .mockResolvedValueOnce(null); // null indicates failure
 
-      vi.mocked(sql.execute).mockResolvedValue(1);
+      vi.mocked(sqlWithRLS.execute).mockResolvedValue({ rowCount: 1 });
 
       const result = await processUnprocessedEvents(companyId);
 
@@ -353,7 +366,7 @@ describe('Event Processor Unit Tests', () => {
       const eventId = 'evt_test_123';
       const companyId = 'company_test_123';
 
-      const { sql, initDb } = await import('@/lib/db');
+      const { sqlWithRLS, initDbWithRLS } = await import('@/lib/db-rls');
       const event = createTestEvent({ 
         id: 'event_test_123', 
         type: 'payment_failed', 
@@ -362,9 +375,9 @@ describe('Event Processor Unit Tests', () => {
       });
       
       // Mock initDb (called first)
-      vi.mocked(initDb).mockResolvedValue(undefined);
+      vi.mocked(initDbWithRLS).mockResolvedValue(undefined);
       // Mock sql.select to find the event
-      vi.mocked(sql.select).mockResolvedValue([event] as any);
+      vi.mocked(sqlWithRLS.select).mockResolvedValue([event] as any);
 
       vi.mocked(processPaymentFailedEvent).mockResolvedValue({ id: 'case_1' } as any);
 
@@ -378,8 +391,8 @@ describe('Event Processor Unit Tests', () => {
       const eventId = 'event_not_found';
       const companyId = 'company_test_123';
 
-      const { sql } = await import('@/lib/db');
-      vi.mocked(sql.select).mockResolvedValue([]);
+      const { sqlWithRLS } = await import('@/lib/db-rls');
+      vi.mocked(sqlWithRLS.select).mockResolvedValue([]);
 
       const result = await processEventById(eventId, companyId);
 

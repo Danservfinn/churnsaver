@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/webhooks/whop/route';
-import { cleanupRateLimitKeys, getRateLimitKeys } from '@/lib/rateLimitRedis';
+import { cleanupRateLimitKeys, getRateLimitKeys } from '@/lib/rateLimit';
 import crypto from 'crypto';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 

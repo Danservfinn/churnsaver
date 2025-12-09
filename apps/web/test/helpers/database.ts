@@ -25,7 +25,7 @@ export function createMockDatabase(): MockDatabase {
 
   const mockSelect = vi.fn().mockResolvedValue([]);
   const mockInsert = vi.fn().mockResolvedValue(null);
-  const mockExecute = vi.fn().mockResolvedValue(1);
+  const mockExecute = vi.fn().mockResolvedValue({ rowCount: 1 });
   const mockQuery = vi.fn().mockResolvedValue({ rows: [], rowCount: 0 });
 
   // Track queries for assertions
@@ -81,13 +81,13 @@ export function createMockQueryResult<T>(rows: T[]): MockQueryResult<T> {
 export function mockSqlModule(overrides: {
   select?: (query: string, params?: any[]) => Promise<any[]>;
   insert?: (query: string, params?: any[]) => Promise<any>;
-  execute?: (query: string, params?: any[]) => Promise<number>;
+  execute?: (query: string, params?: any[]) => Promise<{ rowCount: number }>;
   query?: (query: string, params?: any[]) => Promise<MockQueryResult>;
 } = {}) {
   const defaultMocks = {
     select: vi.fn().mockResolvedValue([]),
     insert: vi.fn().mockResolvedValue(null),
-    execute: vi.fn().mockResolvedValue(1),
+    execute: vi.fn().mockResolvedValue({ rowCount: 1 }),
     query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
   };
 

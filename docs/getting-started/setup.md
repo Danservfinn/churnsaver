@@ -457,18 +457,23 @@ npx prisma db push
 ```env
 # Production Environment
 NODE_ENV=production
-NEXT_PUBLIC_APP_URL=https://your-app.churnsaver.com
+NEXT_PUBLIC_APP_URL=https://your-app.vercel.app
 
-# Production Database (Supabase, AWS RDS, etc.)
-DATABASE_URL=postgresql://user:pass@prod-host:5432/db
-DIRECT_URL=postgresql://user:pass@prod-host:5432/db
+# Supabase
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+SUPABASE_ANON_KEY=your-anon-key
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 
-# Production Redis (AWS ElastiCache, etc.)
-REDIS_URL=redis://prod-redis-host:6379
+# Whop
+WHOP_API_KEY=your-whop-api-key
+WHOP_WEBHOOK_SECRET=your-webhook-secret
 
-# Production Monitoring
-SENTRY_DSN=https://your-sentry-dsn@sentry.io/project
-DATADOG_API_KEY=your-datadog-key
+# Security
+JWT_SECRET=your-jwt-secret-min-32-chars
+ENCRYPTION_KEY=your-encryption-key-32-chars
+CRON_SECRET=your-cron-secret
 ```
 
 ### Deployment Checklist

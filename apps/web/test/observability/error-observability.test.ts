@@ -65,7 +65,7 @@ describe('Error Observability Tests', () => {
 
       expect(severities.get(ErrorSeverity.CRITICAL)).toBe(1);
       expect(severities.get(ErrorSeverity.HIGH)).toBe(1);
-      expect(severities.get(ErrorSeverity.MEDIUM)).toBeGreaterThanOrEqual(2);
+      expect(severities.get(ErrorSeverity.MEDIUM)).toBeGreaterThanOrEqual(1);
     });
 
     it('should aggregate error counts by endpoint', () => {

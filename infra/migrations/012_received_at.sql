@@ -14,10 +14,14 @@ UPDATE events SET received_at = processed_at WHERE received_at IS NULL;
 -- Add index for received_at to support ordering in processUnprocessedEvents
 CREATE INDEX IF NOT EXISTS idx_events_received_at ON events(received_at);
 
+-- Composite index for unprocessed events by company and received time
+CREATE INDEX IF NOT EXISTS idx_events_company_processed_received
+ON events (company_id, processed, received_at);
+
 -- Log migration completion
 DO $$
 BEGIN
     RAISE NOTICE 'Migration 012_received_at completed successfully';
     RAISE NOTICE 'Added received_at column and backfilled existing rows';
-    RAISE NOTICE 'Created index idx_events_received_at';
+    RAISE NOTICE 'Created indexes: idx_events_received_at, idx_events_company_processed_received';
 END $$;

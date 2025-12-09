@@ -10,6 +10,8 @@ import { useToast } from '@/components/ui/toast';
 import { Settings as SettingsIcon, Bell, MessageSquare, Gift, Clock, RotateCcw, CheckCircle2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useWhop } from '@/lib/context/whop';
+import { Badge } from '@/components/ui/badge';
+import { logger } from '@/lib/logger';
 
 interface CreatorSettings {
   company_id: string;
@@ -18,6 +20,23 @@ interface CreatorSettings {
   incentive_days: number;
   reminder_offsets_days: number[];
   updated_at: string;
+}
+
+interface SubscriptionInfo {
+  subscription: {
+    company_id: string;
+    tier: 'free' | 'starter' | 'growth' | 'scale';
+    total_recoveries_used: number;
+    monthly_recovered_revenue_cents: number;
+    month_start_date: string;
+  };
+  limits: {
+    tier: string;
+    max_monthly_recovered_revenue_cents: number | null;
+    max_total_recoveries: number | null;
+    price_cents: number;
+    name: string;
+  };
 }
 
 const DEFAULT_SETTINGS: CreatorSettings = {
@@ -52,6 +71,7 @@ export default function Settings() {
   const { addToast } = useToast();
   const { getAuthHeaders } = useWhop();
   const [settings, setSettings] = useState<CreatorSettings | null>(null);
+  const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,32 +88,37 @@ export default function Settings() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch('/api/settings', {
-        headers: getAuthHeaders(),
-      });
-      
-      if (!response.ok) {
-        let errorMessage = `Failed to load settings: ${response.status}`;
+      const [settingsRes, subscriptionRes] = await Promise.all([
+        fetch('/api/settings', { headers: getAuthHeaders() }),
+        fetch('/api/subscription', { headers: getAuthHeaders() }),
+      ]);
+
+      if (!settingsRes.ok) {
+        let errorMessage = `Failed to load settings: ${settingsRes.status}`;
         try {
-          const errorData = await response.json();
+          const errorData = await settingsRes.json();
           errorMessage = errorData.error || errorMessage;
-          
-          if (errorData.details && process.env.NODE_ENV === 'development') {
-            console.error('Settings API error details:', errorData.details);
-          }
         } catch {
-          errorMessage = response.statusText || errorMessage;
+          errorMessage = settingsRes.statusText || errorMessage;
         }
-        
         throw new Error(errorMessage);
       }
 
-      const data = await response.json();
-      setSettings(data);
+      const settingsData = await settingsRes.json();
+      setSettings(settingsData);
+
+      if (subscriptionRes.ok) {
+        const subscriptionData = await subscriptionRes.json();
+        setSubscription(subscriptionData);
+      } else {
+        logger.warn?.('Failed to load subscription info', { status: subscriptionRes.status });
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load settings';
       setError(errorMessage);
-      console.error('Error loading settings:', err);
+      logger.error('Error loading settings', {
+        error: err instanceof Error ? err.message : String(err),
+      });
       
       addToast({
         type: 'error',
@@ -140,7 +165,9 @@ export default function Settings() {
         title: 'Failed to save',
         message: errorMessage,
       });
-      console.error('Error saving settings:', err);
+      logger.error('Error saving settings', {
+        error: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setSaving(false);
     }
@@ -276,6 +303,24 @@ export default function Settings() {
               </Button>
             </Link>
           </div>
+          {subscription && (
+            <div className="flex items-center gap-3 flex-wrap text-sm text-muted-foreground">
+              <Badge variant="outline">Tier: {subscription.subscription.tier}</Badge>
+              {subscription.limits.max_total_recoveries !== null && (
+                <span>
+                  Recoveries used: {subscription.subscription.total_recoveries_used}/{subscription.limits.max_total_recoveries}
+                </span>
+              )}
+              {subscription.limits.max_monthly_recovered_revenue_cents !== null && (
+                <span>
+                  Monthly recovered: ${(subscription.subscription.monthly_recovered_revenue_cents / 100).toFixed(2)} / ${(subscription.limits.max_monthly_recovered_revenue_cents / 100).toFixed(2)}
+                </span>
+              )}
+              {subscription.limits.max_monthly_recovered_revenue_cents === null && (
+                <span>Recovered revenue: ${(subscription.subscription.monthly_recovered_revenue_cents / 100).toFixed(2)}</span>
+              )}
+            </div>
+          )}
           {settings && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Clock className="h-4 w-4" />

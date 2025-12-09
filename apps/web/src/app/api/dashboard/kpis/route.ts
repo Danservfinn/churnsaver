@@ -12,18 +12,20 @@
 // which is the standard KPI approach for business analytics.
 
 import { NextRequest, NextResponse } from 'next/server';
-import { sql, initDb } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { getRequestContext } from '@/lib/auth/whop';
 import { KpiQuerySchema, validateAndTransform } from '@/lib/validation';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { errors } from '@/lib/apiResponse';
+import { initDbWithRLS, setRequestContext, clearRequestContext, sqlWithRLS } from '@/lib/db-rls';
+import { requireAuthContext } from '@/lib/auth/requireAuth';
 
 export interface DashboardKPIs {
   activeCases: number;
-  recoveries: number;
-  recoveryRate: number; // percentage
-  recoveredRevenueCents: number;
+  recoveries: number; // click-through recoveries
+  organicRecoveries: number;
+  recoveryRate: number; // percentage (click-through / total cases)
+  recoveredRevenueCents: number; // click-through revenue
+  organicRevenueCents: number;
   totalCases: number;
   windowDays: number;
   calculatedAt: string;
@@ -34,19 +36,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   try {
     // Initialize database connection
-    await initDb();
+    await initDbWithRLS();
 
-    // Get company context from request
-    const context = await getRequestContext(request);
-    const companyId = context.companyId;
+    const auth = await requireAuthContext(request);
+    if (!auth.success || !auth.context) {
+      return auth.response ?? NextResponse.json({ error: auth.error || 'Authentication required' }, { status: auth.status || 401 });
+    }
 
-    // Enforce authentication in production for creator-facing endpoints
-    if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
-      logger.warn('Unauthorized request to dashboard KPIs - missing valid auth token');
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+    const { companyId, userId, isAuthenticated } = auth.context;
+    if (!companyId) {
+      logger.warn('Dashboard KPIs request missing companyId in auth context');
+      return NextResponse.json({ error: 'Company context is required' }, { status: 400 });
     }
 
     // Apply rate limiting for creator-facing case actions (30/min per company)
@@ -80,62 +80,102 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - windowDays);
 
+    setRequestContext({
+      companyId,
+      userId: userId ?? undefined,
+      isAuthenticated
+    });
+
     // Query KPIs in parallel (filtered by company)
-    const [activeCasesResult, recoveriesResult, totalCasesResult, revenueResult] = await Promise.all([
+    const [activeCasesResult, recoveriesResult, organicResult, totalCasesResult, revenueResult, organicRevenueResult] = await Promise.all([
       // Active cases (open recovery cases within window)
-      sql.select<{ count: number }>(
+      sqlWithRLS.select<{ count: number }>(
         `SELECT COUNT(*) as count
          FROM recovery_cases
          WHERE company_id = $1
          AND status = 'open'
          AND first_failure_at >= $2`,
-        [companyId, cutoffDate]
+        [companyId, cutoffDate],
+        { companyId }
       ),
 
-      // Recoveries (cases marked as recovered within window)
-      sql.select<{ count: number }>(
+      // Click-through recoveries (attributed)
+      sqlWithRLS.select<{ count: number }>(
         `SELECT COUNT(*) as count
          FROM recovery_cases
          WHERE company_id = $1
          AND status = 'recovered'
+         AND recovery_type = 'CLICK_THROUGH'
          AND first_failure_at >= $2`,
-        [companyId, cutoffDate]
+        [companyId, cutoffDate],
+        { companyId }
       ),
 
-      // Total cases (all cases within window)
-      sql.select<{ count: number }>(
+      // Organic recoveries (not attributed)
+      sqlWithRLS.select<{ count: number }>(
         `SELECT COUNT(*) as count
          FROM recovery_cases
          WHERE company_id = $1
+         AND status = 'recovered'
+         AND recovery_type = 'ORGANIC'
          AND first_failure_at >= $2`,
-        [companyId, cutoffDate]
+        [companyId, cutoffDate],
+        { companyId }
       ),
 
-      // Recovered revenue (sum of recovered amounts within window)
-      sql.select<{ total: number }>(
+      // Total cases (all cases within window)
+      sqlWithRLS.select<{ count: number }>(
+        `SELECT COUNT(*) as count
+         FROM recovery_cases
+         WHERE company_id = $1
+         AND first_failure_at >= $2
+         AND status != 'expired'`,
+        [companyId, cutoffDate],
+        { companyId }
+      ),
+
+      // Click-through recovered revenue
+      sqlWithRLS.select<{ total: number }>(
         `SELECT COALESCE(SUM(recovered_amount_cents), 0) as total
          FROM recovery_cases
          WHERE company_id = $1
          AND status = 'recovered'
+         AND recovery_type = 'CLICK_THROUGH'
          AND first_failure_at >= $2`,
-        [companyId, cutoffDate]
+        [companyId, cutoffDate],
+        { companyId }
+      ),
+
+      // Organic revenue (for context)
+      sqlWithRLS.select<{ total: number }>(
+        `SELECT COALESCE(SUM(recovered_amount_cents), 0) as total
+         FROM recovery_cases
+         WHERE company_id = $1
+         AND status = 'recovered'
+         AND recovery_type = 'ORGANIC'
+         AND first_failure_at >= $2`,
+        [companyId, cutoffDate],
+        { companyId }
       )
     ]);
 
     const activeCases = activeCasesResult[0]?.count || 0;
     const recoveries = recoveriesResult[0]?.count || 0;
+    const organicRecoveries = organicResult[0]?.count || 0;
     const totalCases = totalCasesResult[0]?.count || 0;
     const recoveredRevenueCents = revenueResult[0]?.total || 0;
+    const organicRevenueCents = organicRevenueResult[0]?.total || 0;
 
-    // Calculate recovery rate (Recoveries / Failures per PRD; Failures = active/open cases in window)
-    // Use zero-division guard: if no active cases, recovery rate is 0 (not undefined)
-    const recoveryRate = activeCases > 0 ? Math.round((recoveries / activeCases) * 100 * 100) / 100 : 0; // percentage with 2 decimal places
+    // Recovery rate = click-through recoveries / total failed renewals in window
+    const recoveryRate = totalCases > 0 ? Math.round((recoveries / totalCases) * 100 * 100) / 100 : 0; // percentage with 2 decimal places
 
     const kpis: DashboardKPIs = {
       activeCases,
       recoveries,
+      organicRecoveries,
       recoveryRate,
       recoveredRevenueCents,
+      organicRevenueCents,
       totalCases,
       windowDays,
       calculatedAt: new Date().toISOString()
@@ -163,5 +203,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       { error: 'Failed to calculate KPIs' },
       { status: 500 }
     );
+  } finally {
+    clearRequestContext();
   }
 }

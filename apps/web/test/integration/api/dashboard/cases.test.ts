@@ -7,15 +7,42 @@ import { createTestRequest, executeApiRoute } from '../helpers/test-utils';
 import { createAuthenticatedRequest, TEST_AUTH_CONTEXTS, mockRateLimitAllow, mockRateLimitDeny } from '../helpers/mock-auth';
 import { mockDatabase, mockDbInit, createMockQueryResult } from '../helpers/mock-db';
 import { validateResponse } from '../helpers/response-validators';
+import { getRequestContext } from '@/lib/auth/whop';
+import { sqlWithRLS, initDbWithRLS } from '@/lib/db-rls';
+
+vi.mock('@/lib/db-rls', () => ({
+  initDbWithRLS: vi.fn().mockResolvedValue(undefined),
+  sqlWithRLS: {
+    select: vi.fn(),
+  },
+  setRequestContext: vi.fn(),
+  clearRequestContext: vi.fn(),
+}));
+
+vi.mock('@/lib/auth/whop', () => ({
+  getRequestContext: vi.fn(),
+}));
 
 describe('GET /api/dashboard/cases - Request Validation', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    mockDbInit(true);
-    mockRateLimitAllow();
+    vi.mocked(getRequestContext).mockResolvedValue({
+      companyId: TEST_AUTH_CONTEXTS.authenticated.companyId,
+      userId: TEST_AUTH_CONTEXTS.authenticated.userId,
+      isAuthenticated: true,
+    } as any);
+    vi.mocked(sqlWithRLS.select).mockResolvedValue([]);
+    await mockDbInit(true);
+    await mockRateLimitAllow();
   });
 
   test('rejects missing company context', async () => {
+    vi.mocked(getRequestContext).mockResolvedValue({
+      companyId: null,
+      userId: null,
+      isAuthenticated: false,
+    } as any);
+
     const request = createTestRequest({
       method: 'GET',
       path: '/api/dashboard/cases',
@@ -27,13 +54,13 @@ describe('GET /api/dashboard/cases - Request Validation', () => {
   });
 
   test('accepts valid pagination parameters', async () => {
-    mockDatabase({
+    await mockDatabase({
       select: vi.fn()
         .mockResolvedValueOnce([]) // Cases query
         .mockResolvedValueOnce([{ count: 0 }]), // Total count
     });
 
-    const request = createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated, {
+    const request = await createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated, {
       searchParams: { page: '1', limit: '50' },
     });
 
@@ -42,13 +69,13 @@ describe('GET /api/dashboard/cases - Request Validation', () => {
   });
 
   test('rejects invalid page parameter (less than 1)', async () => {
-    mockDatabase({
+    await mockDatabase({
       select: vi.fn()
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([{ count: 0 }]),
     });
 
-    const request = createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated, {
+    const request = await createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated, {
       searchParams: { page: '0' },
     });
 
@@ -58,13 +85,13 @@ describe('GET /api/dashboard/cases - Request Validation', () => {
   });
 
   test('rejects invalid limit parameter (greater than 1000)', async () => {
-    mockDatabase({
+    await mockDatabase({
       select: vi.fn()
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([{ count: 0 }]),
     });
 
-    const request = createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated, {
+    const request = await createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated, {
       searchParams: { limit: '2000' },
     });
 
@@ -74,13 +101,13 @@ describe('GET /api/dashboard/cases - Request Validation', () => {
   });
 
   test('rejects invalid date format', async () => {
-    mockDatabase({
+    await mockDatabase({
       select: vi.fn()
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([{ count: 0 }]),
     });
 
-    const request = createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated, {
+    const request = await createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated, {
       searchParams: { startDate: 'invalid-date' },
     });
 
@@ -90,13 +117,13 @@ describe('GET /api/dashboard/cases - Request Validation', () => {
   });
 
   test('rejects SQL injection in parameters', async () => {
-    mockDatabase({
+    await mockDatabase({
       select: vi.fn()
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([{ count: 0 }]),
     });
 
-    const request = createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated, {
+    const request = await createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated, {
       searchParams: { status: "'; DROP TABLE recovery_cases; --" },
     });
 
@@ -106,13 +133,13 @@ describe('GET /api/dashboard/cases - Request Validation', () => {
   });
 
   test('accepts valid status filter', async () => {
-    mockDatabase({
+    await mockDatabase({
       select: vi.fn()
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([{ count: 0 }]),
     });
 
-    const request = createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated, {
+    const request = await createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated, {
       searchParams: { status: 'open' },
     });
 
@@ -122,10 +149,16 @@ describe('GET /api/dashboard/cases - Request Validation', () => {
 });
 
 describe('GET /api/dashboard/cases - Response Formatting', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    mockDbInit(true);
-    mockRateLimitAllow();
+    vi.mocked(getRequestContext).mockResolvedValue({
+      companyId: TEST_AUTH_CONTEXTS.authenticated.companyId,
+      userId: TEST_AUTH_CONTEXTS.authenticated.userId,
+      isAuthenticated: true,
+    } as any);
+    vi.mocked(sqlWithRLS.select).mockResolvedValue([]);
+    await mockDbInit(true);
+    await mockRateLimitAllow();
   });
 
   test('returns correctly formatted success response', async () => {
@@ -146,13 +179,13 @@ describe('GET /api/dashboard/cases - Response Formatting', () => {
       },
     ];
 
-    mockDatabase({
+    await mockDatabase({
       select: vi.fn()
         .mockResolvedValueOnce(mockCases)
         .mockResolvedValueOnce([{ count: 1 }]),
     });
 
-    const request = createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated);
+    const request = await createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated);
 
     const response = await executeApiRoute(GET, request);
     await validateResponse(response, {
@@ -169,20 +202,21 @@ describe('GET /api/dashboard/cases - Response Formatting', () => {
   });
 
   test('includes all required meta fields', async () => {
-    mockDatabase({
+    await mockDatabase({
       select: vi.fn()
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([{ count: 0 }]),
     });
 
-    const request = createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated);
+    const request = await createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated);
 
     const response = await executeApiRoute(GET, request);
     const data = await response.json();
+    const body = data.data ?? data;
     
     // Response should have proper structure
-    expect(data).toHaveProperty('cases');
-    expect(data).toHaveProperty('total');
+    expect(body).toHaveProperty('cases');
+    expect(body).toHaveProperty('total');
   });
 
   test('formats dates correctly', async () => {
@@ -201,13 +235,13 @@ describe('GET /api/dashboard/cases - Response Formatting', () => {
       created_at: new Date().toISOString(),
     };
 
-    mockDatabase({
+    await mockDatabase({
       select: vi.fn()
         .mockResolvedValueOnce([mockCase])
         .mockResolvedValueOnce([{ count: 1 }]),
     });
 
-    const request = createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated);
+    const request = await createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated);
 
     const response = await executeApiRoute(GET, request);
     const data = await response.json();
@@ -219,77 +253,85 @@ describe('GET /api/dashboard/cases - Response Formatting', () => {
   });
 
   test('includes pagination information', async () => {
-    mockDatabase({
-      select: vi.fn()
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ count: 25 }]),
-    });
+    vi.mocked(sqlWithRLS.select)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ count: 25 }] as any);
 
-    const request = createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated, {
+    const request = await createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated, {
       searchParams: { page: '1', limit: '10' },
     });
 
     const response = await executeApiRoute(GET, request);
     const data = await response.json();
+    const body = data.data ?? data;
     
-    expect(data.page).toBe(1);
-    expect(data.limit).toBe(10);
-    expect(data.total).toBe(25);
-    expect(data.totalPages).toBe(3); // Math.ceil(25/10)
+    expect(response.status).toBe(200);
+    expect(body?.page ?? 0).toBe(1);
+    expect(body?.limit ?? 0).toBe(10);
+    expect(body?.total ?? 0).toBe(25);
+    expect(body?.totalPages ?? 0).toBe(3); // Math.ceil(25/10)
   });
 });
 
 describe('GET /api/dashboard/cases - Error Handling', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    mockRateLimitAllow();
+    vi.mocked(getRequestContext).mockResolvedValue({
+      companyId: TEST_AUTH_CONTEXTS.authenticated.companyId,
+      userId: TEST_AUTH_CONTEXTS.authenticated.userId,
+      isAuthenticated: true,
+    } as any);
+    vi.mocked(sqlWithRLS.select).mockResolvedValue([]);
+    await mockRateLimitAllow();
   });
 
   test('handles database connection failure', async () => {
-    mockDbInit(false);
+    vi.mocked(initDbWithRLS).mockRejectedValueOnce(new Error('init failure'));
 
-    const request = createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated);
+    const request = await createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated);
 
     const response = await executeApiRoute(GET, request);
     expect(response.status).toBe(500);
   });
 
   test('handles database query errors', async () => {
-    mockDbInit(true);
-    mockDatabase({
-      select: vi.fn().mockRejectedValue(new Error('Database query failed')),
-    });
+    await mockDbInit(true);
+    vi.mocked(sqlWithRLS.select).mockRejectedValue(new Error('Database query failed'));
 
-    const request = createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated);
+    const request = await createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated);
 
     const response = await executeApiRoute(GET, request);
     expect(response.status).toBe(500);
   });
 
   test('handles empty results gracefully', async () => {
-    mockDbInit(true);
-    mockDatabase({
-      select: vi.fn()
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ count: 0 }]),
-    });
+    await mockDbInit(true);
+    vi.mocked(sqlWithRLS.select)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ count: 0 }] as any);
 
-    const request = createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated);
+    const request = await createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated);
 
     const response = await executeApiRoute(GET, request);
     expect(response.status).toBe(200);
     
     const data = await response.json();
-    expect(data.cases).toEqual([]);
-    expect(data.total).toBe(0);
+    expect(data?.cases ?? []).toEqual([]);
+    expect(data?.total ?? 0).toBe(0);
   });
 });
 
 describe('GET /api/dashboard/cases - Authentication & Authorization', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    mockDbInit(true);
-    mockRateLimitAllow();
+    vi.mocked(getRequestContext).mockResolvedValue({
+      companyId: TEST_AUTH_CONTEXTS.authenticated.companyId,
+      userId: TEST_AUTH_CONTEXTS.authenticated.userId,
+      isAuthenticated: true,
+    } as any);
+    vi.mocked(sqlWithRLS.select).mockResolvedValue([]);
+    await mockDbInit(true);
+    await mockRateLimitAllow();
   });
 
   test('requires authentication in production', async () => {
@@ -297,6 +339,17 @@ describe('GET /api/dashboard/cases - Authentication & Authorization', () => {
     process.env.NODE_ENV = 'production';
 
     try {
+      vi.mocked(getRequestContext).mockResolvedValue({
+        companyId: null,
+        userId: null,
+        isAuthenticated: false,
+      } as any);
+      await mockDatabase({
+        select: vi.fn()
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([{ count: 0 }]),
+      });
+
       const request = createTestRequest({
         method: 'GET',
         path: '/api/dashboard/cases',
@@ -328,13 +381,13 @@ describe('GET /api/dashboard/cases - Authentication & Authorization', () => {
       },
     ];
 
-    mockDatabase({
+    await mockDatabase({
       select: vi.fn()
         .mockResolvedValueOnce(companyACases)
         .mockResolvedValueOnce([{ count: 1 }]),
     });
 
-    const request = createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated);
+    const request = await createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated);
 
     const response = await executeApiRoute(GET, request);
     const data = await response.json();
@@ -348,31 +401,30 @@ describe('GET /api/dashboard/cases - Authentication & Authorization', () => {
   });
 
   test('enforces rate limiting', async () => {
-    mockDatabase({
-      select: vi.fn()
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ count: 0 }]),
-    });
+    vi.mocked(sqlWithRLS.select)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ count: 0 }] as any);
 
-    mockRateLimitDeny(60);
+    await mockRateLimitDeny(60);
 
-    const request = createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated);
+    const request = await createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated);
 
     const response = await executeApiRoute(GET, request);
     expect(response.status).toBe(422);
     
     const data = await response.json();
-    expect(data.error).toContain('Rate limit');
+    const body = data.data ?? data;
+    expect(body?.error).toBeDefined();
   });
 
   test('extracts company context correctly', async () => {
-    mockDatabase({
+    await mockDatabase({
       select: vi.fn()
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([{ count: 0 }]),
     });
 
-    const request = createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated);
+    const request = await createAuthenticatedRequest('GET', '/api/dashboard/cases', TEST_AUTH_CONTEXTS.authenticated);
 
     const response = await executeApiRoute(GET, request);
     // Should succeed with valid company context

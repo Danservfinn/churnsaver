@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { TEST_RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
-import { cleanupRateLimitKeys, getRateLimitKeys } from '@/lib/rateLimitRedis';
+import { cleanupRateLimitKeys, getRateLimitKeys } from '@/lib/rateLimit';
 import crypto from 'crypto';
 
 // Test utilities

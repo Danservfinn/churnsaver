@@ -1,7 +1,7 @@
 // Event processor service
 // Processes stored webhook events and creates recovery cases
 
-import { sql } from '@/lib/db';
+import { sqlWithRLS, initDbWithRLS } from '@/lib/db-rls';
 import { logger } from '@/lib/logger';
 import { monitoredSelect, monitoredQuery } from '@/lib/queryMonitor';
 import {
@@ -27,10 +27,26 @@ export interface ProcessedEvent {
   processing_error?: string;
 }
 
+function normalizeEventType(type: string): string {
+  const map: Record<string, string> = {
+    'payment.failed': 'payment_failed',
+    'payment.succeeded': 'payment_succeeded',
+    'membership.went_valid': 'membership_went_valid',
+    'membership.went_invalid': 'membership_went_invalid',
+    'membership.activated': 'membership_activated',
+    'membership.deactivated': 'membership_deactivated'
+  };
+
+  if (!type) return type;
+  if (map[type]) return map[type];
+  // fallback: replace dots with underscores for forward compatibility
+  return type.replace(/\./g, '_');
+}
+
 // Extract PaymentFailedEvent from webhook payload
 function extractPaymentFailedEvent(event: ProcessedEvent): PaymentFailedEvent | null {
   try {
-    if (event.type !== 'payment_failed') {
+    if (normalizeEventType(event.type) !== 'payment_failed') {
       return null;
     }
 
@@ -57,7 +73,8 @@ function extractPaymentFailedEvent(event: ProcessedEvent): PaymentFailedEvent | 
       userId,
       reason,
       amount: typeof amount === 'number' ? amount : undefined,
-      currency
+      currency,
+      occurredAt: event.event_created_at
     };
 
   } catch (error) {
@@ -125,6 +142,9 @@ function normalizeAmountToDollars(rawAmount: number, currency: string = 'USD'): 
   if (normalizedAmount < 0) {
     throw new Error(`Negative amount after normalization: ${normalizedAmount}`);
   }
+  if (normalizedAmount < 0.01) {
+    throw new Error(`Normalized amount too small to attribute: ${normalizedAmount}`);
+  }
   if (normalizedAmount > 1000000) { // $1M upper bound for sanity
     throw new Error(`Excessive amount after normalization: ${normalizedAmount}`);
   }
@@ -135,7 +155,7 @@ function normalizeAmountToDollars(rawAmount: number, currency: string = 'USD'): 
 // Extract PaymentSucceededEvent from webhook payload
 function extractPaymentSucceededEvent(event: ProcessedEvent): PaymentSucceededEvent | null {
   try {
-    if (event.type !== 'payment_succeeded') {
+    if (normalizeEventType(event.type) !== 'payment_succeeded') {
       return null;
     }
 
@@ -152,6 +172,7 @@ function extractPaymentSucceededEvent(event: ProcessedEvent): PaymentSucceededEv
 
     // Payment succeeded events should have an amount in data.payment.amount
     const rawAmount = data.payment?.amount || data.amount;
+
     if (typeof rawAmount !== 'number' || rawAmount <= 0) {
       logger.warn('Invalid or missing amount in payment_succeeded event', {
         eventId: event.whop_event_id,
@@ -215,7 +236,8 @@ function extractPaymentSucceededEvent(event: ProcessedEvent): PaymentSucceededEv
 function extractMembershipValidEvent(event: ProcessedEvent): MembershipValidEvent | null {
   try {
     // Support both v5 and v1 API event names
-    if (event.type !== 'membership_went_valid' && event.type !== 'membership_activated') {
+    const normalizedType = normalizeEventType(event.type);
+    if (normalizedType !== 'membership_went_valid' && normalizedType !== 'membership_activated') {
       return null;
     }
 
@@ -249,7 +271,8 @@ function extractMembershipValidEvent(event: ProcessedEvent): MembershipValidEven
 function extractMembershipInvalidEvent(event: ProcessedEvent): MembershipInvalidEvent | null {
   try {
     // Support both v5 and v1 API event names
-    if (event.type !== 'membership_went_invalid' && event.type !== 'membership_deactivated') {
+    const normalizedType = normalizeEventType(event.type);
+    if (normalizedType !== 'membership_went_invalid' && normalizedType !== 'membership_deactivated') {
       return null;
     }
 
@@ -285,14 +308,16 @@ export async function processWebhookEvent(
   companyId: string
 ): Promise<boolean> {
   try {
+    const normalizedType = normalizeEventType(event.type);
+
     logger.info('Processing webhook event', {
       eventId: event.whop_event_id,
-      type: event.type,
+      type: normalizedType,
       membershipId: event.membership_id
     });
 
     // Process payment_failed events
-    if (event.type === 'payment_failed') {
+    if (normalizedType === 'payment_failed') {
       logger.info('Extracting payment failed event data', { eventId: event.whop_event_id });
       const paymentEvent = extractPaymentFailedEvent(event);
       if (!paymentEvent) {
@@ -313,7 +338,7 @@ export async function processWebhookEvent(
     }
 
     // Process payment_succeeded events (recovery attribution)
-    if (event.type === 'payment_succeeded') {
+    if (normalizedType === 'payment_succeeded') {
       logger.info('Extracting payment succeeded event data', { eventId: event.whop_event_id });
       const paymentEvent = extractPaymentSucceededEvent(event);
       if (!paymentEvent) {
@@ -326,7 +351,7 @@ export async function processWebhookEvent(
         membershipId: paymentEvent.membershipId,
         amount: paymentEvent.amount
       });
-      const result = await processPaymentSucceededEvent(paymentEvent, event.event_created_at);
+      const result = await processPaymentSucceededEvent(paymentEvent, companyId, event.event_created_at);
       logger.info('Payment succeeded event processing result', {
         eventId: paymentEvent.eventId,
         success: result
@@ -336,7 +361,7 @@ export async function processWebhookEvent(
 
     // Process membership_went_valid events (recovery attribution)
     // Also handle v1 API event name: membership_activated
-    if (event.type === 'membership_went_valid' || event.type === 'membership_activated') {
+    if (normalizedType === 'membership_went_valid' || normalizedType === 'membership_activated') {
       logger.info('Extracting membership valid event data', { eventId: event.whop_event_id });
       const membershipEvent = extractMembershipValidEvent(event);
       if (!membershipEvent) {
@@ -348,7 +373,7 @@ export async function processWebhookEvent(
         eventId: membershipEvent.eventId,
         membershipId: membershipEvent.membershipId
       });
-      const result = await processMembershipValidEvent(membershipEvent, event.event_created_at);
+      const result = await processMembershipValidEvent(membershipEvent, companyId, event.event_created_at);
       logger.info('Membership valid event processing result', {
         eventId: membershipEvent.eventId,
         success: result
@@ -358,7 +383,7 @@ export async function processWebhookEvent(
 
     // Process membership_went_invalid events (create recovery case)
     // Also handle v1 API event name: membership_deactivated
-    if (event.type === 'membership_went_invalid' || event.type === 'membership_deactivated') {
+    if (normalizedType === 'membership_went_invalid' || normalizedType === 'membership_deactivated') {
       logger.info('Extracting membership invalid event data', { eventId: event.whop_event_id });
       const membershipEvent = extractMembershipInvalidEvent(event);
       if (!membershipEvent) {
@@ -415,14 +440,22 @@ export async function processUnprocessedEvents(companyId: string): Promise<{
     // Company context is required to ensure RLS policies are applied and data isolation is maintained
     // For now, we'll process all events since we don't have a processed flag
     // In production, you'd add a processed_events table or flag
-    const events = await sql.select<ProcessedEvent>(
+    const events = await sqlWithRLS.select<ProcessedEvent>(
       `SELECT id, whop_event_id, type, membership_id, payload, processed_at, occurred_at AS event_created_at
        FROM events
        WHERE processed = false
          AND company_id = $1
-         AND type IN ('payment_failed', 'payment_succeeded', 'membership_went_valid', 'membership_went_invalid', 'membership_activated', 'membership_deactivated')
+         AND company_resolution_status = 'resolved'
+         AND type IN (
+           'payment_failed', 'payment_succeeded',
+           'membership_went_valid', 'membership_went_invalid',
+           'membership_activated', 'membership_deactivated',
+           'payment.failed', 'payment.succeeded',
+           'membership.went_valid', 'membership.went_invalid'
+         )
        ORDER BY received_at ASC`,
-      [companyId]
+      [companyId],
+      { companyId }
     );
 
     logger.info('Found events to process', { count: events.length });
@@ -437,15 +470,22 @@ export async function processUnprocessedEvents(companyId: string): Promise<{
       try {
         if (success) {
           // Set processed_at only on successful processing
-          await sql.execute(
-            `UPDATE events SET processed = $2, processed_at = NOW(), error = NULL WHERE whop_event_id = $1 AND company_id = $2`,
-            [event.whop_event_id, success, companyId]
+          await sqlWithRLS.execute(
+            `UPDATE events
+             SET processed = $2,
+                 processed_at = NOW(),
+                 error = NULL
+             WHERE whop_event_id = $1
+               AND company_id = $3`,
+            [event.whop_event_id, success, companyId],
+            { companyId }
           );
         } else {
           // Keep processed_at null on failure, set error
-          await sql.execute(
+          await sqlWithRLS.execute(
             `UPDATE events SET processed = $2, error = $3 WHERE whop_event_id = $1 AND company_id = $4`,
-            [event.whop_event_id, success, 'processing_failed', companyId]
+            [event.whop_event_id, success, 'processing_failed', companyId],
+            { companyId }
           );
         }
       } catch (e) {
@@ -490,8 +530,7 @@ export async function processEventById(
 ): Promise<boolean> {
   try {
     // Ensure database is initialized
-    const { initDb } = await import('@/lib/db');
-    await initDb();
+    await initDbWithRLS();
 
     // Validate company context is provided for RLS security
     if (!companyId) {
@@ -499,11 +538,12 @@ export async function processEventById(
       throw new Error('Company context required for tenant-scoped operations');
     }
 
-    const events = await sql.select<ProcessedEvent>(
+    const events = await sqlWithRLS.select<ProcessedEvent>(
       `SELECT id, whop_event_id, type, membership_id, payload, processed_at, occurred_at AS event_created_at
        FROM events
-       WHERE whop_event_id = $1 AND company_id = $2`,
-      [whopEventId, companyId]
+       WHERE whop_event_id = $1 AND company_id = $2 AND company_resolution_status = 'resolved'`,
+      [whopEventId, companyId],
+      { companyId }
     );
 
     if (events.length === 0) {
@@ -521,3 +561,6 @@ export async function processEventById(
     return false;
   }
 }
+
+// Exposed for targeted unit testing
+export { normalizeAmountToDollars };

@@ -1,8 +1,9 @@
 // Database initialization script
 // Runs migrations and tests connection
 
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 import { resolve } from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { initDb, sql, closeDb } from '../src/lib/db';
 import { logger } from '../src/lib/logger';
 
@@ -14,56 +15,146 @@ function loadEnvFile(filePath: string): void {
     for (const line of lines) {
       const trimmed = line.trim();
       if (trimmed && !trimmed.startsWith('#')) {
-        const [key, ...valueParts] = trimmed.split('=');
-        if (key && valueParts.length > 0) {
-          const value = valueParts.join('=').replace(/^["']|["']$/g, '');
-          if (!process.env[key]) {
-            process.env[key] = value;
+        const eqIndex = trimmed.indexOf('=');
+        if (eqIndex === -1) continue;
+
+        const key = trimmed.slice(0, eqIndex).trim();
+        const rawValue = trimmed.slice(eqIndex + 1);
+        const normalizedValue = rawValue.trim();
+
+        let value = normalizedValue;
+        const quoteMatch = normalizedValue.match(/^(['"])(.*)\1$/);
+        if (quoteMatch) {
+          value = quoteMatch[2];
+        } else if (
+          /^['"]/.test(normalizedValue) ||
+          /['"]$/.test(normalizedValue)
+        ) {
+          throw new Error(
+            `Invalid quoted value for ${key} in ${filePath}: remove trailing content or unmatched quotes`
+          );
+        }
+
+        if (!key || value === '') continue;
+
+        // Validate DATABASE_URL format before setting it
+        if (key === 'DATABASE_URL') {
+          try {
+            // Accept any well-formed URL (postgres, supabase, etc.)
+            // and fail fast if it is malformed to avoid confusing downstream errors.
+            // eslint-disable-next-line no-new
+            new URL(value);
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : 'Invalid URL';
+            throw new Error(
+              `Invalid DATABASE_URL in ${filePath}: ${message}`
+            );
           }
+        }
+
+        if (!process.env[key]) {
+          process.env[key] = value;
         }
       }
     }
   } catch (error) {
-    // File doesn't exist, ignore
+    // Ignore missing files, but surface all other errors (including validation failures)
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
+      return;
+    }
+    throw error;
   }
 }
 
 // Try to load .env files in order of precedence
 // Get the script directory (works with both CommonJS and ESM)
-const scriptDir = typeof __dirname !== 'undefined' 
-  ? __dirname 
-  : new URL('.', import.meta.url).pathname;
+const scriptDir =
+  typeof __dirname !== 'undefined'
+    ? __dirname
+    : fileURLToPath(new URL('.', import.meta.url));
 
 loadEnvFile(resolve(scriptDir, '../.env.local'));
 loadEnvFile(resolve(scriptDir, '../.env.development'));
 loadEnvFile(resolve(scriptDir, '../.env'));
 
+const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
+
 // Also check if DATABASE_URL is set, if not provide helpful message
-if (!process.env.DATABASE_URL) {
+if (!hasDatabaseUrl) {
   console.error('\n⚠️  DATABASE_URL not found in environment');
   console.error('Make sure your .env.local file contains:');
   console.error('DATABASE_URL=postgresql://churn_saver_dev:dev_password@localhost:5432/churn_saver_dev\n');
+}
+
+function resolveMigrationsDir(): string {
+  // Prefer repo root (cwd) when script is invoked from arbitrary locations (e.g. npx tsx),
+  // but keep scriptDir as a reliable fallback when the script path is resolvable.
+  const candidateRoots = [
+    process.cwd(),
+    resolve(scriptDir, '../../..'),
+  ];
+
+  for (const root of candidateRoots) {
+    const candidateDir = resolve(root, 'infra/migrations');
+    const sentinel = resolve(candidateDir, '001_init.sql');
+    if (existsSync(sentinel)) {
+      return candidateDir;
+    }
+  }
+
+  throw new Error(
+    'Could not locate infra/migrations/001_init.sql from cwd or script directory'
+  );
+}
+
+function listMigrationFiles(migrationsDir: string): string[] {
+  const files = readdirSync(migrationsDir)
+    .filter(
+      (file) =>
+        file.endsWith('.sql') &&
+        !file.toLowerCase().includes('rollback') &&
+        !file.toLowerCase().startsWith('.')
+    )
+    .sort((a, b) => {
+      const numA = Number.parseInt(a.match(/^(\d+)/)?.[1] ?? '0', 10);
+      const numB = Number.parseInt(b.match(/^(\d+)/)?.[1] ?? '0', 10);
+      if (numA !== numB) return numA - numB;
+      return a.localeCompare(b);
+    });
+
+  if (files.length === 0) {
+    throw new Error(`No migration files found in ${migrationsDir}`);
+  }
+
+  return files;
 }
 
 async function runMigrations(): Promise<void> {
   try {
     logger.info('Running database migrations...');
 
-    // Read migration file
-    const migrationPath = resolve(
-      scriptDir,
-      '../../../infra/migrations/001_init.sql'
-    );
-    const migrationSQL = readFileSync(migrationPath, 'utf-8');
+    const migrationsDir = resolveMigrationsDir();
+    const files = listMigrationFiles(migrationsDir);
 
-    // Execute the entire migration as one statement
-    // The IF NOT EXISTS clauses will handle duplicates safely
-    logger.info('Executing migration SQL', {
-      size: migrationSQL.length,
-      preview: migrationSQL.substring(0, 100) + '...',
+    logger.info('Discovered migration files', {
+      dir: migrationsDir,
+      count: files.length,
+      files,
     });
 
-    await sql.execute(migrationSQL);
+    for (const file of files) {
+      const migrationPath = resolve(migrationsDir, file);
+      const migrationSQL = readFileSync(migrationPath, 'utf-8');
+
+      logger.info('Executing migration SQL', {
+        file,
+        size: migrationSQL.length,
+        preview: migrationSQL.substring(0, 100) + '...',
+      });
+
+      await sql.execute(migrationSQL);
+    }
 
     logger.info('Migrations completed successfully');
   } catch (error) {
@@ -120,7 +211,24 @@ async function main(): Promise<void> {
   }
 }
 
-// Run if called directly
-if (require.main === module) {
-  main();
+// Run if called directly (CJS or ESM/tsx)
+const isDirectRun =
+  (typeof import.meta !== 'undefined' &&
+    typeof process?.argv?.[1] === 'string' &&
+    import.meta.url === pathToFileURL(process.argv[1]).href) ||
+  (typeof require !== 'undefined' && require.main === module);
+
+if (isDirectRun) {
+  if (!hasDatabaseUrl) {
+    process.exit(1);
+  }
+  // Wrap in async IIFE to avoid top-level await in CJS execution
+  (async () => {
+    await main();
+  })().catch((error) => {
+    logger.error('Database initialization failed (unhandled)', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    process.exit(1);
+  });
 }

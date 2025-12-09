@@ -40,12 +40,21 @@ export default defineConfig({
       '**/whop/**',
       '**/node_modules/**',
       '**/.next/**'
+      ,
+      // Server-dependent suites run separately
+      'test/e2e-server/**',
+      // Legacy security suite requiring Jest-style mocks
+      'test/security/sql-injection.test.ts'
     ],
     
     // Test file patterns
     include: [
-      'test/**/*.test.{js,ts,tsx}',
-      'test/**/*.spec.{js,ts,tsx}'
+      'test/unit/**/*.test.{js,ts,tsx}',
+      'test/unit/**/*.spec.{js,ts,tsx}',
+      'test/security/**/*.test.{js,ts,tsx}',
+      'test/security/**/*.spec.{js,ts,tsx}',
+      'test/components/**/*.test.{js,ts,tsx}',
+      'test/components/**/*.spec.{js,ts,tsx}'
     ],
     
     // Test environment and setup

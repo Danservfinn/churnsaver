@@ -2,6 +2,7 @@
 // Tests RLS policies against real database with multiple tenants
 
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
+import { randomUUID } from 'crypto';
 import { initDbWithRLS, closeDbWithRLS, sqlWithRLS, setRequestContext, clearRequestContext } from '../../src/lib/db-rls';
 
 const mockEnv = {
@@ -11,8 +12,8 @@ const mockEnv = {
   NODE_ENV: 'test'
 };
 
-const COMPANY_A = 'company_a_' + Math.random().toString(36).substr(2, 9);
-const COMPANY_B = 'company_b_' + Math.random().toString(36).substr(2, 9);
+const COMPANY_A = 'company_a_' + randomUUID();
+const COMPANY_B = 'company_b_' + randomUUID();
 
 describe('RLS Policy Integration Tests', () => {
   beforeAll(async () => {

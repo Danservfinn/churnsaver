@@ -56,17 +56,15 @@ export function createAuthHeaders(context: MockAuthContext): Record<string, stri
 /**
  * Mock the getRequestContextSDK function
  */
-export function mockGetRequestContextSDK(context: MockAuthContext) {
-  return vi.spyOn(
-    await import('@/lib/whop-sdk'),
-    'getRequestContextSDK'
-  ).mockResolvedValue(context as RequestContext);
+export async function mockGetRequestContextSDK(context: MockAuthContext) {
+  const module = await import('@/lib/whop-sdk');
+  return vi.spyOn(module, 'getRequestContextSDK').mockResolvedValue(context as RequestContext);
 }
 
 /**
  * Create authenticated test request
  */
-export function createAuthenticatedRequest(
+export async function createAuthenticatedRequest(
   method: string,
   path: string,
   context: MockAuthContext = TEST_AUTH_CONTEXTS.authenticated,
@@ -75,7 +73,7 @@ export function createAuthenticatedRequest(
     searchParams?: Record<string, string>;
   } = {}
 ) {
-  const { createTestRequest } = require('./test-utils');
+  const { createTestRequest } = await import('./test-utils');
   return createTestRequest({
     method,
     path,
@@ -88,7 +86,7 @@ export function createAuthenticatedRequest(
 /**
  * Create unauthenticated test request
  */
-export function createUnauthenticatedRequest(
+export async function createUnauthenticatedRequest(
   method: string,
   path: string,
   options: {
@@ -102,10 +100,10 @@ export function createUnauthenticatedRequest(
 /**
  * Mock rate limiting to allow requests
  */
-export function mockRateLimitAllow() {
-  const { checkRateLimit } = require('@/server/middleware/rateLimit');
+export async function mockRateLimitAllow() {
+  const module = await import('@/server/middleware/rateLimit');
   return vi.spyOn(
-    { checkRateLimit },
+    module,
     'checkRateLimit'
   ).mockResolvedValue({
     allowed: true,
@@ -117,10 +115,10 @@ export function mockRateLimitAllow() {
 /**
  * Mock rate limiting to deny requests
  */
-export function mockRateLimitDeny(retryAfter: number = 60) {
-  const { checkRateLimit } = require('@/server/middleware/rateLimit');
+export async function mockRateLimitDeny(retryAfter: number = 60) {
+  const module = await import('@/server/middleware/rateLimit');
   return vi.spyOn(
-    { checkRateLimit },
+    module,
     'checkRateLimit'
   ).mockResolvedValue({
     allowed: false,

@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { cleanupRateLimitKeys, getRateLimitKeys } from '@/lib/rateLimitRedis';
+import { cleanupRateLimitKeys, getRateLimitKeys } from '@/lib/rateLimit';
 import crypto from 'crypto';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 
@@ -37,6 +37,90 @@ function createSignature(payload: any): string {
     .update(body, 'utf8')
     .digest('hex');
 }
+
+const rateLimitCounters = new Map<string, number>();
+const rateLimitKeyStore = new Set<string>();
+
+vi.mock('@/lib/rateLimit', () => ({
+  cleanupRateLimitKeys: vi.fn(async () => {
+    const deleted = rateLimitKeyStore.size;
+    rateLimitKeyStore.clear();
+    rateLimitCounters.clear();
+    return deleted;
+  }),
+  getRateLimitKeys: vi.fn(async () => Array.from(rateLimitKeyStore)),
+}));
+
+vi.mock('@/lib/db', () => ({
+  sql: {
+    select: vi.fn(async (query: string, params: any[] = []) => {
+      if (query.includes('FROM rate_limits')) {
+        const [identifier, bucket] = params;
+        const bucketMs = new Date(bucket).getTime();
+        const key = `${identifier}:${bucketMs}`;
+        const count = rateLimitCounters.get(key) || 0;
+        return [{ count }];
+      }
+      return [];
+    }),
+    execute: vi.fn(async (query: string, params: any[] = []) => {
+      if (query.startsWith('DELETE FROM rate_limits')) {
+        const [windowBucketStart] = params;
+        const threshold = new Date(windowBucketStart).getTime();
+        for (const key of Array.from(rateLimitCounters.keys())) {
+          const bucketMs = Number(key.split(':').pop());
+          if (bucketMs < threshold) {
+            rateLimitCounters.delete(key);
+            rateLimitKeyStore.delete(`ratelimit:${key}`);
+          }
+        }
+        return { rowCount: 0 };
+      }
+
+      if (query.includes('INSERT INTO rate_limits')) {
+        const [identifier, bucket] = params;
+        const bucketMs = new Date(bucket).getTime();
+        const key = `${identifier}:${bucketMs}`;
+        const current = rateLimitCounters.get(key) || 0;
+        rateLimitCounters.set(key, current + 1);
+        rateLimitKeyStore.add(`ratelimit:${identifier}:${bucketMs}`);
+        return { rowCount: 1 };
+      }
+
+      return { rowCount: 0 };
+    }),
+  },
+}));
+
+vi.mock('@/server/middleware/rateLimit', () => {
+  const counters = rateLimitCounters;
+  const RATE_LIMIT_CONFIGS = {
+    webhooks: {
+      windowMs: 60 * 1000,
+      maxRequests: 300,
+    },
+  };
+
+  return {
+    RATE_LIMIT_CONFIGS,
+    checkRateLimit: async (identifier: string, config: { windowMs: number; maxRequests: number }) => {
+      const current = counters.get(identifier) || 0;
+      const allowed = current < config.maxRequests;
+      const nextCount = allowed ? current + 1 : current;
+      counters.set(identifier, nextCount);
+
+      const bucketMs = Math.floor(Date.now() / config.windowMs) * config.windowMs;
+      rateLimitKeyStore.add(`ratelimit:${identifier}:${bucketMs}`);
+
+      return {
+        allowed,
+        resetAt: new Date(Date.now() + config.windowMs),
+        remaining: Math.max(config.maxRequests - nextCount, 0),
+        retryAfter: allowed ? undefined : Math.ceil(config.windowMs / 1000),
+      };
+    },
+  };
+});
 
 describe('Webhook Rate Limiting Integration Tests', () => {
   beforeEach(async () => {
@@ -103,6 +187,21 @@ describe('Webhook Rate Limiting Integration Tests', () => {
       
       expect(hasCompanyAKey).toBe(true);
       expect(hasCompanyBKey).toBe(true);
+    });
+
+    it('should not allow bypass by varying x-forwarded-for', async () => {
+      const payload = createMockWebhookPayload(TEST_COMPANY_ID);
+      const signature = createSignature(payload);
+
+      const firstIpKey = `webhook:company:${TEST_COMPANY_ID}`;
+      const secondIpKey = `webhook:company:${TEST_COMPANY_ID}`; // identical key regardless of IP spoofing
+
+      const first = await checkRateLimit(firstIpKey, RATE_LIMIT_CONFIGS.webhooks);
+      const second = await checkRateLimit(secondIpKey, RATE_LIMIT_CONFIGS.webhooks);
+
+      expect(first.allowed).toBe(true);
+      expect(second.allowed).toBe(true);
+      expect(second.remaining).toBeLessThan(first.remaining); // counts against same key
     });
 
     it('should fall back to global rate limit when company ID extraction fails', async () => {
@@ -271,9 +370,7 @@ describe('Webhook Rate Limiting Integration Tests', () => {
       const rateLimitKey = `webhook:company:${TEST_COMPANY_ID}`;
       
       // Mock a service error
-      vi.spyOn(require('@/lib/rateLimitRedis'), 'getRateLimitKeys').mockRejectedValueOnce(
-        new Error('Redis connection failed')
-      );
+      vi.mocked(getRateLimitKeys).mockRejectedValueOnce(new Error('Redis connection failed'));
       
       try {
         await checkRateLimit(rateLimitKey, RATE_LIMIT_CONFIGS.webhooks);

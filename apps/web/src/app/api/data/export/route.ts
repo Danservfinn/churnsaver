@@ -31,11 +31,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // Get company context from request
     const sdkContext = await getRequestContextSDK(request);
-    const companyId = sdkContext.companyId;
-    const userId = sdkContext.userId;
+    const companyId = sdkContext.companyId ?? null;
+    const userId = sdkContext.userId ?? null;
 
     // Enforce authentication in production
-    if (process.env.NODE_ENV === 'production' && !sdkContext.isAuthenticated) {
+    if (process.env.NODE_ENV === 'production' && (!sdkContext.isAuthenticated || !companyId || !userId)) {
       logger.security('Unauthorized request to data export - missing valid auth token', {
         requestId: context.requestId,
         ip: context.ip
@@ -46,9 +46,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    if (!companyId || !userId) {
+      return apiError(errors.unauthorized('Company context required'), context);
+    }
+
     // Apply rate limiting for data export requests
     const rateLimitResult = await checkRateLimit(
-      `data_export:${userId}:${companyId}`,
+      `data_export:${userId ?? 'unknown'}:${companyId ?? 'unknown'}`,
       RATE_LIMIT_CONFIGS.dataExport
     );
 
@@ -183,11 +187,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     // Get company context from request
     const sdkContext = await getRequestContextSDK(request);
-    const companyId = sdkContext.companyId;
-    const userId = sdkContext.userId;
+    const companyId = sdkContext.companyId ?? null;
+    const userId = sdkContext.userId ?? null;
 
     // Enforce authentication in production
-    if (process.env.NODE_ENV === 'production' && !sdkContext.isAuthenticated) {
+    if (process.env.NODE_ENV === 'production' && (!sdkContext.isAuthenticated || !companyId || !userId)) {
       logger.security('Unauthorized request to list data exports - missing valid auth token', {
         requestId: context.requestId,
         ip: context.ip
@@ -196,6 +200,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         errors.unauthorized('Authentication required'),
         context
       );
+    }
+
+    if (!companyId || !userId) {
+      return apiError(errors.unauthorized('Company context required'), context);
     }
 
     // Parse query parameters

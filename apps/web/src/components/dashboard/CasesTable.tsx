@@ -27,6 +27,7 @@ interface RecoveryCase {
   incentive_days: number;
   recovered_amount_cents: number;
   failure_reason: string | null;
+  recovery_type: string | null;
   first_failure_at: string;
   last_nudge_at: string | null;
   created_at: string;
@@ -130,6 +131,20 @@ export function CasesTable({
 
   const formatCurrency = (cents: number) => {
     return `$${(cents / 100).toFixed(2)}`;
+  };
+
+  const formatRecoveryType = (recoveryType: string | null) => {
+    if (!recoveryType) return <Badge variant="outline">Unattributed</Badge>;
+    if (recoveryType === 'CLICK_THROUGH') {
+      return <Badge variant="success">Click-through</Badge>;
+    }
+    if (recoveryType === 'ORGANIC') {
+      return <Badge variant="secondary">Organic</Badge>;
+    }
+    if (recoveryType === 'LEGACY_UNKNOWN') {
+      return <Badge variant="outline">Legacy</Badge>;
+    }
+    return <Badge variant="outline">{recoveryType}</Badge>;
   };
 
   const handleNudge = async (caseId: string) => {
@@ -369,6 +384,7 @@ export function CasesTable({
               <AccessibleTableCell scope="col">First Failure</AccessibleTableCell>
               <AccessibleTableCell scope="col">Attempts</AccessibleTableCell>
               <AccessibleTableCell scope="col">Recovered</AccessibleTableCell>
+              <AccessibleTableCell scope="col">Attribution</AccessibleTableCell>
               <AccessibleTableCell scope="col">Reason</AccessibleTableCell>
               <AccessibleTableCell scope="col">Actions</AccessibleTableCell>
             </tr>
@@ -407,6 +423,9 @@ export function CasesTable({
                   ) : (
                     <span className="text-gray-400">-</span>
                   )}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {formatRecoveryType(case_.recovery_type)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                   {case_.failure_reason || '-'}

@@ -1,3 +1,5 @@
+/* eslint-env node, jest */
+/* global require, process, Buffer */
 /**
  * Comprehensive Security Tests
  * Validates authentication, webhook validation, rate limiting, and database security
@@ -8,7 +10,7 @@ const { describe, it, beforeEach, afterEach, expect, jest } = require('@jest/glo
 // Import the services we need to test
 const { WhopAuthService, whopAuthService } = require('../src/lib/whop/auth');
 const { WebhookValidator, webhookValidator, validateWebhookSignature, validateTimestamp, validateEventType, validateWebhookPayload } = require('../src/lib/whop/webhookValidator');
-const { checkRateLimit } = require('../src/lib/rateLimitRedis');
+const { checkRateLimit, isRedisHealthy } = require('../src/lib/rateLimit');
 const sqlWithRLS = require('../src/lib/db-rls');
 const { encrypt, decrypt } = require('../src/lib/encryption');
 
@@ -54,8 +56,6 @@ jest.mock('@whop/sdk', () => ({
     }
   }))
 }));
-
-jest.mock('ioredis');
 
 // Mock database operations
 jest.mock('../src/lib/db-rls', () => ({
@@ -306,7 +306,7 @@ describe('Security Tests Suite', () => {
         };
 
         // Mock Redis as unavailable to test Postgres fallback
-        const mockIsRedisHealthy = jest.spyOn(require('../src/lib/rateLimitRedis'), 'isRedisHealthy');
+        const mockIsRedisHealthy = jest.spyOn(require('../src/lib/rateLimit'), 'isRedisHealthy');
         mockIsRedisHealthy.mockResolvedValue(false);
 
         // Mock Postgres rate limit check
@@ -342,7 +342,7 @@ describe('Security Tests Suite', () => {
 
     describe('JWT Tampering Detection', () => {
       it('should reject tampered JWT tokens', async () => {
-        const tamperedToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.tampered_signature';
+        const tamperedToken = 'dummy.jwt.token.with.tampered.signature';
 
         const mockWhopSdk = require('@whop/sdk').Whop.mock.results[0].value;
         mockWhopSdk.verifyUserToken.mockRejectedValue(new Error('Invalid signature'));
@@ -353,7 +353,7 @@ describe('Security Tests Suite', () => {
       });
 
       it('should detect none algorithm in JWT header', () => {
-        const noneToken = 'eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.';
+        const noneToken = 'dummy.jwt.token.with.none.alg';
 
         // Use token analysis to check for none algorithm
         const tokenParts = noneToken.split('.');
@@ -369,7 +369,7 @@ describe('Security Tests Suite', () => {
    *****************************/
 
   describe('Webhook Security Tests', () => {
-    const validSecret = 'test-webhook-secret';
+    const validSecret = process.env.TEST_WEBHOOK_SECRET || 'test-webhook-secret';
     const validBody = JSON.stringify({ type: 'payment.succeeded', data: { id: 'test' } });
 
     describe('Webhook Signature Validation', () => {
@@ -544,7 +544,7 @@ describe('Security Tests Suite', () => {
         };
 
         // Mock successful rate limit check
-        const mockCheckRateLimit = jest.spyOn(require('../src/lib/rateLimitRedis'), 'checkRateLimit');
+        const mockCheckRateLimit = jest.spyOn(require('../src/lib/rateLimit'), 'checkRateLimit');
         mockCheckRateLimit.mockResolvedValue({
           allowed: true,
           remaining: 7,
@@ -565,7 +565,7 @@ describe('Security Tests Suite', () => {
           keyPrefix: 'webhook'
         };
 
-        const mockCheckRateLimit = jest.spyOn(require('../src/lib/rateLimitRedis'), 'checkRateLimit');
+        const mockCheckRateLimit = jest.spyOn(require('../src/lib/rateLimit'), 'checkRateLimit');
         mockCheckRateLimit.mockResolvedValue({
           allowed: false,
           remaining: 0,
@@ -602,7 +602,7 @@ describe('Security Tests Suite', () => {
             keyPrefix
           };
 
-          const mockCheckRateLimit = jest.spyOn(require('../src/lib/rateLimitRedis'), 'checkRateLimit');
+          const mockCheckRateLimit = jest.spyOn(require('../src/lib/rateLimit'), 'checkRateLimit');
           mockCheckRateLimit.mockResolvedValue({
             allowed: true,
             remaining: config.maxRequests - 1,
@@ -633,7 +633,7 @@ describe('Security Tests Suite', () => {
           '::1'
         ];
 
-        const mockCheckRateLimit = jest.spyOn(require('../src/lib/rateLimitRedis'), 'checkRateLimit');
+        const mockCheckRateLimit = jest.spyOn(require('../src/lib/rateLimit'), 'checkRateLimit');
 
         for (const identifier of spoofedIdentifiers) {
           mockCheckRateLimit.mockResolvedValueOnce({
@@ -685,7 +685,7 @@ describe('Security Tests Suite', () => {
             keyPrefix: `tier-${tier.name}`
           };
 
-          const mockCheckRateLimit = jest.spyOn(require('../src/lib/rateLimitRedis'), 'checkRateLimit');
+          const mockCheckRateLimit = jest.spyOn(require('../src/lib/rateLimit'), 'checkRateLimit');
 
           // Simulate reaching the limit
           for (let i = 0; i < tier.maxRequests; i++) {
@@ -728,7 +728,7 @@ describe('Security Tests Suite', () => {
           keyPrefix: 'test'
         };
 
-        const mockCheckRateLimit = jest.spyOn(require('../src/lib/rateLimitRedis'), 'checkRateLimit');
+        const mockCheckRateLimit = jest.spyOn(require('../src/lib/rateLimit'), 'checkRateLimit');
 
         // First request
         mockCheckRateLimit.mockResolvedValueOnce({
@@ -787,7 +787,7 @@ describe('Security Tests Suite', () => {
         };
 
         // Mock Redis failure
-        const mockIsRedisHealthy = jest.spyOn(require('../src/lib/rateLimitRedis'), 'isRedisHealthy');
+        const mockIsRedisHealthy = jest.spyOn(require('../src/lib/rateLimit'), 'isRedisHealthy');
         mockIsRedisHealthy.mockResolvedValue(false);
 
         // Mock Postgres operations
@@ -1170,7 +1170,7 @@ describe('Security Tests Suite', () => {
         process.env.NODE_ENV = originalEnv;
       });
 
-      it('should allow configurable SSL validation in development', () => {
+      it('should enforce SSL validation even in development', () => {
         process.env.NODE_ENV = 'development';
         process.env.ALLOW_INSECURE_SSL = 'true';
 
@@ -1181,11 +1181,11 @@ describe('Security Tests Suite', () => {
         const poolConfig = {
           connectionString: 'postgresql://user:pass@host:5432/db',
           ssl: {
-            rejectUnauthorized: false // Should be allowed in dev with flag
+            rejectUnauthorized: true
           }
         };
 
-        expect(poolConfig.ssl.rejectUnauthorized).toBe(false);
+        expect(poolConfig.ssl.rejectUnauthorized).toBe(true);
       });
     });
   });

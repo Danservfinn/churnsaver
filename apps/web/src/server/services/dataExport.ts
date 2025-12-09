@@ -1012,7 +1012,7 @@ export async function deleteExportRequest(
       [requestId, userId, companyId]
     );
 
-    return result > 0;
+  return result.rowCount > 0;
 
   } catch (error) {
     logger.error('Failed to delete export request', {

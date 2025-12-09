@@ -382,7 +382,7 @@ class AlertingService {
   private async sendEmailNotification(alert: Alert, channel: NotificationChannel): Promise<boolean> {
     try {
       // This is a simplified email implementation
-      // In production, you'd use a proper email service like SendGrid or AWS SES
+      // In production, you'd use a proper email service like SendGrid or Postmark
       const smtp = channel.config.smtp;
       if (!smtp) return false;
 

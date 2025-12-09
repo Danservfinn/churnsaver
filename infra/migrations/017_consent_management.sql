@@ -39,10 +39,7 @@ CREATE TABLE IF NOT EXISTS user_consents (
   user_agent text,
   consent_data jsonb DEFAULT '{}', -- Additional consent-specific data
   created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now(),
-  
-  -- Ensure user can only have one active consent per type per company
-  UNIQUE(user_id, company_id, consent_type, status) WHERE (status = 'active')
+  updated_at timestamptz DEFAULT now()
 );
 
 -- Consent audit log table for tracking consent changes
@@ -70,6 +67,9 @@ CREATE INDEX IF NOT EXISTS idx_user_consents_company_status ON user_consents(com
 CREATE INDEX IF NOT EXISTS idx_user_consents_type_status ON user_consents(consent_type, status);
 CREATE INDEX IF NOT EXISTS idx_user_consents_expires_at ON user_consents(expires_at);
 CREATE INDEX IF NOT EXISTS idx_user_consents_granted_at ON user_consents(granted_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_consents_active_unique
+ON user_consents(user_id, company_id, consent_type, status)
+WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS idx_consent_audit_consent_id ON consent_audit_log(consent_id);
 CREATE INDEX IF NOT EXISTS idx_consent_audit_user_company ON consent_audit_log(user_id, company_id);
 CREATE INDEX IF NOT EXISTS idx_consent_audit_action ON consent_audit_log(action);

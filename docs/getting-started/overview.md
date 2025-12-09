@@ -132,11 +132,10 @@ graph TB
 ### Technology Stack
 
 - **Backend**: Node.js, TypeScript, Next.js
-- **Database**: PostgreSQL with Prisma ORM
-- **Cache**: Redis for session and data caching
-- **Infrastructure**: AWS (ECS, RDS, ElastiCache, CloudFront)
-- **Security**: AES-256 encryption, JWT authentication, AWS WAF
-- **Monitoring**: DataDog, Sentry, CloudWatch
+- **Database**: Supabase (PostgreSQL)
+- **Infrastructure**: Vercel (serverless functions, edge network)
+- **Security**: AES-256 encryption, JWT authentication, Whop SDK
+- **Monitoring**: Vercel Analytics, Supabase Dashboard
 
 ## Compliance & Security
 

@@ -33,7 +33,7 @@ describe('Enhanced Job Queue Service', () => {
     mockSql.query.mockResolvedValue({ rows: [], rowCount: 0 });
     mockSql.select.mockResolvedValue([]);
     mockSql.insert.mockResolvedValue(null);
-    mockSql.execute.mockResolvedValue(1);
+    mockSql.execute.mockResolvedValue({ rowCount: 1 });
 
     // Mock logger methods
     mockLogger.info.mockImplementation(() => {});

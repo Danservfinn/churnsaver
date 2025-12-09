@@ -4,6 +4,7 @@
 
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { pathToFileURL } from 'url';
 import { Client } from 'pg';
 import { logger } from '../src/lib/logger';
 
@@ -29,10 +30,27 @@ function loadEnvFile(filePath: string): void {
   }
 }
 
+// Determine script directory (works for CommonJS and ESM/tsx)
+const scriptDir =
+  typeof __dirname !== 'undefined'
+    ? __dirname
+    : new URL('.', import.meta.url).pathname;
+
 // Try to load .env files in order of precedence
-loadEnvFile(resolve(__dirname, '../.env.local'));
-loadEnvFile(resolve(__dirname, '../.env.development'));
-loadEnvFile(resolve(__dirname, '../.env'));
+loadEnvFile(resolve(scriptDir, '../.env.local'));
+loadEnvFile(resolve(scriptDir, '../.env.development'));
+loadEnvFile(resolve(scriptDir, '../.env'));
+
+function requireSafeIdentifier(value: string, label: string): string {
+  // Allow only simple PostgreSQL identifiers: letters, numbers, underscore.
+  // This prevents injection when interpolating identifiers (which cannot be parameterized).
+  if (!/^[A-Za-z0-9_]+$/.test(value)) {
+    logger.error(`${label} contains unsafe characters`, { value: '[REDACTED]' });
+    console.error(`❌ ${label} contains unsupported characters. Use only letters, numbers, or underscore.`);
+    process.exit(1);
+  }
+  return value;
+}
 
 async function setupDatabaseRole(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
@@ -47,18 +65,29 @@ async function setupDatabaseRole(): Promise<void> {
     process.exit(1);
   }
 
-  // Parse DATABASE_URL
-  // Format: postgresql://username:password@host:port/database
-  const urlMatch = databaseUrl.match(/postgresql:\/\/([^:]+):([^@]+)@([^:]+):([^/]+)\/(.+)/);
-  
-  if (!urlMatch) {
-    logger.error('Invalid DATABASE_URL format', { url: databaseUrl ? '[REDACTED]' : 'not set' });
+  // Parse DATABASE_URL using WHATWG URL to handle query params (e.g., ?pgbouncer=true)
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(databaseUrl);
+  } catch {
+    logger.error('Invalid DATABASE_URL format', { url: '[REDACTED]' });
     console.error('❌ Invalid DATABASE_URL format');
     console.error('Expected format: postgresql://username:password@host:port/database');
     process.exit(1);
   }
 
-  const [, dbUser, dbPass, dbHost, dbPort, dbName] = urlMatch;
+  const dbUser = parsedUrl.username;
+  const dbPass = parsedUrl.password;
+  const dbHost = parsedUrl.hostname;
+  const dbPort = parsedUrl.port || '5432';
+  const dbNameRaw = parsedUrl.pathname.replace(/^\//, '').split('/')[0];
+
+  if (!dbUser || !dbHost || !dbNameRaw) {
+    logger.error('DATABASE_URL is missing required components', { url: '[REDACTED]' });
+    console.error('❌ DATABASE_URL must include username, host, and database name');
+    process.exit(1);
+  }
+  const dbName = requireSafeIdentifier(dbNameRaw, 'Database name');
 
   logger.info('Setting up database role', {
     host: dbHost,
@@ -106,15 +135,16 @@ async function setupDatabaseRole(): Promise<void> {
       `);
 
       // Grant privileges on database
-      await client.query(`GRANT ALL PRIVILEGES ON DATABASE ${dbName} TO churn_saver_dev;`);
+      await client.query(`GRANT ALL PRIVILEGES ON DATABASE "${dbName}" TO churn_saver_dev;`);
       
       // Grant schema privileges (need to connect to the specific database)
       // Close current connection and reconnect to the target database
       await client.end();
       
       // Reconnect to the specific database to grant schema privileges
-      const dbConnectionUrl = connectionUrl.replace(/\/[^/]+$/, `/${dbName}`);
-      client = new Client({ connectionString: dbConnectionUrl });
+      const dbConnectionUrl = new URL(connectionUrl);
+      dbConnectionUrl.pathname = `/${dbName}`;
+      client = new Client({ connectionString: dbConnectionUrl.toString() });
       await client.connect();
       
       await client.query(`GRANT ALL ON SCHEMA public TO churn_saver_dev;`);
@@ -168,8 +198,14 @@ async function setupDatabaseRole(): Promise<void> {
   console.log(`DATABASE_URL=postgresql://churn_saver_dev:dev_password@${dbHost}:${dbPort}/${dbName}\n`);
 }
 
-// Run if called directly
-if (require.main === module) {
+// Run if called directly (CJS or ESM/tsx)
+const isDirectRun =
+  (typeof import.meta !== 'undefined' &&
+    typeof process?.argv?.[1] === 'string' &&
+    import.meta.url === pathToFileURL(process.argv[1]).href) ||
+  (typeof require !== 'undefined' && require.main === module);
+
+if (isDirectRun) {
   setupDatabaseRole()
     .then(() => {
       process.exit(0);

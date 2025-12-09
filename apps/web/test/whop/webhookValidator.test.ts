@@ -18,13 +18,24 @@ import {
 } from '@/lib/whop/webhookValidator';
 import { whopConfig } from '@/lib/whop/sdkConfig';
 import { logger } from '@/lib/logger';
+import { isProductionLikeEnvironment } from '@/lib/env';
 
 // Mock dependencies
 jest.mock('@/lib/whop/sdkConfig');
 jest.mock('@/lib/logger');
+jest.mock('@/lib/env', () => {
+  const actual = jest.requireActual('@/lib/env');
+  return {
+    ...actual,
+    isProductionLikeEnvironment: jest.fn()
+  };
+});
 
 const mockWhopConfig = whopConfig as jest.Mocked<typeof whopConfig>;
 const mockLogger = logger as jest.Mocked<typeof logger>;
+const mockIsProductionLikeEnvironment = isProductionLikeEnvironment as jest.MockedFunction<
+  typeof isProductionLikeEnvironment
+>;
 
 describe('Webhook Signature Validation', () => {
   const testSecret = 'test_webhook_secret_12345';
@@ -217,10 +228,12 @@ describe('Webhook Signature Validation', () => {
   });
 
   describe('validateTimestamp', () => {
-    const originalNodeEnv = process.env.NODE_ENV;
+    beforeEach(() => {
+      mockIsProductionLikeEnvironment.mockReturnValue(false);
+    });
 
     afterEach(() => {
-      process.env.NODE_ENV = originalNodeEnv;
+      mockIsProductionLikeEnvironment.mockReset();
     });
 
     it('should accept valid timestamp', () => {
@@ -253,18 +266,18 @@ describe('Webhook Signature Validation', () => {
       expect(result.error).toContain('outside allowed window');
     });
 
-    it('should require timestamp in production', () => {
-      process.env.NODE_ENV = 'production';
-      
+    it('should require timestamp in production-like environment', () => {
+      mockIsProductionLikeEnvironment.mockReturnValue(true);
+
       const result = validateTimestamp(null);
       
       expect(result.valid).toBe(false);
-      expect(result.error).toContain('Missing X-Whop-Timestamp header');
+      expect(result.error).toContain('production-like environment');
     });
 
-    it('should allow missing timestamp in development', () => {
-      process.env.NODE_ENV = 'development';
-      
+    it('should allow missing timestamp in non-production-like environment', () => {
+      mockIsProductionLikeEnvironment.mockReturnValue(false);
+
       const result = validateTimestamp(null);
       
       expect(result.valid).toBe(true);

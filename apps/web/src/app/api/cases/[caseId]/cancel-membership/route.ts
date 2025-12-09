@@ -8,6 +8,7 @@ import { logger } from '@/lib/logger';
 import { getRequestContextSDK } from '@/lib/whop-sdk';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { errorResponses } from '@/lib/apiResponse';
+import { isProductionLikeEnvironment } from '@/lib/env';
 
 export async function POST(
   request: NextRequest,
@@ -20,12 +21,17 @@ export async function POST(
   try {
     // Get company context from request
     const context = await getRequestContextSDK(request);
-    const companyId = context.companyId;
+    const companyId = context.companyId ?? undefined;
 
     // Enforce authentication in production for creator-facing endpoints
-    if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
+    if (isProductionLikeEnvironment() && !context.isAuthenticated) {
       logger.warn('Unauthorized request to cancel membership - missing valid auth token');
       return errorResponses.unauthorizedResponse('Authentication required');
+    }
+
+    if (!companyId) {
+      logger.warn('Missing company context for cancel membership request');
+      return errorResponses.unauthorizedResponse('Company context required');
     }
 
     // Apply rate limiting for creator-facing case actions (30/min per company)

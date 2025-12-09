@@ -2,28 +2,37 @@
 // GET /api/cases/export?status=open&startDate=2024-01-01&endDate=2024-12-31
 
 import { NextRequest, NextResponse } from 'next/server';
-import { sql, initDb } from '@/lib/db';
+import { initDbWithRLS, sqlWithRLS, setRequestContext, clearRequestContext } from '@/lib/db-rls';
 import { logger } from '@/lib/logger';
 import { getRequestContextSDK } from '@/lib/whop-sdk';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { errors } from '@/lib/apiResponse';
+import { isProductionLikeEnvironment } from '@/lib/env';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const startTime = Date.now();
 
   try {
     // Initialize database connection
-    await initDb();
+    await initDbWithRLS();
 
     // Get company context from request
     const context = await getRequestContextSDK(request);
-    const companyId = context.companyId;
+    const companyId = context.companyId ?? undefined;
 
     // Enforce authentication in production for creator-facing endpoints
-    if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
+    if (isProductionLikeEnvironment() && !context.isAuthenticated) {
       logger.warn('Unauthorized request to cases export - missing valid auth token');
       return NextResponse.json(
         { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    if (!companyId) {
+      logger.warn('Missing company context for cases export request');
+      return NextResponse.json(
+        { error: 'Company context required' },
         { status: 401 }
       );
     }
@@ -98,7 +107,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       created_at: Date | string;
     }
 
-    const cases = await sql.select<RecoveryCaseRow>(
+    setRequestContext({
+      companyId,
+      userId: context.userId ?? undefined,
+      isAuthenticated: context.isAuthenticated
+    });
+
+    const cases = await sqlWithRLS.select<RecoveryCaseRow>(
       `SELECT
         id, membership_id, user_id, company_id, status, attempts,
         incentive_days, recovered_amount_cents, failure_reason,
@@ -106,7 +121,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
        FROM recovery_cases
        ${whereClause}
        ORDER BY first_failure_at DESC`,
-      params
+      params,
+      { companyId }
     );
 
     logger.info('Cases exported for CSV', {
@@ -186,5 +202,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       { error: 'Failed to export cases' },
       { status: 500 }
     );
+  } finally {
+    clearRequestContext();
   }
 }

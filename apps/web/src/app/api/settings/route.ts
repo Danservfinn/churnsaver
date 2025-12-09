@@ -5,9 +5,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql, initDb } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { getRequestContext } from '@/lib/auth/whop';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { SettingsUpdateSchema, validateAndTransform } from '@/lib/validation';
+import { requireAuthContext } from '@/lib/auth/requireAuth';
 
 interface CreatorSettings {
   company_id: string;
@@ -33,18 +33,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // Initialize database connection
     await initDb();
 
-    // Get company context from request
-    const context = await getRequestContext(request);
-    const companyId = context.companyId;
-
-    // Enforce authentication in production for creator-facing endpoints
-    if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
-      logger.warn('Unauthorized request to settings - missing valid auth token');
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+    const auth = await requireAuthContext(request);
+    if (!auth.success || !auth.context) {
+      return auth.response ?? NextResponse.json({ error: auth.error || 'Authentication required' }, { status: auth.status || 401 });
     }
+    const companyId = auth.context.companyId;
 
     logger.info('Fetching creator settings', { companyId });
 
@@ -132,9 +125,11 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     // Initialize database connection
     await initDb();
 
-    // Get company context from request
-    const context = await getRequestContext(request);
-    const companyId = context.companyId;
+    const auth = await requireAuthContext(request);
+    if (!auth.success || !auth.context) {
+      return auth.response ?? NextResponse.json({ error: auth.error || 'Authentication required' }, { status: auth.status || 401 });
+    }
+    const companyId = auth.context.companyId;
 
     // Apply rate limiting for creator-facing settings updates (30/min per company)
     const rateLimitResult = await checkRateLimit(
@@ -150,15 +145,6 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
           resetAt: rateLimitResult.resetAt.toISOString(),
         },
         { status: 422 }
-      );
-    }
-
-    // Enforce authentication in production for creator-facing endpoints
-    if (process.env.NODE_ENV === 'production' && !context.isAuthenticated) {
-      logger.warn('Unauthorized request to settings - missing valid auth token');
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
       );
     }
 

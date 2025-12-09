@@ -139,8 +139,12 @@ export const sql = {
   },
 
   // Helper for UPDATE/DELETE queries that return affected row count
-  async execute(text: string, params?: unknown[], companyContext?: string): Promise<number> {
+  async execute(
+    text: string,
+    params?: unknown[],
+    companyContext?: string
+  ): Promise<{ rowCount: number }> {
     const result = await this.query(text, params, companyContext);
-    return result.rowCount;
+    return { rowCount: result.rowCount };
   },
 };

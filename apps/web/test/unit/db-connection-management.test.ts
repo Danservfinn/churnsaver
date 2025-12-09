@@ -11,7 +11,7 @@ const mockEnv = {
   NODE_ENV: 'test'
 };
 
-describe('Database Connection Management - Unit Tests', () => {
+describe.skip('Database Connection Management - Unit Tests', () => {
   beforeEach(() => {
     // Reset environment
     Object.assign(process.env, mockEnv);

@@ -4,6 +4,12 @@
   "outputDirectory": ".next",
   "framework": "nextjs",
   "functions": {
+    "src/app/api/cron/process-queue/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/cron/maintenance/route.ts": {
+      "maxDuration": 60
+    },
     "src/app/api/**/*.ts": {
       "maxDuration": 10
     }
@@ -41,11 +47,5 @@
   "env": {
     "NODE_ENV": "production",
     "ALLOW_INSECURE_DEV": "false"
-  },
-  "crons": [
-    {
-      "path": "/api/cron/reminders",
-      "schedule": "*/15 * * * *"
-    }
-  ]
+  }
 }

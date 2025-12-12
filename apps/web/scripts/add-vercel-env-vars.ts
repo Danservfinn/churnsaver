@@ -66,6 +66,36 @@ const envVars: Array<{
   { key: 'WEBHOOK_TIMESTAMP_SKEW_SECONDS', value: '300', sensitive: false, environments: ['production', 'preview', 'development'] },
 ];
 
+async function createSecret(name: string, value: string): Promise<string> {
+  const url = `https://api.vercel.com/v2/secrets`;
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${VERCEL_TOKEN}`,
+    'Content-Type': 'application/json',
+  };
+  
+  // Add team header if team ID is provided
+  if (VERCEL_TEAM_ID) {
+    headers['x-vercel-team-id'] = VERCEL_TEAM_ID;
+  }
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      name: `${name}_${Date.now()}`,
+      value,
+    }),
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to create secret ${name}: ${response.status} ${errorText}`);
+  }
+  
+  const data = await response.json();
+  return data.uid;
+}
+
 async function addEnvVar(
   key: string,
   value: string,
@@ -74,31 +104,63 @@ async function addEnvVar(
 ): Promise<void> {
   const url = `https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env`;
   
+  // For sensitive variables, create a secret first
+  let secretId: string | undefined;
+  if (sensitive) {
+    try {
+      secretId = await createSecret(key, value);
+      console.log(`🔐 Created secret for ${key}`);
+    } catch (error) {
+      console.error(`❌ Failed to create secret for ${key}:`, error);
+      throw error;
+    }
+  }
+  
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${VERCEL_TOKEN}`,
+    'Content-Type': 'application/json',
+  };
+  
+  // Add team header if team ID is provided
+  if (VERCEL_TEAM_ID) {
+    headers['x-vercel-team-id'] = VERCEL_TEAM_ID;
+  }
+  
   for (const env of environments) {
-    const body = {
+    const body: any = {
       key,
-      value,
-      type: sensitive ? 'secret' : 'encrypted',
       target: [env],
     };
+    
+    if (sensitive && secretId) {
+      body.type = 'secret';
+      body.value = secretId;
+    } else {
+      body.type = 'encrypted';
+      body.value = value;
+    }
     
     try {
       const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${VERCEL_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify(body),
       });
       
       if (!response.ok) {
-        const error = await response.text();
-        if (response.status === 409) {
+        const errorText = await response.text();
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: { code: 'UNKNOWN' } };
+        }
+        
+        if (response.status === 409 || errorData.error?.code === 'ENV_CONFLICT') {
           console.log(`⚠️  ${key} (${env}) already exists, skipping...`);
           continue;
         }
-        throw new Error(`Failed to add ${key} (${env}): ${response.status} ${error}`);
+        throw new Error(`Failed to add ${key} (${env}): ${response.status} ${errorText}`);
       }
       
       console.log(`✅ Added ${key} (${env})`);
@@ -136,6 +198,11 @@ async function main() {
   }
   
   for (const envVar of envVars) {
+    // Skip variables with placeholder values
+    if (envVar.value.includes('REPLACE_')) {
+      console.log(`⏭️  Skipping ${envVar.key} (placeholder value - will need to be added manually)`);
+      continue;
+    }
     await addEnvVar(envVar.key, envVar.value, envVar.sensitive, envVar.environments);
     // Small delay to avoid rate limiting
     await new Promise(resolve => setTimeout(resolve, 200));

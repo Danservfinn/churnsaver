@@ -36,7 +36,7 @@
 		"db:setup-role": "npx tsx scripts/setup-db-role.ts",
 		"data-privacy-maintenance": "npx tsx scripts/data-privacy-maintenance.ts",
 		"worker": "cross-env ENABLE_PG_BOSS=true ENABLE_PG_BOSS_WORKER=true npx tsx src/worker/queue-worker.ts",
-		"prepare": "node -e \"if (process.env.CI || process.env.VERCEL || process.env.NODE_ENV === 'production') process.exit(0);\" && husky install"
+		"prepare": "node -e \"process.exit((process.env.CI || process.env.VERCEL || process.env.NODE_ENV === 'production') ? 0 : 1)\" || husky install"
 	},
 	"dependencies": {
 		"@opentelemetry/api": "^1.9.0",

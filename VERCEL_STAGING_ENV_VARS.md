@@ -10,7 +10,7 @@ Add these in Vercel Dashboard → Project Settings → Environment Variables →
 
 ### Database (Supabase Staging)
 ```
-DATABASE_URL=postgresql://postgres.zhjhvsqogaownorkidfu:[PASSWORD]@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require&pgbouncer=true
+DATABASE_URL=<REDACTED>
 ```
 **Note**: Replace `[PASSWORD]` with the database password from Supabase Dashboard → Project Settings → Database → Connection string
 
@@ -25,15 +25,15 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzd
 ### Cron Configuration (Cron-only mode)
 ```
 ENABLE_PG_BOSS=false
-CRON_SECRET=a4pvVzJCTZqhVL+H+wtR/AVh66vJmz6CR6vMVnK0YRM=
+CRON_SECRET=<REDACTED>
 ```
 
 ### Security
 ```
-ADMIN_API_TOKEN=1WP6U0i1zisJfIKubIbUy6w+PXhZAkL2nZoSrbt96nI=
+ADMIN_API_TOKEN=<REDACTED>
 ADMIN_IP_ALLOWLIST=
-JWT_SECRET=b7Xe8HdLmXq9ewK/4Ip+mDhtK+1U02/SYOS1cWbrYT4=
-ENCRYPTION_KEY=o1oxj+/YCBpgXV5wq2p4IBi6Qb12s08ZtsFo3JoGL38=
+JWT_SECRET=<REDACTED>
+ENCRYPTION_KEY=<REDACTED>
 ```
 
 ### Environment
@@ -50,8 +50,8 @@ NEXT_PUBLIC_QA_DEMO_BYPASS=false
 ```
 NEXT_PUBLIC_WHOP_APP_ID=[STAGING_APP_ID]
 WHOP_APP_ID=[STAGING_APP_ID]
-WHOP_API_KEY=[STAGING_API_KEY]
-WHOP_WEBHOOK_SECRET=[STAGING_WEBHOOK_SECRET]
+WHOP_API_KEY=<REDACTED>
+WHOP_WEBHOOK_SECRET=<REDACTED>
 ```
 **Note**: Get these from Whop Developer Dashboard → Your App → Settings
 

@@ -18,18 +18,18 @@ The automation script successfully added most environment variables. Here's what
 - ✅ `ENABLE_PG_BOSS=false` (all environments)
 
 ### Generated Secrets:
-- ✅ `WHOP_WEBHOOK_SECRET=0SpgvoU1W/qcNULF5AxoJp9oLSnRyd1AQyXLUnU3Aek=` (generated, needs to be added)
+- ✅ `WHOP_WEBHOOK_SECRET=<REDACTED>` (generated, needs to be added)
 
 ## ⚠️ Still Need Manual Addition
 
 Due to rate limiting and placeholder values, these need to be added manually:
 
 ### Critical Secrets (Need Actual Values):
-1. **`CRON_SECRET`** - Value: `a4pvVzJCTZqhVL+H+wtR/AVh66vJmz6CR6vMVnK0YRM=`
-2. **`ADMIN_API_TOKEN`** - Value: `1WP6U0i1zisJfIKubIbUy6w+PXhZAkL2nZoSrbt96nI=`
-3. **`JWT_SECRET`** - Value: `b7Xe8HdLmXq9ewK/4Ip+mDhtK+1U02/SYOS1cWbrYT4=`
-4. **`ENCRYPTION_KEY`** - Value: `o1oxj+/YCBpgXV5wq2p4IBi6Qb12s08ZtsFo3JoGL38=`
-5. **`WHOP_WEBHOOK_SECRET`** - Value: `0SpgvoU1W/qcNULF5AxoJp9oLSnRyd1AQyXLUnU3Aek=`
+1. **`CRON_SECRET`** - Value: `<REDACTED>`
+2. **`ADMIN_API_TOKEN`** - Value: `<REDACTED>`
+3. **`JWT_SECRET`** - Value: `<REDACTED>`
+4. **`ENCRYPTION_KEY`** - Value: `<REDACTED>`
+5. **`WHOP_WEBHOOK_SECRET`** - Value: `<REDACTED>`
 
 ### Need Credentials to Retrieve:
 6. **`SUPABASE_SERVICE_ROLE_KEY`** - Get from: https://supabase.com/dashboard/project/zhjhvsqogaownorkidfu/settings/api → Click "Reveal" next to `service_role` key
@@ -51,19 +51,19 @@ cd apps/web
 
 # Add secrets (mark as sensitive)
 vercel env add CRON_SECRET production preview development --sensitive
-# Paste: a4pvVzJCTZqhVL+H+wtR/AVh66vJmz6CR6vMVnK0YRM=
+# Paste: <REDACTED>
 
 vercel env add ADMIN_API_TOKEN production preview development --sensitive
-# Paste: 1WP6U0i1zisJfIKubIbUy6w+PXhZAkL2nZoSrbt96nI=
+# Paste: <REDACTED>
 
 vercel env add JWT_SECRET production preview development --sensitive
-# Paste: b7Xe8HdLmXq9ewK/4Ip+mDhtK+1U02/SYOS1cWbrYT4=
+# Paste: <REDACTED>
 
 vercel env add ENCRYPTION_KEY production preview development --sensitive
-# Paste: o1oxj+/YCBpgXV5wq2p4IBi6Qb12s08ZtsFo3JoGL38=
+# Paste: <REDACTED>
 
 vercel env add WHOP_WEBHOOK_SECRET production preview development --sensitive
-# Paste: 0SpgvoU1W/qcNULF5AxoJp9oLSnRyd1AQyXLUnU3Aek=
+# Paste: <REDACTED>
 
 # Add non-sensitive variables
 vercel env add ADMIN_IP_ALLOWLIST production preview development

@@ -121,7 +121,7 @@ Sensitive: No
 
 ```
 Key: CRON_SECRET
-Value: a4pvVzJCTZqhVL+H+wtR/AVh66vJmz6CR6vMVnK0YRM=
+Value: <REDACTED>
 Environment: All Environments
 Sensitive: Yes
 ```
@@ -129,21 +129,21 @@ Sensitive: Yes
 #### Group 4: Security Secrets
 ```
 Key: ADMIN_API_TOKEN
-Value: 1WP6U0i1zisJfIKubIbUy6w+PXhZAkL2nZoSrbt96nI=
+Value: <REDACTED>
 Environment: All Environments
 Sensitive: Yes
 ```
 
 ```
 Key: JWT_SECRET
-Value: b7Xe8HdLmXq9ewK/4Ip+mDhtK+1U02/SYOS1cWbrYT4=
+Value: <REDACTED>
 Environment: All Environments
 Sensitive: Yes
 ```
 
 ```
 Key: ENCRYPTION_KEY
-Value: o1oxj+/YCBpgXV5wq2p4IBi6Qb12s08ZtsFo3JoGL38=
+Value: <REDACTED>
 Environment: All Environments
 Sensitive: Yes
 ```

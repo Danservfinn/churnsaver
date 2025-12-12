@@ -39,22 +39,22 @@ const envVars: Array<{
   { key: 'NEXT_PUBLIC_QA_DEMO_BYPASS', value: 'false', sensitive: false, environments: ['production', 'preview', 'development'] },
   
   // Supabase Configuration
-  { key: 'SUPABASE_URL', value: 'https://zhjhvsqogaownorkidfu.supabase.co', sensitive: false, environments: ['production', 'preview', 'development'] },
-  { key: 'SUPABASE_ANON_KEY', value: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpoamh2c3FvZ2Fvd25vcmtpZGZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1NDQ2OTEsImV4cCI6MjA4MTEyMDY5MX0.igz41zVKbd37Xpt_0l3UzRZNufFcMj6_xlNZAKe12aU', sensitive: false, environments: ['production', 'preview', 'development'] },
-  { key: 'NEXT_PUBLIC_SUPABASE_URL', value: 'https://zhjhvsqogaownorkidfu.supabase.co', sensitive: false, environments: ['production', 'preview', 'development'] },
-  { key: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', value: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpoamh2c3FvZ2Fvd25vcmtpZGZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1NDQ2OTEsImV4cCI6MjA4MTEyMDY5MX0.igz41zVKbd37Xpt_0l3UzRZNufFcMj6_xlNZAKe12aU', sensitive: false, environments: ['production', 'preview', 'development'] },
+  { key: 'SUPABASE_URL', value: process.env.SUPABASE_URL || 'REPLACE_WITH_SUPABASE_URL', sensitive: false, environments: ['production', 'preview', 'development'] },
+  { key: 'SUPABASE_ANON_KEY', value: process.env.SUPABASE_ANON_KEY || 'REPLACE_WITH_SUPABASE_ANON_KEY', sensitive: false, environments: ['production', 'preview', 'development'] },
+  { key: 'NEXT_PUBLIC_SUPABASE_URL', value: process.env.NEXT_PUBLIC_SUPABASE_URL || 'REPLACE_WITH_NEXT_PUBLIC_SUPABASE_URL', sensitive: false, environments: ['production', 'preview', 'development'] },
+  { key: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', value: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'REPLACE_WITH_NEXT_PUBLIC_SUPABASE_ANON_KEY', sensitive: false, environments: ['production', 'preview', 'development'] },
   { key: 'SUPABASE_SERVICE_ROLE_KEY', value: process.env.SUPABASE_SERVICE_ROLE_KEY || 'REPLACE_WITH_SERVICE_ROLE_KEY', sensitive: true, environments: ['production', 'preview', 'development'] },
   { key: 'DATABASE_URL', value: process.env.DATABASE_URL || 'REPLACE_WITH_DATABASE_URL', sensitive: true, environments: ['production', 'preview', 'development'] },
   
   // Cron Configuration
   { key: 'ENABLE_PG_BOSS', value: 'false', sensitive: false, environments: ['production', 'preview', 'development'] },
-  { key: 'CRON_SECRET', value: 'a4pvVzJCTZqhVL+H+wtR/AVh66vJmz6CR6vMVnK0YRM=', sensitive: true, environments: ['production', 'preview', 'development'] },
+  { key: 'CRON_SECRET', value: process.env.CRON_SECRET || 'REPLACE_WITH_CRON_SECRET', sensitive: true, environments: ['production', 'preview', 'development'] },
   
   // Security Secrets
-  { key: 'ADMIN_API_TOKEN', value: '1WP6U0i1zisJfIKubIbUy6w+PXhZAkL2nZoSrbt96nI=', sensitive: true, environments: ['production', 'preview', 'development'] },
+  { key: 'ADMIN_API_TOKEN', value: process.env.ADMIN_API_TOKEN || 'REPLACE_WITH_ADMIN_API_TOKEN', sensitive: true, environments: ['production', 'preview', 'development'] },
   { key: 'ADMIN_IP_ALLOWLIST', value: '', sensitive: false, environments: ['production', 'preview', 'development'] },
-  { key: 'JWT_SECRET', value: 'b7Xe8HdLmXq9ewK/4Ip+mDhtK+1U02/SYOS1cWbrYT4=', sensitive: true, environments: ['production', 'preview', 'development'] },
-  { key: 'ENCRYPTION_KEY', value: 'o1oxj+/YCBpgXV5wq2p4IBi6Qb12s08ZtsFo3JoGL38=', sensitive: true, environments: ['production', 'preview', 'development'] },
+  { key: 'JWT_SECRET', value: process.env.JWT_SECRET || 'REPLACE_WITH_JWT_SECRET', sensitive: true, environments: ['production', 'preview', 'development'] },
+  { key: 'ENCRYPTION_KEY', value: process.env.ENCRYPTION_KEY || 'REPLACE_WITH_ENCRYPTION_KEY', sensitive: true, environments: ['production', 'preview', 'development'] },
   
   // Whop Configuration
   { key: 'WHOP_APP_ID', value: process.env.WHOP_APP_ID || 'app_oU8bWaXO', sensitive: false, environments: ['production', 'preview', 'development'] },

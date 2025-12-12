@@ -3,18 +3,23 @@
  * Add missing environment variables that need to be added for all environments
  */
 
-const VERCEL_TOKEN = process.env.VERCEL_TOKEN || 'Tn2z3hyFo5xgxes2Dp0VhqG2';
+const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
 const VERCEL_PROJECT_ID = 'churnsaver-o3gl';
 const VERCEL_TEAM_ID = 'dannys-projects-de68569e';
 
+if (!VERCEL_TOKEN) {
+  console.error('❌ Missing VERCEL_TOKEN in environment');
+  process.exit(1);
+}
+
 const missingVars = [
-  { key: 'JWT_SECRET', value: 'b7Xe8HdLmXq9ewK/4Ip+mDhtK+1U02/SYOS1cWbrYT4=', sensitive: true },
+  { key: 'JWT_SECRET', value: process.env.JWT_SECRET ?? 'REPLACE_WITH_JWT_SECRET', sensitive: true },
   { key: 'ADMIN_IP_ALLOWLIST', value: '', sensitive: false },
   { key: 'WEBHOOK_TIMESTAMP_SKEW_SECONDS', value: '300', sensitive: false },
-  { key: 'SUPABASE_URL', value: 'https://zhjhvsqogaownorkidfu.supabase.co', sensitive: false },
-  { key: 'SUPABASE_ANON_KEY', value: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpoamh2c3FvZ2Fvd25vcmtpZGZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1NDQ2OTEsImV4cCI6MjA4MTEyMDY5MX0.igz41zVKbd37Xpt_0l3UzRZNufFcMj6_xlNZAKe12aU', sensitive: false },
-  { key: 'NEXT_PUBLIC_SUPABASE_URL', value: 'https://zhjhvsqogaownorkidfu.supabase.co', sensitive: false },
-  { key: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', value: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpoamh2c3FvZ2Fvd25vcmtpZGZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1NDQ2OTEsImV4cCI6MjA4MTEyMDY5MX0.igz41zVKbd37Xpt_0l3UzRZNufFcMj6_xlNZAKe12aU', sensitive: false },
+  { key: 'SUPABASE_URL', value: process.env.SUPABASE_URL ?? 'REPLACE_WITH_SUPABASE_URL', sensitive: false },
+  { key: 'SUPABASE_ANON_KEY', value: process.env.SUPABASE_ANON_KEY ?? 'REPLACE_WITH_SUPABASE_ANON_KEY', sensitive: false },
+  { key: 'NEXT_PUBLIC_SUPABASE_URL', value: process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'REPLACE_WITH_NEXT_PUBLIC_SUPABASE_URL', sensitive: false },
+  { key: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', value: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'REPLACE_WITH_NEXT_PUBLIC_SUPABASE_ANON_KEY', sensitive: false },
   { key: 'ALLOW_INSECURE_DEV', value: 'false', sensitive: false },
   { key: 'NEXT_PUBLIC_DEBUG_MODE', value: 'false', sensitive: false },
   { key: 'QA_DEMO_BYPASS', value: 'false', sensitive: false },
@@ -79,6 +84,10 @@ async function main() {
   console.log('🚀 Adding missing environment variables...\n');
   
   for (const envVar of missingVars) {
+    if (envVar.value.startsWith('REPLACE_')) {
+      console.log(`⏭️  Skipping ${envVar.key} (missing value; set it in your environment)`);
+      continue;
+    }
     for (const env of ['production', 'preview', 'development']) {
       const result = await addEnvVar(envVar.key, envVar.value, envVar.sensitive, env);
       

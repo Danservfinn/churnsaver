@@ -51,7 +51,7 @@ All environment variables have been configured for `churnsaver-o3gl`:
 **Issue**: Cron endpoint returns `401 unauthorized` even with correct Bearer token format.
 
 **Test Results**:
-- Tested with: `Authorization: Bearer a4pvVzJCTZqhVL+H+wtR/AVh66vJmz6CR6vMVnK0YRM=`
+- Tested with: `Authorization: Bearer <REDACTED>`
 - Expected format: ✅ Correct (`Bearer ${CRON_SECRET}`)
 - Response: ❌ `{"error":"unauthorized"}`
 

@@ -3,9 +3,14 @@
  * Trigger a new Vercel deployment via API
  */
 
-const VERCEL_TOKEN = process.env.VERCEL_TOKEN || 'Tn2z3hyFo5xgxes2Dp0VhqG2';
+const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
 const VERCEL_PROJECT_ID = 'churnsaver-o3gl';
 const VERCEL_TEAM_ID = 'dannys-projects-de68569e';
+
+if (!VERCEL_TOKEN) {
+  console.error('❌ Missing VERCEL_TOKEN in environment');
+  process.exit(1);
+}
 
 async function triggerDeployment() {
   const url = `https://api.vercel.com/v13/deployments`;

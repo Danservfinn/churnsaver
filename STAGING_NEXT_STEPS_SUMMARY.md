@@ -35,7 +35,7 @@
 - **Critical variables**:
   - `DATABASE_URL` (Supabase pooler, port 6543)
   - `SUPABASE_SERVICE_ROLE_KEY` (get from Supabase dashboard)
-  - `CRON_SECRET` (already generated: `a4pvVzJCTZqhVL+H+wtR/AVh66vJmz6CR6vMVnK0YRM=`)
+  - `CRON_SECRET` (already generated: `<REDACTED>`)
   - `WHOP_APP_ID`, `WHOP_API_KEY`, `WHOP_WEBHOOK_SECRET` (get from Whop dashboard)
 - **Reference**: `ENV_VAR_SETUP_STEPS.md` for complete list
 
@@ -74,7 +74,7 @@
 ```bash
 cd apps/web
 STAGING_URL="https://[CANONICAL_DOMAIN]" \
-CRON_SECRET="a4pvVzJCTZqhVL+H+wtR/AVh66vJmz6CR6vMVnK0YRM=" \
+CRON_SECRET=<REDACTED> \
 bash scripts/staging-smoke-tests.sh
 ```
 
@@ -122,10 +122,10 @@ bash scripts/staging-smoke-tests.sh
 
 ## Key Credentials (Generated)
 
-**CRON_SECRET**: `a4pvVzJCTZqhVL+H+wtR/AVh66vJmz6CR6vMVnK0YRM=`  
-**ADMIN_API_TOKEN**: `1WP6U0i1zisJfIKubIbUy6w+PXhZAkL2nZoSrbt96nI=`  
-**JWT_SECRET**: `b7Xe8HdLmXq9ewK/4Ip+mDhtK+1U02/SYOS1cWbrYT4=`  
-**ENCRYPTION_KEY**: `o1oxj+/YCBpgXV5wq2p4IBi6Qb12s08ZtsFo3JoGL38=`
+**CRON_SECRET**: `<REDACTED>`  
+**ADMIN_API_TOKEN**: `<REDACTED>`  
+**JWT_SECRET**: `<REDACTED>`  
+**ENCRYPTION_KEY**: `<REDACTED>`
 
 **Note**: These are staging secrets. Generate new ones for production.
 

@@ -71,7 +71,7 @@
 ```bash
 cd apps/web
 STAGING_URL="https://churnsaver-o3gl.vercel.app" \
-CRON_SECRET="a4pvVzJCTZqhVL+H+wtR/AVh66vJmz6CR6vMVnK0YRM=" \
+CRON_SECRET=<REDACTED> \
 bash scripts/staging-smoke-tests.sh
 ```
 

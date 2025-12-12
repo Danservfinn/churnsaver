@@ -4,8 +4,13 @@
 
 set -e
 
-STAGING_URL="${STAGING_URL:-https://churnsaver-o3gl-hlqdg3fn8-dannys-projects-de68569e.vercel.app}"
-CRON_SECRET="${CRON_SECRET:-a4pvVzJCTZqhVL+H+wtR/AVh66vJmz6CR6vMVnK0YRM=}"
+STAGING_URL="${STAGING_URL:-}"
+CRON_SECRET="${CRON_SECRET:-}"
+
+if [ -z "$STAGING_URL" ]; then
+  echo "❌ STAGING_URL is required"
+  exit 1
+fi
 
 echo "🧪 Running staging smoke tests against: $STAGING_URL"
 echo ""

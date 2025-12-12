@@ -30,7 +30,7 @@
 
 2. **Complete Supabase Migrations**:
    ```bash
-   export DATABASE_URL="postgresql://postgres.zhjhvsqogaownorkidfu:[PASSWORD]@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require"
+   export DATABASE_URL=<REDACTED>
    cd apps/web
    pnpm db:migrate
    ```
@@ -43,7 +43,7 @@
    ```bash
    cd apps/web
    STAGING_URL="https://churnsaver-o3gl-hlqdg3fn8-dannys-projects-de68569e.vercel.app" \
-   CRON_SECRET="a4pvVzJCTZqhVL+H+wtR/AVh66vJmz6CR6vMVnK0YRM=" \
+   CRON_SECRET=<REDACTED> \
    bash scripts/staging-smoke-tests.sh
    ```
 

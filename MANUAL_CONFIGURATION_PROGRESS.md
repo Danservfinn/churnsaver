@@ -33,11 +33,11 @@ I've created an automated script that can add all remaining variables at once us
 cd apps/web
 
 # Set required environment variables
-export VERCEL_TOKEN="your_vercel_token_here"
-export SUPABASE_SERVICE_ROLE_KEY="your_service_role_key"
-export DATABASE_URL="postgresql://postgres.zhjhvsqogaownorkidfu:[PASSWORD]@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require&pgbouncer=true"
-export WHOP_API_KEY="your_whop_api_key"
-export WHOP_WEBHOOK_SECRET="your_generated_webhook_secret"
+export VERCEL_TOKEN=<REDACTED>
+export SUPABASE_SERVICE_ROLE_KEY=<REDACTED>
+export DATABASE_URL=<REDACTED>
+export WHOP_API_KEY=<REDACTED>
+export WHOP_WEBHOOK_SECRET=<REDACTED>
 
 # Run the script
 pnpm tsx scripts/add-vercel-env-vars.ts
@@ -81,11 +81,11 @@ If you prefer to continue via browser:
 - `NEXT_PUBLIC_SUPABASE_URL=https://zhjhvsqogaownorkidfu.supabase.co`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` (already have)
 - `ENABLE_PG_BOSS=false`
-- `CRON_SECRET=a4pvVzJCTZqhVL+H+wtR/AVh66vJmz6CR6vMVnK0YRM=`
-- `ADMIN_API_TOKEN=1WP6U0i1zisJfIKubIbUy6w+PXhZAkL2nZoSrbt96nI=`
+- `CRON_SECRET=<REDACTED>
+- `ADMIN_API_TOKEN=<REDACTED>
 - `ADMIN_IP_ALLOWLIST=` (empty)
-- `JWT_SECRET=b7Xe8HdLmXq9ewK/4Ip+mDhtK+1U02/SYOS1cWbrYT4=`
-- `ENCRYPTION_KEY=o1oxj+/YCBpgXV5wq2p4IBi6Qb12s08ZtsFo3JoGL38=`
+- `JWT_SECRET=<REDACTED>
+- `ENCRYPTION_KEY=<REDACTED>
 - `NEXT_PUBLIC_WHOP_APP_ID=app_oU8bWaXO`
 - `WHOP_APP_ID=app_oU8bWaXO`
 - `WEBHOOK_TIMESTAMP_SKEW_SECONDS=300`
@@ -110,7 +110,7 @@ If you prefer to continue via browser:
    ```bash
    cd apps/web
    STAGING_URL="https://churnsaver-o3gl.vercel.app" \
-   CRON_SECRET="a4pvVzJCTZqhVL+H+wtR/AVh66vJmz6CR6vMVnK0YRM=" \
+   CRON_SECRET=<REDACTED> \
    bash scripts/staging-smoke-tests.sh
    ```
 

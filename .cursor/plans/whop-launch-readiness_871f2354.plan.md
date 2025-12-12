@@ -4,10 +4,10 @@ overview: Bring ChurnSaver to Whop App Store launch readiness on Vercel + Supaba
 todos:
   - id: baseline-gates
     content: Create release branch; enforce lint/typecheck/test/build gates after each phase.
-    status: pending
+    status: completed
   - id: tenant-id-no-fallback
     content: Remove/disable production fallback companyId derivation; require trusted companyId for tenant-scoped routes.
-    status: pending
+    status: in_progress
   - id: whop-context-resolution
     content: Verify Whop token/webhook payload shapes; implement correct server-side companyId resolution.
     status: pending

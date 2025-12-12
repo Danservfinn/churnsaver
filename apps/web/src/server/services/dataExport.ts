@@ -4,7 +4,7 @@
 import { randomUUID } from 'crypto';
 import { createHash } from 'crypto';
 import { createReadStream, createWriteStream, existsSync, mkdirSync, unlinkSync } from 'fs';
-import { join } from 'path';
+import { join, resolve, normalize } from 'path';
 import { pipeline } from 'stream/promises';
 import { gzip } from 'zlib';
 import { sql } from '@/lib/db';
@@ -370,9 +370,24 @@ async function generateExportFile(options: ExportProcessingOptions): Promise<Exp
       totalRecords += exportedData.metadata.record_counts[dataType];
     }
 
-    // Generate file based on format
+    // Generate file based on format (sanitize to prevent path traversal)
+    // fileName is generated from request_id (UUID) and timestamp, but validate anyway
     const fileName = `${options.request_id}_${Date.now()}.${options.export_format}`;
-    const filePath = join(EXPORT_DIR, fileName);
+    // Remove any path separators that might have been introduced
+    const sanitizedFileName = fileName.replace(/[\/\\]/g, '_');
+    const filePath = join(EXPORT_DIR, sanitizedFileName);
+    
+    // Validate path containment after join
+    const resolvedPath = resolve(filePath);
+    const resolvedExportDir = resolve(EXPORT_DIR);
+    if (!resolvedPath.startsWith(resolvedExportDir)) {
+      throw new DataExportError(
+        'Invalid file path generated',
+        'PATH_VALIDATION_FAILED',
+        'system',
+        true
+      );
+    }
 
     let fileSizeBytes = 0;
     let checksum = '';
@@ -750,6 +765,14 @@ async function writeFile(filePath: string, data: Buffer): Promise<void> {
  */
 async function cleanupFile(filePath: string): Promise<void> {
   try {
+    // Validate path containment before cleanup
+    if (!validateExportFilePath(filePath)) {
+      logger.error('Path traversal attempt detected in cleanup file path', {
+        filePath
+      });
+      return;
+    }
+
     if (existsSync(filePath)) {
       unlinkSync(filePath);
     }
@@ -959,9 +982,56 @@ export async function getExportFile(
 }
 
 /**
- * Read file from disk
+ * Validate file path is contained within EXPORT_DIR (prevents path traversal)
+ * This function validates paths that come from the database (file.file_path)
+ */
+function validateExportFilePath(filePath: string): boolean {
+  try {
+    // Normalize the input path first
+    const normalizedPath = normalize(filePath);
+    
+    // Resolve both paths to absolute paths for comparison
+    // Note: resolve() is safe here - we're validating containment, not using user input directly
+    // The normalizedPath comes from database (file.file_path) which we validate is within EXPORT_DIR
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const resolvedPath = resolve(normalizedPath);
+    const resolvedExportDir = resolve(EXPORT_DIR);
+    
+    // Ensure the resolved path is within EXPORT_DIR
+    if (!resolvedPath.startsWith(resolvedExportDir)) {
+      logger.error('Path traversal attempt detected in export file path', {
+        filePath,
+        normalizedPath,
+        resolvedPath,
+        exportDir: resolvedExportDir
+      });
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    logger.error('Failed to validate export file path', {
+      filePath,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return false;
+  }
+}
+
+/**
+ * Read file from disk with path containment validation
  */
 async function readFile(filePath: string): Promise<Buffer> {
+  // Validate path containment before reading
+  if (!validateExportFilePath(filePath)) {
+    throw new DataExportError(
+      'Invalid file path - path traversal detected',
+      'PATH_TRAVERSAL',
+      'security',
+      false
+    );
+  }
+
   return new Promise((resolve, reject) => {
     const readStream = createReadStream(filePath);
     const chunks: Buffer[] = [];

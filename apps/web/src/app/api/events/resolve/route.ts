@@ -27,8 +27,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
   }
 
-  // Optional IP allowlist: comma-separated
-  const allowedIps = process.env.ADMIN_ALLOWED_IPS?.split(',').map((ip) => ip.trim()).filter(Boolean) || [];
+  // Optional IP allowlist: comma-separated (standardize to ADMIN_IP_ALLOWLIST)
+  const allowedIps = (process.env.ADMIN_IP_ALLOWLIST || process.env.ADMIN_ALLOWED_IPS)?.split(',').map((ip) => ip.trim()).filter(Boolean) || [];
   const ipAllowed = allowedIps.length === 0 || allowedIps.includes(clientIp);
 
   const tokensMatch = (() => {

@@ -15,3 +15,4 @@ CREATE INDEX IF NOT EXISTS idx_cases_status_first_failure_at
 
 
 
+

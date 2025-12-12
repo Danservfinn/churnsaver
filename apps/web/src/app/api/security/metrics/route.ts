@@ -29,6 +29,18 @@ function verifyAdminToken(request: NextRequest): boolean {
   }
 }
 
+function ipAllowed(request: NextRequest): boolean {
+  const allowlist = process.env.ADMIN_IP_ALLOWLIST || process.env.ADMIN_ALLOWED_IPS;
+  if (!allowlist) return true; // Allow all if no allowlist configured
+  const ips = allowlist.split(',').map((ip) => ip.trim()).filter(Boolean);
+  const clientIp =
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    request.headers.get('x-real-ip') ||
+    '';
+  if (!clientIp) return false;
+  return ips.includes(clientIp);
+}
+
 function requireAdmin(request: NextRequest): NextResponse | null {
   if (!verifyAdminToken(request)) {
     const clientIp =
@@ -46,6 +58,25 @@ function requireAdmin(request: NextRequest): NextResponse | null {
       { status: 401 }
     );
   }
+
+  // Check IP allowlist if configured
+  if (!ipAllowed(request)) {
+    const clientIp =
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      request.headers.get('x-real-ip') ||
+      'unknown';
+
+    logger.warn('IP not in allowlist for security metrics endpoint', {
+      ip: clientIp,
+      hasToken: true
+    });
+
+    return NextResponse.json(
+      { error: 'Forbidden' },
+      { status: 403 }
+    );
+  }
+
   return null;
 }
 

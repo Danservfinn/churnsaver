@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { requestSizeLimitMiddleware } from './middleware/requestSizeLimit';
+import { requestSizeLimitMiddleware } from './middleware/requestSizeLimit.edge';
 
 // Middleware that enforces request size limits for API routes
 export async function middleware(request: NextRequest) {

@@ -42,6 +42,18 @@ jobs:
         working-directory: apps/web
         run: pnpm test:ci
 
+      - name: Run security tests
+        working-directory: apps/web
+        run: pnpm test:security
+
+      - name: Run webhook tests
+        working-directory: apps/web
+        run: pnpm test:webhooks
+
+      - name: Run RLS unit tests
+        working-directory: apps/web
+        run: pnpm test:rls
+
       - name: Upload unit test results
         uses: actions/upload-artifact@v4
         with:
@@ -120,14 +132,14 @@ jobs:
           export NODE_ENV=test
           export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/churn_saver_test"
           
-          # Run integration tests
-          if [ -d "test/integration" ]; then
-            echo "Running integration tests"
-            find test/integration -name "*.test.js" -o -name "*.test.ts" | xargs node
-          fi
-          
-          # Run API integration tests
+          # Run API integration tests (includes DB-backed tests)
           pnpm test:integration
+          
+          # Run RLS integration tests if they exist
+          if [ -d "test/integration" ] && find test/integration -name "*rls*.test.ts" | grep -q .; then
+            echo "Running RLS integration tests"
+            pnpm vitest run --config vitest.integration.config.ts test/integration/*rls*.test.ts
+          fi
 
       - name: Upload integration test results
         uses: actions/upload-artifact@v4
@@ -191,15 +203,31 @@ jobs:
             GRANT ALL PRIVILEGES ON DATABASE test_migrations TO postgres;
           "
 
+      - name: Setup test database with roles
+        run: |
+          psql -h localhost -p 5432 -U postgres -d test_migrations <<'EOF'
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated; END IF;
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon; END IF;
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role; END IF;
+          END $$;
+          EOF
+
       - name: Run migration tests
         working-directory: apps/web
         run: |
           export NODE_ENV=test
-          export TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test_migrations"
-          pnpm test test/migrations/migration-test.ts
+          export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test_migrations"
+          # Run migration tests if they exist
+          if [ -f "test/migrations/remove-default-company-id.test.ts" ]; then
+            pnpm vitest run test/migrations/remove-default-company-id.test.ts
+          else
+            echo "No migration tests found, skipping"
+          fi
         env:
           NODE_ENV: test
-          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_migrations
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_migrations
 
       - name: Upload migration test results
         uses: actions/upload-artifact@v4

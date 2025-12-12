@@ -1,15 +1,13 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { requestSizeLimitMiddleware } from './middleware/requestSizeLimit.edge';
 
 // Middleware that enforces request size limits for API routes
 export async function middleware(request: NextRequest) {
-  // Check request size limits (returns null if OK, or NextResponse with error if exceeded)
-  const sizeCheckResult = await requestSizeLimitMiddleware(request);
-  if (sizeCheckResult) {
-    return sizeCheckResult;
-  }
-
+  // NOTE:
+  // This file runs on the Edge runtime. Keep it minimal and avoid importing
+  // server-only modules. Request-size enforcement happens inside the relevant
+  // API routes (e.g. webhooks) where Node.js runtime is available.
+  void request;
   return NextResponse.next();
 }
 

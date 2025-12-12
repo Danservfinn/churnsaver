@@ -60,11 +60,12 @@ export const whopsdk = new Whop({
 export async function getRequestContextSDK(request: { headers: HeaderLike }): Promise<RequestContext> {
   try {
     // In development, skip verification if no secret is set
+    // BUT: Never use APP_ID as companyId fallback - return null instead
     if (process.env.NODE_ENV === 'development' && !env.WHOP_APP_SECRET && !env.WHOP_API_KEY) {
       return {
-        companyId: env.NEXT_PUBLIC_WHOP_APP_ID || 'dev-company',
+        companyId: null, // Explicitly null - require QA demo bypass or proper token for companyId (RequestContext allows null)
         userId: 'dev-user',
-        isAuthenticated: true,
+        isAuthenticated: false, // Not authenticated without proper token
         devBypass: true,
       };
     }

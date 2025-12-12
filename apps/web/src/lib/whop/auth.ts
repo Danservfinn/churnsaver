@@ -386,9 +386,11 @@ export class WhopAuthService {
         headers.set('Authorization', `Bearer ${token}`);
         
         const result = await this.sdk.verifyUserToken(headers);
+        // NEVER use appId as companyId fallback - require explicit companyId from token
+        const resolvedCompanyId = (result as any).companyId ?? (result as any).company_id ?? null;
         payload = {
           userId: result.userId,
-          companyId: (result as any).companyId || this.config.appId,
+          companyId: resolvedCompanyId, // Explicit null if not in token - no appId fallback
           // Add other claims as needed
         };
       } else {
@@ -578,7 +580,7 @@ export class WhopAuthService {
       expiresAt: now + (ttl * 1000),
       isActive: true,
       userId,
-      companyId: companyId || this.config.appId
+      companyId: companyId || undefined // Never use appId as fallback - require explicit companyId
     };
 
     // Store session securely
@@ -858,7 +860,7 @@ export class WhopAuthService {
         {
           oldTokenHash: oldTokenHash.substring(0, 8) + '...',
           userId: result.userId,
-          companyId: (result as any).companyId || this.config.appId,
+          companyId: (result as any).companyId ?? (result as any).company_id ?? undefined, // Never use appId fallback
           refreshedBy: 'refreshToken'
         }
       );

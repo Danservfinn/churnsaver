@@ -1,21 +1,39 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, LayoutDashboard, Settings, Menu, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 export function AppHeader() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const menuId = 'primary-navigation';
 
   const navItems = [
     { href: '/', label: 'Home', icon: Home },
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/settings', label: 'Settings', icon: Settings },
   ];
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMobileMenuOpen(false);
+      }
+    };
+
+    const firstLink = mobileMenuRef.current?.querySelector<HTMLAnchorElement>('a');
+    firstLink?.focus();
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [mobileMenuOpen]);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-card/80 backdrop-blur-sm">
@@ -39,16 +57,17 @@ export function AppHeader() {
                 (item.href !== '/' && pathname?.startsWith(item.href));
               
               return (
-                <Link key={item.href} href={item.href}>
-                  <Button
-                    variant={isActive ? 'secondary' : 'ghost'}
-                    size="sm"
-                    className="gap-2"
-                    aria-current={isActive ? 'page' : undefined}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span>{item.label}</span>
-                  </Button>
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={cn(
+                    buttonVariants({ variant: isActive ? 'secondary' : 'ghost', size: 'sm' }),
+                    'gap-2'
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{item.label}</span>
                 </Link>
               );
             })}
@@ -62,6 +81,7 @@ export function AppHeader() {
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label="Toggle menu"
             aria-expanded={mobileMenuOpen}
+            aria-controls={menuId}
           >
             {mobileMenuOpen ? (
               <X className="h-5 w-5" />
@@ -73,34 +93,56 @@ export function AppHeader() {
 
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
-          <nav 
-            className="md:hidden border-t border-border py-4 space-y-2" 
-            aria-label="Main navigation"
-          >
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.href || 
-                (item.href !== '/' && pathname?.startsWith(item.href));
-              
-              return (
-                <Link 
-                  key={item.href} 
-                  href={item.href}
+          <div className="md:hidden fixed inset-0 z-50">
+            <button
+              aria-label="Close menu"
+              className="absolute inset-0 bg-background/70 backdrop-blur-sm"
+              onClick={() => setMobileMenuOpen(false)}
+            />
+            <nav
+              id={menuId}
+              ref={mobileMenuRef}
+              aria-label="Main navigation"
+              className="absolute right-0 top-0 h-full w-72 max-w-[90%] border-l border-border bg-card shadow-xl py-6 px-4 space-y-3 focus:outline-none"
+              role="dialog"
+              aria-modal="true"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-muted-foreground">
+                  Navigation
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Close menu"
                   onClick={() => setMobileMenuOpen(false)}
                 >
-                  <Button
-                    variant={isActive ? 'secondary' : 'ghost'}
-                    size="sm"
-                    className={cn('w-full justify-start gap-2')}
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.href || 
+                  (item.href !== '/' && pathname?.startsWith(item.href));
+                
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={cn(
+                      buttonVariants({ variant: isActive ? 'secondary' : 'ghost', size: 'sm' }),
+                      'w-full justify-start gap-2'
+                    )}
                     aria-current={isActive ? 'page' : undefined}
                   >
                     <Icon className="h-4 w-4" />
                     <span>{item.label}</span>
-                  </Button>
-                </Link>
-              );
-            })}
-          </nav>
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
         )}
       </div>
     </header>

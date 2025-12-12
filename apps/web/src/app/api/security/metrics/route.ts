@@ -1,24 +1,59 @@
+import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { getRequestContextSDK } from '@/lib/whop-sdk';
 import { securityMonitor, SecurityEvent } from '@/lib/security-monitoring';
-import { errors } from '@/lib/apiResponse';
-import { isProductionLikeEnvironment } from '@/lib/env';
 import { logger } from '@/lib/logger';
+
+function verifyAdminToken(request: NextRequest): boolean {
+  const adminToken = process.env.ADMIN_API_TOKEN;
+  const providedToken = request.headers.get('x-admin-token');
+
+  if (!adminToken || adminToken.length < 32) {
+    return false;
+  }
+
+  if (!providedToken) {
+    return false;
+  }
+
+  try {
+    const adminTokenBuffer = Buffer.from(adminToken, 'utf8');
+    const providedTokenBuffer = Buffer.from(providedToken, 'utf8');
+    
+    if (adminTokenBuffer.length !== providedTokenBuffer.length) {
+      return false;
+    }
+
+    return timingSafeEqual(adminTokenBuffer, providedTokenBuffer);
+  } catch {
+    return false;
+  }
+}
+
+function requireAdmin(request: NextRequest): NextResponse | null {
+  if (!verifyAdminToken(request)) {
+    const clientIp =
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      request.headers.get('x-real-ip') ||
+      'unknown';
+
+    logger.warn('Unauthorized attempt to access security metrics endpoint', {
+      ip: clientIp,
+      hasToken: !!request.headers.get('x-admin-token')
+    });
+
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 401 }
+    );
+  }
+  return null;
+}
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
-    // Authenticate request
-    const context = await getRequestContextSDK(request);
-    const companyId = context.companyId ?? undefined;
-    const userId = context.userId ?? undefined;
-    
-    // In production, require authentication
-    if (isProductionLikeEnvironment() && !context.isAuthenticated) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
+    // Require admin authentication for this sensitive endpoint
+    const adminCheck = requireAdmin(request);
+    if (adminCheck) return adminCheck;
 
     // Parse query parameters
     const { searchParams } = new URL(request.url);
@@ -65,18 +100,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    // Authenticate request
-    const context = await getRequestContextSDK(request);
-    const companyId = context.companyId ?? undefined;
-    const userId = context.userId ?? undefined;
-    
-    // In production, require authentication
-    if (isProductionLikeEnvironment() && !context.isAuthenticated) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
+    const adminCheck = requireAdmin(request);
+    if (adminCheck) return adminCheck;
 
     // Parse request body for manual security event reporting
     const body = await request.json();
@@ -103,12 +128,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       description,
       ip: clientIP,
       userAgent,
-      userId,
-      companyId,
+      userId: undefined,
+      companyId: undefined,
       endpoint: '/api/security/metrics',
       metadata: {
         ...metadata,
-        reportedBy: userId,
+        reportedBy: 'admin_api',
         manualReport: true
       }
     });

@@ -5,7 +5,10 @@
   "framework": "nextjs",
   "functions": {
     "src/app/api/cron/process-queue/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 15
+    },
+    "src/app/api/cron/reminders/route.ts": {
+      "maxDuration": 15
     },
     "src/app/api/cron/maintenance/route.ts": {
       "maxDuration": 60
@@ -47,5 +50,10 @@
   "env": {
     "NODE_ENV": "production",
     "ALLOW_INSECURE_DEV": "false"
-  }
+  },
+  "crons": [
+    { "path": "/api/cron/process-queue", "schedule": "* * * * *" },
+    { "path": "/api/cron/reminders", "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/maintenance", "schedule": "0 * * * *" }
+  ]
 }

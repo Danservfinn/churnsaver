@@ -3,9 +3,18 @@ import { logger } from '@/lib/logger';
 import { requireAuthContext } from '@/lib/auth/requireAuth';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { getCompanySubscription, getTierLimits } from '@/server/services/subscriptions';
+import { getQaDemoSubscription, isQaDemoBypassEnabled } from '@/lib/qaDemo';
+import { initDb } from '@/lib/db';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
+    if (isQaDemoBypassEnabled(request)) {
+      logger.info('QA demo bypass: returning mock subscription');
+      return NextResponse.json(getQaDemoSubscription());
+    }
+
+    await initDb();
+
     const auth = await requireAuthContext(request);
     if (!auth.success || !auth.context) {
       return auth.response ?? NextResponse.json({ error: auth.error || 'Authentication required' }, { status: auth.status || 401 });

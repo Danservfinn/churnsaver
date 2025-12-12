@@ -1,25 +1,29 @@
-import { describe, it, expect, beforeEach } from '@jest/globals';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createHmac } from 'crypto';
 
 import { verifyWebhookSignature } from '@/server/webhooks/whop';
 import { validateTimestamp } from '@/lib/whop/webhookValidator';
 
-jest.mock('@/lib/env', () => {
-  const actual = jest.requireActual('@/lib/env');
+vi.mock('@/lib/env', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/env')>('@/lib/env');
   return {
     ...actual,
-    isProductionLikeEnvironment: jest.fn()
+    additionalEnv: {
+      ...actual.additionalEnv,
+      WEBHOOK_TIMESTAMP_SKEW_SECONDS: 60
+    },
+    isProductionLikeEnvironment: vi.fn()
   };
 });
 
 import { additionalEnv, isProductionLikeEnvironment } from '@/lib/env';
 
-const mockIsProductionLikeEnvironment = isProductionLikeEnvironment as jest.MockedFunction<
+const mockIsProductionLikeEnvironment = isProductionLikeEnvironment as vi.MockedFunction<
   typeof isProductionLikeEnvironment
 >;
 
 describe('Webhook timestamp enforcement', () => {
-  const secret = 'test_webhook_secret';
+  const secret = process.env.TEST_WEBHOOK_SECRET ?? 'test_webhook_secret';
   const body = JSON.stringify({ hello: 'world' });
   const signature = 'sha256=' + createHmac('sha256', secret).update(body, 'utf8').digest('hex');
   const skew = additionalEnv.WEBHOOK_TIMESTAMP_SKEW_SECONDS;

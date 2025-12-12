@@ -208,7 +208,7 @@ Large-scale customer retention with advanced analytics and custom recovery workf
 ## Next Steps
 
 - **[Setup Guide](setup.md)**: Get started with local development
-- **[Architecture](architecture.md)**: Deep dive into system design
+- **[Architecture](../../apps/web/docs/architecture/ARCHITECTURE.md)**: Deep dive into system design, infrastructure, and costs
 - **[API Reference](../api/rest-api.md)**: Complete API documentation
 - **[Security Overview](../security/overview.md)**: Security architecture and compliance
 

@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { errorResponses, apiSuccess } from '@/lib/apiResponse';
 import { requireAuthContext } from '@/lib/auth/requireAuth';
+import { getQaDemoDashboardCases, isQaDemoBypassEnabled } from '@/lib/qaDemo';
 
 export interface RecoveryCaseSummary {
   id: string;
@@ -39,6 +40,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const startTime = Date.now();
 
   try {
+    if (isQaDemoBypassEnabled(request)) {
+      logger.info('QA demo bypass: returning mock dashboard cases');
+      return apiSuccess(getQaDemoDashboardCases());
+    }
+
     // Initialize database connection
     await initDbWithRLS();
 

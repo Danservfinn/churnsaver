@@ -1,7 +1,7 @@
 // Settings service
 // Handles loading company-specific settings with environment fallbacks
 
-import { sql } from '@/lib/db';
+import { sqlWithRLS } from '@/lib/db-rls';
 import { env, additionalEnv } from '@/lib/env';
 import { logger } from '@/lib/logger';
 
@@ -23,11 +23,13 @@ const DEFAULT_SETTINGS: Omit<CompanySettings, 'company_id' | 'updated_at'> = {
 };
 
 // Get settings for a company (with fallback to defaults)
+// Uses RLS to ensure tenant isolation - companyId must match authenticated context
 export async function getSettingsForCompany(companyId: string): Promise<CompanySettings> {
   try {
-    const settings = await sql.select<CompanySettings>(
+    const settings = await sqlWithRLS.select<CompanySettings>(
       'SELECT company_id, enable_push, enable_dm, incentive_days, reminder_offsets_days, updated_at FROM creator_settings WHERE company_id = $1',
-      [companyId]
+      [companyId],
+      { companyId, enforceCompanyContext: true }
     );
 
     if (settings.length > 0) {
@@ -57,9 +59,10 @@ export async function getSettingsForCompany(companyId: string): Promise<CompanyS
 }
 
 // Create or update settings for a company
+// Uses RLS to ensure tenant isolation - companyId must match authenticated context
 export async function upsertSettingsForCompany(settings: CompanySettings): Promise<boolean> {
   try {
-    await sql.execute(
+    await sqlWithRLS.execute(
       `INSERT INTO creator_settings (
         company_id, enable_push, enable_dm, incentive_days, reminder_offsets_days, updated_at
       ) VALUES ($1, $2, $3, $4, $5, $6)
@@ -76,7 +79,8 @@ export async function upsertSettingsForCompany(settings: CompanySettings): Promi
         settings.incentive_days,
         settings.reminder_offsets_days,
         settings.updated_at
-      ]
+      ],
+      { companyId: settings.company_id, enforceCompanyContext: true }
     );
 
     logger.info('Settings updated for company', { companyId: settings.company_id });

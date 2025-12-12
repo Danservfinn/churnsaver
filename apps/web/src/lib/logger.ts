@@ -1,4 +1,5 @@
 // Logger utility for Whop authentication and API operations
+import { sendToLogDrain } from './log-drain';
 
 export enum LogLevel {
   DEBUG = 0,
@@ -69,11 +70,26 @@ class Logger {
   private requestId?: string;
 
   constructor(logLevel: LogLevel = LogLevel.INFO) {
-    this.logLevel = logLevel;
+    this.logLevel = this.getEnvLogLevel() ?? logLevel;
   }
 
   setRequestId(requestId: string): void {
     this.requestId = requestId;
+  }
+
+  private getEnvLogLevel(): LogLevel | undefined {
+    const envLevel = process.env.LOG_LEVEL?.toUpperCase();
+    if (!envLevel) return undefined;
+
+    const map: Record<string, LogLevel> = {
+      DEBUG: LogLevel.DEBUG,
+      INFO: LogLevel.INFO,
+      WARN: LogLevel.WARN,
+      ERROR: LogLevel.ERROR,
+      SECURITY: LogLevel.SECURITY
+    };
+
+    return map[envLevel];
   }
 
   private shouldLog(level: LogLevel): boolean {
@@ -91,7 +107,12 @@ class Logger {
       ...(metadata || {})
     };
 
-    const serialized = JSON.stringify(redactObject(payload));
+    // Redact sensitive data before serialization and sending to log drain
+    const redactedPayload = redactObject(payload) as Record<string, unknown>;
+    const serialized = JSON.stringify(redactedPayload);
+
+    // Fire-and-forget delivery to optional log drain endpoint (with redacted payload)
+    void sendToLogDrain(redactedPayload);
 
     switch (level) {
       case LogLevel.DEBUG:

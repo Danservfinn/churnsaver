@@ -11,10 +11,23 @@ const mockEnv = {
   NODE_ENV: 'test'
 };
 
-describe.skip('Database Connection Management - Unit Tests', () => {
+describe('Database Connection Management - Unit Tests', () => {
+  beforeAll(() => {
+    Object.assign(process.env, mockEnv);
+  });
+
   beforeEach(() => {
     // Reset environment
     Object.assign(process.env, mockEnv);
+  });
+
+  afterAll(async () => {
+    try {
+      await closeDb();
+    } catch {}
+    try {
+      await closeDbWithRLS();
+    } catch {}
   });
 
   describe('initDb() connection initialization', () => {

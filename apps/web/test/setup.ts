@@ -12,27 +12,22 @@ global.console = {
 
 // Mock environment variables for testing
 process.env.NODE_ENV = 'test';
+process.env.ENCRYPTION_KEY ??= 'dGVzdC1rZXktMzItYnl0ZXMtbG9uZy1lbm91Z2g='; // base64 for a 32-byte-ish test key
+process.env.WHOP_API_KEY ??= 'test-api-key';
+process.env.WHOP_APP_ID ??= 'test-app-id';
+process.env.NEXT_PUBLIC_WHOP_APP_ID ??= 'test-app-id';
+process.env.WHOP_WEBHOOK_SECRET ??= 'whsec_test_secret';
+process.env.KPI_ATTRIBUTION_WINDOW_DAYS ??= '30';
+process.env.CASE_EXPIRY_WINDOW_DAYS ??= '90';
 
 // Set up global test utilities
-import { vi } from 'vitest';
+import { vi, afterEach } from 'vitest';
+import { cleanup } from '@testing-library/react';
 
-// Mock any global dependencies if needed
-vi.mock('@/lib/env', () => ({
-  env: {
-    DATABASE_URL: 'postgresql://test:test@localhost:5432/test',
-    ENCRYPTION_KEY: 'dGVzdGVkZXlZWJfa2V0NvQ==', // base64 for 'test-key-32-bytes'
-    WHOP_API_KEY: 'test-api-key',
-    WHOP_APP_ID: 'test-app-id',
-    WHOP_WEBHOOK_SECRET: 'whsec_test_secret',
-    NODE_ENV: 'test',
-  },
-  additionalEnv: {
-    KPI_ATTRIBUTION_WINDOW_DAYS: 30,
-    CASE_EXPIRY_WINDOW_DAYS: 90,
-  },
-  isProductionLikeEnvironment: () => false,
-  validateWebhookTimestampSkew: () => {},
-}));
+// Ensure cleanup after each test
+afterEach(() => {
+  cleanup();
+});
 
 // Mock whop auth service to prevent initialization errors during tests
 vi.mock('@/src/lib/whop/auth', () => ({

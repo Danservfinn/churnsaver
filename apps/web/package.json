@@ -35,6 +35,7 @@
 		"db:migrate": "npx tsx scripts/init-db.ts",
 		"db:setup-role": "npx tsx scripts/setup-db-role.ts",
 		"data-privacy-maintenance": "npx tsx scripts/data-privacy-maintenance.ts",
+		"worker": "cross-env ENABLE_PG_BOSS=true ENABLE_PG_BOSS_WORKER=true npx tsx src/worker/queue-worker.ts",
 		"prepare": "husky install"
 	},
 	"dependencies": {

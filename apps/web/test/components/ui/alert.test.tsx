@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
-describe.skip('Alert Component', () => {
+describe('Alert Component', () => {
   afterEach(() => {
     cleanup();
   });
@@ -27,25 +27,25 @@ describe.skip('Alert Component', () => {
   describe('Icons', () => {
     it('should show icon by default', () => {
       render(<Alert>Test</Alert>);
-      const alert = screen.getByText('Test').parentElement;
+      const alert = screen.getByRole('status');
       const icon = alert?.querySelector('svg');
       expect(icon).toBeInTheDocument();
     });
 
     it('should hide icon when showIcon is false', () => {
       render(<Alert showIcon={false}>Test</Alert>);
-      const alert = screen.getByText('Test').parentElement;
+      const alert = screen.getByRole('status');
       const icon = alert?.querySelector('svg');
       expect(icon).not.toBeInTheDocument();
     });
 
     it('should show correct icon for each variant', () => {
       const { rerender } = render(<Alert variant="success">Success</Alert>);
-      let alert = screen.getByText('Success').parentElement;
+      let alert = screen.getByRole('status');
       expect(alert?.querySelector('svg')).toBeInTheDocument();
 
       rerender(<Alert variant="destructive">Error</Alert>);
-      alert = screen.getByText('Error').parentElement;
+      alert = screen.getByRole('alert');
       expect(alert?.querySelector('svg')).toBeInTheDocument();
     });
   });
@@ -111,15 +111,15 @@ describe.skip('Alert Component', () => {
   describe('Styling', () => {
     it('should apply custom className', () => {
       render(<Alert className="custom-alert">Test</Alert>);
-      const alert = screen.getByText('Test').parentElement;
+      const alert = screen.getByRole('status');
       expect(alert).toHaveClass('custom-alert');
     });
 
     it('should have animation classes', () => {
       render(<Alert>Test</Alert>);
-      const alert = screen.getByText('Test').parentElement;
-      expect(alert?.className).toContain('animate-in');
-      expect(alert?.className).toContain('fade-in');
+      const alert = screen.getByRole('status');
+      expect(alert.className).toContain('animate-in');
+      expect(alert.className).toContain('fade-in');
     });
   });
 });

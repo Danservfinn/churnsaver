@@ -18,6 +18,7 @@ import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimi
 import { errors } from '@/lib/apiResponse';
 import { initDbWithRLS, setRequestContext, clearRequestContext, sqlWithRLS } from '@/lib/db-rls';
 import { requireAuthContext } from '@/lib/auth/requireAuth';
+import { getQaDemoDashboardKpis, isQaDemoBypassEnabled } from '@/lib/qaDemo';
 
 export interface DashboardKPIs {
   activeCases: number;
@@ -35,6 +36,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const startTime = Date.now();
 
   try {
+    if (isQaDemoBypassEnabled(request)) {
+      logger.info('QA demo bypass: returning mock dashboard KPIs');
+      return NextResponse.json(getQaDemoDashboardKpis());
+    }
+
     // Initialize database connection
     await initDbWithRLS();
 

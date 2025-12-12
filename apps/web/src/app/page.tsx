@@ -10,6 +10,8 @@ import { useWhop } from '@/lib/context/whop';
 export default function HomePage() {
   const { companyId } = useWhop();
   const [showSettings, setShowSettings] = useState(false);
+  const dashboardHref =
+    companyId && companyId !== 'unknown' ? `/dashboard/${companyId}` : '/dashboard';
 
   const features = [
     {
@@ -57,7 +59,7 @@ export default function HomePage() {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-              <Link href={companyId ? `/dashboard/${companyId}` : '/dashboard'}>
+              <Link href={dashboardHref}>
                 <Button size="lg" className="gap-2">
                   View Dashboard
                   <ArrowRight className="h-4 w-4" />
@@ -179,7 +181,7 @@ export default function HomePage() {
                 Start recovering failed payments automatically. No credit card required to get started.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link href={companyId ? `/dashboard/${companyId}` : '/dashboard'}>
+                <Link href={dashboardHref}>
                   <Button size="lg" className="gap-2">
                     Get Started
                     <ArrowRight className="h-4 w-4" />

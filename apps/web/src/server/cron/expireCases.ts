@@ -30,3 +30,7 @@ export async function expireOldCases(companyId: string): Promise<number> {
   return result.rowCount;
 }
 
+
+
+
+

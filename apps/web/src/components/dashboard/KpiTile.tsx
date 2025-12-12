@@ -74,7 +74,7 @@ export function KpiTile({ title, value, subtitle, isLoading, trend, icon, varian
       <CardContent>
         <div className="flex items-baseline gap-2">
           {isLoading ? (
-            <Skeleton className="h-8 w-24" />
+            <Skeleton className="h-8 w-24" role="status" />
           ) : (
             <p className="text-2xl font-bold text-foreground">
               {formatValue(value)}

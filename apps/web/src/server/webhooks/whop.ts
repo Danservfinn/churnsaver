@@ -185,6 +185,13 @@ function validateTimestamp(timestampHeader?: string | null): { valid: boolean; e
     const nowSec = Math.floor(Date.now() / 1000);
     const skewSec = Math.abs(nowSec - ts);
 
+    if (skewSec > additionalEnv.WEBHOOK_TIMESTAMP_SKEW_SECONDS) {
+      return {
+        valid: false,
+        error: `Webhook timestamp outside allowed window: ${skewSec}s > ${additionalEnv.WEBHOOK_TIMESTAMP_SKEW_SECONDS}s`
+      };
+    }
+
     // Log security warnings for timestamps close to expiration
     const warningThreshold = Math.floor(additionalEnv.WEBHOOK_TIMESTAMP_SKEW_SECONDS * 0.8);
     if (skewSec > warningThreshold) {
@@ -197,13 +204,6 @@ function validateTimestamp(timestampHeader?: string | null): { valid: boolean; e
         error_category: 'security'
       });
       return { valid: true, warning };
-    }
-
-    if (skewSec > additionalEnv.WEBHOOK_TIMESTAMP_SKEW_SECONDS) {
-      return {
-        valid: false,
-        error: `Webhook timestamp outside allowed window: ${skewSec}s > ${additionalEnv.WEBHOOK_TIMESTAMP_SKEW_SECONDS}s`
-      };
     }
   }
 
@@ -306,36 +306,31 @@ function extractMembershipId(payload: WhopWebhookPayload): string {
   return 'unknown';
 }
 
-// Handle webhook events based on action
-async function handlePaymentSucceededWebhook(data: any) {
-  // Process payment succeeded webhook
+/**
+ * Lightweight logger for payment_succeeded webhooks.
+ * All recovery attribution happens asynchronously via job queue; this avoids double-processing.
+ */
+async function logPaymentSucceededWebhook(data: any) {
   const membershipId =
     data?.membership_id ||
     data?.membership?.id ||
     data?.membership?.membership_id ||
     'unknown';
   const paymentKeys = data?.payment ? Object.keys(data.payment) : [];
-  logger.info('Processing payment succeeded webhook', {
+  logger.info('Payment succeeded webhook received (logging only)', {
     membershipId,
     paymentKeys,
     dataKeys: data ? Object.keys(data) : []
   });
-  
-  // Here you would typically:
-  // 1. Update membership status in database
-  // 2. Send notifications
-  // 3. Update analytics
-  // 4. Trigger any business logic
-  
-  // For now, just log the event
-  return {
-    processed: true,
-    data
-  };
+  return { processed: true };
 }
 
 // Main webhook handler
-export async function handleWhopWebhook(request: NextRequest): Promise<NextResponse> {
+// Accepts body and headers directly to avoid consuming request body twice
+export async function handleWhopWebhook(
+  body: string,
+  headers: Headers | { get: (key: string) => string | null }
+): Promise<NextResponse> {
   const startTime = Date.now();
 
   let lastEventId = 'unknown';
@@ -344,10 +339,9 @@ export async function handleWhopWebhook(request: NextRequest): Promise<NextRespo
     // Initialize database connection if needed
     await initDbWithRLS();
 
-    // Get raw body for signature verification
-    const body = await request.text();
-    const signature = request.headers.get('x-whop-signature') || request.headers.get('X-Whop-Signature');
-    const timestamp = request.headers.get('x-whop-timestamp') || request.headers.get('X-Whop-Timestamp');
+    // Get headers for signature verification
+    const signature = headers.get('x-whop-signature') || headers.get('X-Whop-Signature');
+    const timestamp = headers.get('x-whop-timestamp') || headers.get('X-Whop-Timestamp');
 
     // Validate signature manually first (don't trust @whop/api for signature validation)
     if (!signature) {
@@ -357,8 +351,8 @@ export async function handleWhopWebhook(request: NextRequest): Promise<NextRespo
         bodyLength: body.length
       });
 
-      const clientIP = request.headers.get('x-forwarded-for') ||
-                        request.headers.get('x-real-ip') ||
+      const clientIP = headers.get('x-forwarded-for') ||
+                        headers.get('x-real-ip') ||
                         'unknown';
 
       await securityMonitor.processSecurityEvent({
@@ -395,8 +389,8 @@ export async function handleWhopWebhook(request: NextRequest): Promise<NextRespo
         bodyLength: body.length
       });
 
-      const clientIP = request.headers.get('x-forwarded-for') ||
-                        request.headers.get('x-real-ip') ||
+      const clientIP = headers.get('x-forwarded-for') ||
+                        headers.get('x-real-ip') ||
                         'unknown';
 
       await securityMonitor.processSecurityEvent({
@@ -426,8 +420,8 @@ export async function handleWhopWebhook(request: NextRequest): Promise<NextRespo
         error_category: 'validation'
       });
 
-      const clientIP = request.headers.get('x-forwarded-for') ||
-                        request.headers.get('x-real-ip') ||
+      const clientIP = headers.get('x-forwarded-for') ||
+                        headers.get('x-real-ip') ||
                         'unknown';
 
       await securityMonitor.processSecurityEvent({
@@ -449,8 +443,8 @@ export async function handleWhopWebhook(request: NextRequest): Promise<NextRespo
     // Validate webhook payload using Zod schema
     const validation = validateAndTransform(WebhookPayloadSchema, payload);
     if (!validation.success) {
-      const clientIP = request.headers.get('x-forwarded-for') ||
-                       request.headers.get('x-real-ip') ||
+      const clientIP = headers.get('x-forwarded-for') ||
+                       headers.get('x-real-ip') ||
                        'unknown';
 
       logger.warn('Webhook payload validation failed', {
@@ -492,9 +486,19 @@ export async function handleWhopWebhook(request: NextRequest): Promise<NextRespo
 
     // Derive company context from webhook headers
     const headersObj: Record<string, string> = {};
-    request.headers.forEach((value, key) => {
-      headersObj[key] = value;
-    });
+    // Headers might be a Headers object or a simple object with get method
+    if (headers instanceof Headers) {
+      headers.forEach((value, key) => {
+        headersObj[key] = value;
+      });
+    } else {
+      // For objects with get method, extract known headers
+      const knownHeaders = ['x-whop-company-id', 'x-whop-signature', 'x-whop-timestamp', 'x-whop-event-type'];
+      for (const key of knownHeaders) {
+        const value = headers.get(key);
+        if (value) headersObj[key] = value;
+      }
+    }
     const companyId = getWebhookCompanyContext(headersObj, payload);
 
     // Reject early if company context cannot be resolved
@@ -567,12 +571,13 @@ export async function handleWhopWebhook(request: NextRequest): Promise<NextRespo
 
     // Handle webhook events based on type
     if (normalizedType === "payment_succeeded") {
-      await handlePaymentSucceededWebhook(payload.data);
+      await logPaymentSucceededWebhook(payload.data);
     }
 
     // Enqueue event processing job (fail fast so Whop retries on errors)
+    // Use producer mode - only enqueues jobs, doesn't start worker handlers
     try {
-      await jobQueue.init();
+      await jobQueue.initProducer();
 
       const jobData = {
         eventId: eventId,
@@ -604,41 +609,19 @@ export async function handleWhopWebhook(request: NextRequest): Promise<NextRespo
     logger.info('Webhook processed successfully', {
       eventId,
       type: payload.type,
-      processingTimeMs: processingTime
+      processingTimeMs: processingTime,
+      companyId
     });
 
-    // Report successful processing to security monitoring
-    await securityMonitor.processSecurityEvent({
-      category: 'authentication',
-      severity: 'info',
-      type: 'webhook_processed_successfully',
-      description: `Webhook processed successfully: ${payload.type}`,
-      endpoint: '/api/webhooks/whop',
-      metadata: {
+    // Quick response (< 1s requirement) - log only, don't call security monitor on hot path
+    if (processingTime > 1000) {
+      logger.warn('Webhook processing exceeded 1s', { 
+        processingTime,
         eventId,
         eventType: payload.type,
-        processingTimeMs: processingTime,
         companyId
-      }
-    });
-
-    // Quick response (< 1s requirement)
-    if (processingTime > 1000) {
-      logger.warn('Webhook processing exceeded 1s', { processingTime });
-      
-      // Report performance issue to security monitoring
-      await securityMonitor.processSecurityEvent({
-        category: 'anomaly',
-        severity: 'low',
-        type: 'webhook_performance_issue',
-        description: `Webhook processing exceeded 1s: ${processingTime}ms`,
-        endpoint: '/api/webhooks/whop',
-        metadata: {
-          eventId,
-          processingTimeMs: processingTime,
-          threshold: 1000
-        }
       });
+      // Note: Performance issues are logged but not sent to security monitor to avoid DB overhead
     }
 
     return NextResponse.json({ success: true }, { status: 200 });
@@ -647,8 +630,8 @@ export async function handleWhopWebhook(request: NextRequest): Promise<NextRespo
     const eventId = lastEventId;
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorCategory = error instanceof Error && error.name ? error.name : 'unknown';
-    const clientIP = request.headers.get('x-forwarded-for') ||
-                     request.headers.get('x-real-ip') ||
+    const clientIP = headers.get('x-forwarded-for') ||
+                     headers.get('x-real-ip') ||
                      'unknown';
 
     logger.error('Webhook processing failed', {

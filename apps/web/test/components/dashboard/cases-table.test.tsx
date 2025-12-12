@@ -31,7 +31,7 @@ const mockCase = {
   created_at: '2024-01-15T10:00:00Z',
 };
 
-describe.skip('CasesTable Component', () => {
+describe('CasesTable Component', () => {
   beforeEach(() => {
     global.fetch = vi.fn();
   });
@@ -47,7 +47,8 @@ describe.skip('CasesTable Component', () => {
           totalPages={1}
         />
       );
-      expect(screen.getByText('Recovery Cases')).toBeInTheDocument();
+      const headings = screen.getAllByText('Recovery Cases');
+      expect(headings.length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('1 case')).toBeInTheDocument();
     });
 
@@ -127,7 +128,7 @@ describe.skip('CasesTable Component', () => {
           totalPages={1}
         />
       );
-      expect(screen.getByText('Recovered')).toBeInTheDocument();
+      expect(screen.getAllByText('Recovered').length).toBeGreaterThan(0);
     });
 
     it('should format closed status correctly', () => {

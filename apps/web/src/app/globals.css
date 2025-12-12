@@ -78,6 +78,27 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+.skip-link {
+  position: absolute;
+  top: -200px;
+  left: 12px;
+  padding: 0.65rem 1rem;
+  background: var(--card);
+  color: var(--foreground);
+  border: 3px solid var(--ring);
+  border-radius: 0.6rem;
+  font-weight: 600;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+  z-index: 60;
+  transition: top 150ms ease, box-shadow 150ms ease;
+}
+
+.skip-link:focus-visible {
+  top: 12px;
+  outline: none;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
 /* Smooth scrolling */
 html {
   scroll-behavior: smooth;
@@ -104,8 +125,10 @@ html {
 
 /* Focus visible styles */
 *:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
+  outline: 3px solid var(--ring);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--ring) 30%, transparent);
+  border-radius: 6px;
 }
 
 /* Reduced motion */

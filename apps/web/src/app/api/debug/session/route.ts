@@ -16,6 +16,7 @@ import {
   DebugEnvironment
 } from '@/types/debugging';
 import { logger } from '@/lib/logger';
+import { timingSafeEqual } from 'crypto';
 
 
 // Rate limit configuration for debug session operations
@@ -429,10 +430,76 @@ async function getSessionHandler(request: NextRequest, context: MiddlewareAuthCo
   }
 }
 
+// Disable debug endpoints in production unless explicitly enabled
+function isDebugEnabled(): boolean {
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.ENABLE_DEBUG_ENDPOINTS === 'true';
+  }
+  return true;
+}
+
+function verifyAdminToken(request: NextRequest): boolean {
+  const adminToken = process.env.ADMIN_API_TOKEN;
+  const providedToken = request.headers.get('x-admin-token');
+
+  if (!adminToken || adminToken.length < 32) {
+    return false;
+  }
+
+  if (!providedToken) {
+    return false;
+  }
+
+  try {
+    const adminTokenBuffer = Buffer.from(adminToken, 'utf8');
+    const providedTokenBuffer = Buffer.from(providedToken, 'utf8');
+
+    if (adminTokenBuffer.length !== providedTokenBuffer.length) {
+      return false;
+    }
+
+    return timingSafeEqual(adminTokenBuffer, providedTokenBuffer);
+  } catch {
+    return false;
+  }
+}
+
+function requireAdminIfProduction(request: NextRequest): NextResponse | null {
+  if (process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV) {
+    if (!verifyAdminToken(request)) {
+      const clientIp =
+        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+        request.headers.get('x-real-ip') ||
+        'unknown';
+
+      logger.warn('Unauthorized attempt to access debug endpoint', {
+        ip: clientIp,
+        hasToken: !!request.headers.get('x-admin-token')
+      });
+
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+  }
+  return null;
+}
+
 // Main handler function
 export async function GET(
   request: NextRequest
 ): Promise<NextResponse> {
+  if (!isDebugEnabled()) {
+    return NextResponse.json(
+      { error: 'Debug endpoints are disabled in production' },
+      { status: 403 }
+    );
+  }
+
+  const adminCheck = requireAdminIfProduction(request);
+  if (adminCheck) return adminCheck;
+
   const handler = async (req: NextRequest, context: MiddlewareAuthContext): Promise<NextResponse<any>> => {
     const { searchParams } = new URL(req.url);
   if (searchParams.get('sessionId')) {
@@ -446,17 +513,41 @@ export async function GET(
 export async function POST(
   request: NextRequest
 ): Promise<NextResponse> {
+  if (!isDebugEnabled()) {
+    return NextResponse.json(
+      { error: 'Debug endpoints are disabled in production' },
+      { status: 403 }
+    );
+  }
+  const adminCheck = requireAdminIfProduction(request);
+  if (adminCheck) return adminCheck;
   return authenticatedRoute(createSessionHandler as any)(request);
 }
 
 export async function PUT(
   request: NextRequest
 ): Promise<NextResponse> {
+  if (!isDebugEnabled()) {
+    return NextResponse.json(
+      { error: 'Debug endpoints are disabled in production' },
+      { status: 403 }
+    );
+  }
+  const adminCheck = requireAdminIfProduction(request);
+  if (adminCheck) return adminCheck;
   return authenticatedRoute(updateSessionHandler as any)(request);
 }
 
 export async function DELETE(
   request: NextRequest
 ): Promise<NextResponse> {
+  if (!isDebugEnabled()) {
+    return NextResponse.json(
+      { error: 'Debug endpoints are disabled in production' },
+      { status: 403 }
+    );
+  }
+  const adminCheck = requireAdminIfProduction(request);
+  if (adminCheck) return adminCheck;
   return authenticatedRoute(endSessionHandler as any)(request);
 }

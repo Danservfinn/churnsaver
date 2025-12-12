@@ -71,12 +71,19 @@ export default function Settings() {
   const { addToast } = useToast();
   const { getAuthHeaders } = useWhop();
   const [settings, setSettings] = useState<CreatorSettings | null>(null);
+  const [enablePush, setEnablePush] = useState<boolean>(true);
+  const [enableDm, setEnableDm] = useState<boolean>(true);
+  const [incentiveDays, setIncentiveDays] = useState<number>(DEFAULT_SETTINGS.incentive_days);
+  const [reminderOffsets, setReminderOffsets] = useState<number[]>(DEFAULT_SETTINGS.reminder_offsets_days);
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [saveSuccess, setSaveSuccess] = useState(false);
+  useEffect(() => {
+    setValidationErrors(computeErrors());
+  }, [enablePush, enableDm, incentiveDays, reminderOffsets]);
 
   // Load settings on mount
   useEffect(() => {
@@ -106,6 +113,10 @@ export default function Settings() {
 
       const settingsData = await settingsRes.json();
       setSettings(settingsData);
+      setEnablePush(settingsData.enable_push);
+      setEnableDm(settingsData.enable_dm);
+      setIncentiveDays(settingsData.incentive_days);
+      setReminderOffsets(settingsData.reminder_offsets_days);
 
       if (subscriptionRes.ok) {
         const subscriptionData = await subscriptionRes.json();
@@ -173,42 +184,30 @@ export default function Settings() {
     }
   };
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setValidationErrors({});
-
-    if (!settings) return;
-
-    const formData = new FormData(e.currentTarget);
-
-    const enable_push = formData.get('enable_push') === 'on';
-    const enable_dm = formData.get('enable_dm') === 'on';
-    const incentive_days = parseInt(formData.get('incentive_days') as string, 10);
-
-    const reminder_offsets_days: number[] = [];
-    formData.forEach((value, key) => {
-      if (key.startsWith('reminder_') && value === 'on') {
-        const offset = parseInt(key.replace('reminder_', ''), 10);
-        reminder_offsets_days.push(offset);
-      }
-    });
-
+  const computeErrors = () => {
     const errors: Record<string, string> = {};
-    
-    if (!enable_push && !enable_dm) {
+    if (!enablePush && !enableDm) {
       errors.channels = 'At least one communication channel must be enabled';
     }
-
-    if (isNaN(incentive_days) || incentive_days < 0) {
-      errors.incentive_days = 'Incentive days must be a valid number';
+    if (Number.isNaN(incentiveDays) || incentiveDays < 0) {
+      errors.incentive_days = 'Incentive days must be a valid non-negative number';
     }
-
-    if (reminder_offsets_days.length === 0) {
-      errors.reminder_offsets = 'At least one reminder timing must be selected';
+    if (!reminderOffsets.length) {
+      errors.reminder_offsets = 'Select at least one reminder timing';
     }
+    return errors;
+  };
 
+  const validateForm = () => {
+    const errors = computeErrors();
+    setValidationErrors(errors);
+    return errors;
+  };
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const errors = validateForm();
     if (Object.keys(errors).length > 0) {
-      setValidationErrors(errors);
       addToast({
         type: 'error',
         title: 'Validation error',
@@ -218,15 +217,19 @@ export default function Settings() {
     }
 
     await saveSettings({
-      enable_push,
-      enable_dm,
-      incentive_days,
-      reminder_offsets_days
+      enable_push: enablePush,
+      enable_dm: enableDm,
+      incentive_days: incentiveDays,
+      reminder_offsets_days: reminderOffsets
     });
   };
 
   const handleReset = async () => {
     if (confirm('Are you sure you want to reset to default settings?')) {
+      setEnablePush(DEFAULT_SETTINGS.enable_push);
+      setEnableDm(DEFAULT_SETTINGS.enable_dm);
+      setIncentiveDays(DEFAULT_SETTINGS.incentive_days);
+      setReminderOffsets(DEFAULT_SETTINGS.reminder_offsets_days);
       await saveSettings(DEFAULT_SETTINGS);
     }
   };
@@ -374,7 +377,8 @@ export default function Settings() {
                     name="enable_push"
                     type="checkbox"
                     className="sr-only peer"
-                    defaultChecked={settings?.enable_push ?? DEFAULT_SETTINGS.enable_push}
+                    checked={enablePush}
+                    onChange={(e) => setEnablePush(e.target.checked)}
                   />
                   <div className="w-11 h-6 bg-muted peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-ring rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-background after:border-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
                 </label>
@@ -398,7 +402,8 @@ export default function Settings() {
                     name="enable_dm"
                     type="checkbox"
                     className="sr-only peer"
-                    defaultChecked={settings?.enable_dm ?? DEFAULT_SETTINGS.enable_dm}
+                    checked={enableDm}
+                    onChange={(e) => setEnableDm(e.target.checked)}
                   />
                   <div className="w-11 h-6 bg-muted peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-ring rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-background after:border-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
                 </label>
@@ -432,7 +437,8 @@ export default function Settings() {
                         ? "border-destructive" 
                         : "border-input"
                     )}
-                    defaultValue={settings?.incentive_days ?? DEFAULT_SETTINGS.incentive_days}
+                    value={incentiveDays}
+                    onChange={(e) => setIncentiveDays(parseInt(e.target.value, 10))}
                   >
                     {INCENTIVE_OPTIONS.map(option => (
                       <option key={option.value} value={option.value}>
@@ -495,7 +501,14 @@ export default function Settings() {
                             name={`reminder_${offset.value}`}
                             type="checkbox"
                             className="sr-only"
-                            defaultChecked={isChecked}
+                            checked={reminderOffsets.includes(offset.value)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setReminderOffsets((prev) => Array.from(new Set([...prev, offset.value])));
+                              } else {
+                                setReminderOffsets((prev) => prev.filter((v) => v !== offset.value));
+                              }
+                            }}
                           />
                           <div className={cn(
                             "w-5 h-5 rounded border mb-2 flex items-center justify-center",
@@ -531,7 +544,7 @@ export default function Settings() {
           <div className="flex flex-col sm:flex-row gap-4 pt-4">
             <Button
               type="submit"
-              disabled={saving}
+              disabled={saving || loading}
               loading={saving}
               success={saveSuccess}
               className="flex-1"

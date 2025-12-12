@@ -41,6 +41,7 @@ Key files to know
 - Base TS config: [tsconfig.base.json](tsconfig.base.json)
 - CI plans: [.github/workflows](.github/workflows)
 - Example package manifest: [apps/web/package.json](apps/web/package.json)
+- System Architecture: [apps/web/docs/architecture/ARCHITECTURE.md](apps/web/docs/architecture/ARCHITECTURE.md)
 
 
 ## Repository map (navigate with Turbo)

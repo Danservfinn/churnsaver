@@ -237,7 +237,7 @@ export async function recordRecoveryWithClient(
   client: PoolClient,
   companyId: string,
   amountCents: number
-): Promise<void> {
+): Promise<{ allowed: boolean; reason?: string }> {
   // Ensure subscription row exists
   await client.query(
     `INSERT INTO company_subscriptions (company_id, tier)
@@ -248,7 +248,7 @@ export async function recordRecoveryWithClient(
 
   // Lock subscription row for update
   const subResult = await client.query<CompanySubscription>(
-    `SELECT company_id, month_start_date, total_recoveries_used, monthly_recovered_revenue_cents
+    `SELECT company_id, tier, month_start_date, total_recoveries_used, monthly_recovered_revenue_cents
      FROM company_subscriptions
      WHERE company_id = $1
      FOR UPDATE`,
@@ -260,6 +260,7 @@ export async function recordRecoveryWithClient(
     throw new Error('Unable to load subscription inside transaction');
   }
 
+  // Refresh month if needed
   const start = new Date(subscription.month_start_date);
   const now = new Date();
   const sameMonth =
@@ -275,6 +276,35 @@ export async function recordRecoveryWithClient(
        WHERE company_id = $1`,
       [companyId]
     );
+    subscription.month_start_date = new Date().toISOString() as any;
+    subscription.monthly_recovered_revenue_cents = 0;
+  }
+
+  // Load tier limits inside the same transaction to avoid races
+  const tierResult = await client.query<TierLimits>(
+    `SELECT tier, max_monthly_recovered_revenue_cents, max_total_recoveries, price_cents, name
+     FROM tier_limits
+     WHERE tier = $1`,
+    [subscription.tier]
+  );
+
+  const limits = tierResult.rows[0];
+  if (!limits) {
+    throw new Error(`Tier limits missing for tier ${subscription.tier}`);
+  }
+
+  const projectedTotal = subscription.total_recoveries_used + 1;
+  const projectedMonthly = subscription.monthly_recovered_revenue_cents + amountCents;
+
+  if (limits.max_total_recoveries !== null && projectedTotal > limits.max_total_recoveries) {
+    return { allowed: false, reason: 'free_limit_reached' };
+  }
+
+  if (
+    limits.max_monthly_recovered_revenue_cents !== null &&
+    projectedMonthly > limits.max_monthly_recovered_revenue_cents
+  ) {
+    return { allowed: false, reason: 'monthly_limit_reached' };
   }
 
   await client.query(
@@ -290,5 +320,7 @@ export async function recordRecoveryWithClient(
     companyId,
     amountCents
   });
+
+  return { allowed: true };
 }
 

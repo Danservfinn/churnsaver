@@ -9,7 +9,7 @@ import { getMembershipManageUrlResult, terminateMembership as terminateMembershi
 import { getSettingsForCompany } from './settings';
 import { ReminderChannelSettings } from './reminders/notifier';
 import { ReminderNotifier } from './shared/reminderNotifier';
-import { checkRecoveryAllowed, recordRecoveryWithClient } from './subscriptions';
+import { recordRecoveryWithClient } from './subscriptions';
 import {
   errorHandler,
   ErrorCode,
@@ -379,15 +379,12 @@ export async function updateRecoveryCase(
     async () => {
       const updatedCase = await sqlWithRLS.insert<RecoveryCase>(
         `UPDATE recovery_cases
-         SET attempts = attempts + 1,
-             last_nudge_at = $2,
-             failure_reason = COALESCE($3, failure_reason),
+         SET failure_reason = COALESCE($2, failure_reason),
              updated_at = NOW()
          WHERE id = $1
          RETURNING *`,
         [
           existingCase.id,
-          new Date(),
           event.reason || null
         ],
         { companyId: existingCase.company_id }
@@ -397,8 +394,7 @@ export async function updateRecoveryCase(
         logger.info('Updated existing recovery case', {
           caseId: existingCase.id,
           membershipId: event.membershipId,
-          previousAttempts: existingCase.attempts,
-          newAttempts: updatedCase.attempts
+          updatedFailureReason: event.reason || undefined
         });
       }
 
@@ -676,38 +672,6 @@ export async function markCaseRecoveredByMembership(
       qualifyingClick && !qualifyingClick.is_bot_suspected ? CLICK_THROUGH : ORGANIC;
     let attributedClickId: string | null =
       qualifyingClick && !qualifyingClick.is_bot_suspected ? qualifyingClick.id : null;
-    let allowance:
-      | {
-          allowed: boolean;
-          reason?: string;
-        }
-      | null = null;
-
-    if (recoveryType === CLICK_THROUGH) {
-      try {
-        allowance = await checkRecoveryAllowed(openCase.company_id, recoveredAmountCents);
-        if (!allowance.allowed) {
-          logger.warn('Recovery exceeds current tier limits, downgrading to ORGANIC', {
-            companyId: openCase.company_id,
-            membershipId,
-            reason: allowance.reason,
-            amountCents: recoveredAmountCents,
-          });
-          recoveryType = ORGANIC;
-          attributedClickId = null;
-        }
-      } catch (error) {
-        logger.error('Failed to check recovery allowance; aborting recovery to allow retry', {
-          error: error instanceof Error ? error.message : String(error),
-          companyId: openCase.company_id,
-          membershipId,
-        });
-        // Propagate to allow caller/job retry instead of silently closing case
-        throw error;
-      }
-    }
-
-    const amountToPersist = recoveryType === CLICK_THROUGH ? recoveredAmountCents : 0;
 
     const transactionResult = await sqlWithRLS.transaction(
       async (client) => {
@@ -722,6 +686,19 @@ export async function markCaseRecoveredByMembership(
           return { success: true as const, alreadyProcessed: true as const };
         }
       }
+
+        let usageRecorded = false;
+        if (recoveryType === CLICK_THROUGH) {
+          const usageResult = await recordRecoveryWithClient(client, openCase.company_id, recoveredAmountCents);
+          if (!usageResult.allowed) {
+            recoveryType = ORGANIC;
+            attributedClickId = null;
+          } else {
+            usageRecorded = true;
+          }
+        }
+
+        const amountToPersist = recoveryType === CLICK_THROUGH ? recoveredAmountCents : 0;
 
         const updateResult = await client.query<{
           id: string;
@@ -763,7 +740,9 @@ export async function markCaseRecoveredByMembership(
         return { success: false as const, alreadyProcessed: false as const };
         }
 
-        if (recoveryType === CLICK_THROUGH && allowance?.allowed) {
+        if (recoveryType === CLICK_THROUGH && !usageRecorded) {
+          // Defensive: if usage was not recorded above but recoveryType remained click-through,
+          // record it now to keep case + usage in sync.
           await recordRecoveryWithClient(client, openCase.company_id, recoveredAmountCents);
         }
 

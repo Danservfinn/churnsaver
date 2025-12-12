@@ -8,10 +8,12 @@ import { useWhop, useWhopAuth, useWhopCompany } from '@/lib/context/whop';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { Download, RefreshCw, Settings, TrendingUp, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { logger } from '@/lib/logger';
+import { isQaDemoClient } from '@/lib/qaDemo';
 
 interface DashboardKPIs {
   activeCases: number;
@@ -74,6 +76,7 @@ export default function DashboardCompanyPage({
   const [companyIdMismatch, setCompanyIdMismatch] = useState(false);
   const [kpiError, setKpiError] = useState<string | null>(null);
   const [casesError, setCasesError] = useState<string | null>(null);
+  const isDemo = isQaDemoClient();
 
   // Validate companyId from URL matches context
   useEffect(() => {
@@ -172,7 +175,23 @@ export default function DashboardCompanyPage({
   };
 
   const handleExportCSV = () => {
-    // Build CSV export URL with current filters
+    if (isDemo) {
+      const rows = [
+        ['id', 'status', 'attempts', 'incentive_days', 'recovered_amount_cents', 'first_failure_at'],
+        ['demo-case-1', 'open', '2', '3', '0', '2025-12-01T12:00:00Z'],
+        ['demo-case-2', 'recovered', '1', '7', '8200', '2025-11-30T12:00:00Z'],
+      ];
+      const csv = rows.map((r) => r.join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'demo-cases.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+
     const params = new URLSearchParams();
     if (casesData?.filters.status) {
       params.append('status', casesData.filters.status);
@@ -243,6 +262,14 @@ export default function DashboardCompanyPage({
 
   return (
     <div className="space-y-6">
+      {isDemo && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Demo data is shown. Actions like export use mock data; connect a real Whop session to see live metrics.
+          </AlertDescription>
+        </Alert>
+      )}
       {/* Welcome Header */}
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -298,39 +325,51 @@ export default function DashboardCompanyPage({
       )}
 
       {/* KPI Tiles */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiTile
-          title="Active Cases"
-          value={kpis?.activeCases || 0}
-          subtitle="Currently being recovered"
-          isLoading={isLoadingKpis}
-          variant="warning"
-        />
+      {isLoadingKpis ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((key) => (
+            <Card key={key} className="p-4">
+              <Skeleton className="h-5 w-24 mb-3" />
+              <Skeleton className="h-10 w-20 mb-2" />
+              <Skeleton className="h-4 w-32" />
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <KpiTile
+            title="Active Cases"
+            value={kpis?.activeCases || 0}
+            subtitle="Currently being recovered"
+            isLoading={isLoadingKpis}
+            variant="warning"
+          />
 
-        <KpiTile
-          title="Recoveries"
-          value={kpis?.recoveries || 0}
-          subtitle="Successful recoveries"
-          isLoading={isLoadingKpis}
-          variant="success"
-        />
+          <KpiTile
+            title="Recoveries"
+            value={kpis?.recoveries || 0}
+            subtitle="Successful recoveries"
+            isLoading={isLoadingKpis}
+            variant="success"
+          />
 
-        <KpiTile
-          title="Recovery Rate"
-          value={`${kpis?.recoveryRate || 0}%`}
-          subtitle={`${kpis?.windowDays || 14}-day attribution window`}
-          isLoading={isLoadingKpis}
-          variant="info"
-        />
+          <KpiTile
+            title="Recovery Rate"
+            value={`${kpis?.recoveryRate || 0}%`}
+            subtitle={`${kpis?.windowDays || 14}-day attribution window`}
+            isLoading={isLoadingKpis}
+            variant="info"
+          />
 
-        <KpiTile
-          title="Recovered Revenue"
-          value={kpis?.recoveredRevenueCents ? formatRevenue(kpis.recoveredRevenueCents) : '$0.00'}
-          subtitle="Revenue attributed to recoveries"
-          isLoading={isLoadingKpis}
-          variant="success"
-        />
-      </div>
+          <KpiTile
+            title="Recovered Revenue"
+            value={kpis?.recoveredRevenueCents ? formatRevenue(kpis.recoveredRevenueCents) : '$0.00'}
+            subtitle="Revenue attributed to recoveries"
+            isLoading={isLoadingKpis}
+            variant="success"
+          />
+        </div>
+      )}
 
       {/* Cases Error */}
       {casesError && (
@@ -342,15 +381,36 @@ export default function DashboardCompanyPage({
 
       {/* Cases Table */}
       {!casesError && (
-        <CasesTable
-          cases={casesData?.cases || []}
-          isLoading={isLoadingCases}
-          total={casesData?.total || 0}
-          page={casesData?.page || 1}
-          limit={casesData?.limit || 10}
-          totalPages={casesData?.totalPages || 1}
-          onPageChange={handlePageChange}
-        />
+        <>
+          {isLoadingCases ? (
+            <Card className="p-6 space-y-4">
+              {[1, 2, 3].map((row) => (
+                <div key={row} className="grid grid-cols-3 gap-4">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-full" />
+                </div>
+              ))}
+            </Card>
+          ) : (casesData?.cases?.length ?? 0) === 0 ? (
+            <Card className="p-6">
+              <CardTitle className="text-lg mb-2">No recovery cases yet</CardTitle>
+              <CardDescription>
+                Cases will appear when payment failures occur. Connect to Whop and retry once traffic is flowing.
+              </CardDescription>
+            </Card>
+          ) : (
+            <CasesTable
+              cases={casesData?.cases || []}
+              isLoading={isLoadingCases}
+              total={casesData?.total || 0}
+              page={casesData?.page || 1}
+              limit={casesData?.limit || 10}
+              totalPages={casesData?.totalPages || 1}
+              onPageChange={handlePageChange}
+            />
+          )}
+        </>
       )}
 
       {/* Refresh Button */}

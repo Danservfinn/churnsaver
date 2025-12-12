@@ -32,3 +32,7 @@ CREATE POLICY events_company_update_policy ON events
   FOR UPDATE
   USING (company_id = get_current_company_id());
 
+
+
+
+

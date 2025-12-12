@@ -39,23 +39,16 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run unit tests
-        run: |
-          # Run existing test scripts
-          pnpm test || true
-          
-          # Run additional unit tests if they exist
-          if [ -d "test/unit" ]; then
-            echo "Running unit tests from test/unit directory"
-            find test/unit -name "*.test.js" -o -name "*.test.ts" | xargs node
-          fi
+        working-directory: apps/web
+        run: pnpm test:ci
 
       - name: Upload unit test results
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-results-${{ matrix.node-version }}
           path: |
-            test-results/
-            coverage/
+            apps/web/test-results/
+            apps/web/coverage/
 
   integration-tests:
     runs-on: ubuntu-latest
@@ -112,6 +105,7 @@ jobs:
           "
 
       - name: Run database migrations
+        working-directory: apps/web
         run: |
           # Set database URL for tests
           export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/churn_saver_test"
@@ -120,6 +114,7 @@ jobs:
           pnpm run db:migrate
 
       - name: Run integration tests
+        working-directory: apps/web
         run: |
           # Set test environment
           export NODE_ENV=test
@@ -132,15 +127,15 @@ jobs:
           fi
           
           # Run API integration tests
-          pnpm test:integration || true
+          pnpm test:integration
 
       - name: Upload integration test results
         uses: actions/upload-artifact@v4
         with:
           name: integration-test-results
           path: |
-            test-results/
-            coverage/
+            apps/web/test-results/
+            apps/web/coverage/
 
   migration-tests:
     runs-on: ubuntu-latest
@@ -212,7 +207,7 @@ jobs:
         with:
           name: migration-test-results
           path: |
-            test-results/
+            apps/web/test-results/
 
   e2e-tests:
     runs-on: ubuntu-latest
@@ -244,6 +239,7 @@ jobs:
           pnpm exec playwright install-deps
 
       - name: Build application
+        working-directory: apps/web
         run: pnpm build
 
       - name: Run E2E tests
@@ -261,8 +257,8 @@ jobs:
         with:
           name: e2e-test-results
           path: |
-            test-results/
-            playwright-report/
+            apps/web/test-results/
+            apps/web/playwright-report/
 
   performance-tests:
     runs-on: ubuntu-latest
@@ -323,15 +319,16 @@ jobs:
         run: |
           lhci autorun \
             --config=.lighthouserc.js \
-            --upload.target=temporary-public-storage || true
+            --upload.target=temporary-public-storage
         env:
           LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
 
       - name: Stop application
         if: always()
+        working-directory: apps/web
         run: |
           if [ -f app.pid ]; then
-            kill $(cat app.pid) || true
+            kill "$(cat app.pid)"
           fi
 
       - name: Upload performance test results
@@ -374,9 +371,11 @@ jobs:
           npm install -g pa11y
 
       - name: Build application
+        working-directory: apps/web
         run: pnpm build
 
       - name: Run accessibility tests
+        working-directory: apps/web
         run: |
           # Start application
           pnpm start &
@@ -405,8 +404,8 @@ jobs:
         with:
           name: accessibility-test-results
           path: |
-            accessibility-results.json
-            pa11y-results.json
+            apps/web/accessibility-results.json
+            apps/web/pa11y-results.json
 
   test-coverage:
     runs-on: ubuntu-latest

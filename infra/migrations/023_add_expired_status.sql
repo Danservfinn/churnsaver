@@ -11,3 +11,7 @@ CREATE INDEX IF NOT EXISTS idx_cases_status_first_failure_at
   ON recovery_cases(status, first_failure_at);
 
 
+
+
+
+

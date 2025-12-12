@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { isQaDemoBypassEnabled } from '@/lib/qaDemo';
 
 export interface WhopContextType {
   companyId: string;
@@ -96,6 +97,44 @@ export function WhopProvider({ children }: WhopProviderProps) {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [authToken, setAuthToken] = useState<string | null>(null);
+  const [qaBypassEnabled, setQaBypassEnabled] = useState<boolean>(false);
+
+  const resolveQaDemoBypass = () => {
+    const companyFallback = env.NEXT_PUBLIC_QA_DEMO_COMPANY_ID || env.QA_DEMO_COMPANY_ID || env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'demo-company';
+    const userFallback = env.NEXT_PUBLIC_QA_DEMO_USER_ID || env.QA_DEMO_USER_ID || 'demo-user';
+
+    let queryEnabled = false;
+    let storedEnabled = false;
+
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const raw = params.get('qa_demo') || params.get('demo');
+      const normalized = raw?.toLowerCase();
+      if (normalized && ['1', 'true', 'yes', 'on'].includes(normalized)) {
+        queryEnabled = true;
+        try {
+          localStorage.setItem('qa_demo_bypass', 'true');
+        } catch {
+          // ignore storage errors
+        }
+      }
+
+      try {
+        storedEnabled = localStorage.getItem('qa_demo_bypass') === 'true';
+      } catch {
+        storedEnabled = false;
+      }
+    }
+
+    const envEnabled = env.NEXT_PUBLIC_QA_DEMO_BYPASS || env.QA_DEMO_BYPASS || false;
+    const enabled = (!process.env.VERCEL_ENV || process.env.VERCEL_ENV === 'preview' || process.env.NODE_ENV !== 'production') && (envEnabled || queryEnabled || storedEnabled);
+
+    return {
+      enabled,
+      companyId: companyFallback,
+      userId: userFallback,
+    };
+  };
 
   /**
    * Get authentication headers for API calls
@@ -104,6 +143,10 @@ export function WhopProvider({ children }: WhopProviderProps) {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
+
+    if (qaBypassEnabled || isQaDemoBypassEnabled()) {
+      headers['x-qa-demo-bypass'] = '1';
+    }
 
     const token = authToken || extractWhopToken();
     if (token) {
@@ -118,6 +161,21 @@ export function WhopProvider({ children }: WhopProviderProps) {
     try {
       setIsLoading(true);
       setError(null);
+
+      const qaBypass = resolveQaDemoBypass();
+      if (qaBypass.enabled) {
+        setCompanyId(qaBypass.companyId);
+        setUserId(qaBypass.userId);
+        setIsAuthenticated(true);
+        setQaBypassEnabled(true);
+        setIsLoading(false);
+        setError(null);
+        logger.info?.('QA demo bypass enabled in client context', {
+          companyId: qaBypass.companyId,
+          userId: qaBypass.userId,
+        });
+        return;
+      }
 
       // Extract token from various sources
       const token = extractWhopToken();

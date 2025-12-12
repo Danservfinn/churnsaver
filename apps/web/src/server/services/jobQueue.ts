@@ -25,19 +25,26 @@ import { acquireEventLockWithClient } from './shared/advisoryLock';
 class JobQueueService {
   private boss: PgBoss | null = null;
   private initialized = false;
+  private producerInitialized = false;
+  private workerInitialized = false;
   private processingTimes: number[] = [];
   private readonly pgBossEnabled = process.env.ENABLE_PG_BOSS === 'true';
+  private readonly pgBossWorkerEnabled = process.env.ENABLE_PG_BOSS_WORKER === 'true';
 
   // Job queue names
   private readonly WEBHOOK_PROCESSING_JOB = 'webhook-processing';
   private readonly REMINDER_PROCESSING_JOB = 'reminder-processing';
 
-  async init() {
-    if (this.initialized) return;
+  /**
+   * Initialize pg-boss in producer mode (for enqueuing jobs only)
+   * This is safe to call from serverless functions
+   */
+  async initProducer(): Promise<void> {
+    if (this.producerInitialized || this.boss) return;
 
     if (!this.pgBossEnabled) {
       logger.info('pg-boss disabled (cron-only mode enabled via ENABLE_PG_BOSS!=true)');
-      this.initialized = true;
+      this.producerInitialized = true;
       return;
     }
 
@@ -45,24 +52,17 @@ class JobQueueService {
       // Initialize pg-boss with PostgreSQL connection
       this.boss = new PgBoss(process.env.DATABASE_URL!);
 
-      // Start pg-boss
+      // Start pg-boss (this sets up the schema and connection, but doesn't register workers)
       await this.boss.start();
 
-      // Register simplified single handlers (flattened from dual-layer approach)
-      await this.boss.work(this.WEBHOOK_PROCESSING_JOB, (async (job: PgBoss.Job<JobData>) => {
-        return await this.processWebhookJob(job);
-      }) as any);
-
-      await this.boss.work(this.REMINDER_PROCESSING_JOB, (async (job: PgBoss.Job<{ companyId: string }>) => {
-        return await this.processReminderJob(job);
-      }) as any);
+      this.producerInitialized = true;
       this.initialized = true;
 
-      logger.info('Job queue service initialized', {
-        jobTypes: [this.WEBHOOK_PROCESSING_JOB, this.REMINDER_PROCESSING_JOB]
+      logger.info('Job queue producer initialized (enqueue-only mode)', {
+        workerMode: false
       });
     } catch (error) {
-      logger.error('Failed to initialize job queue service', {
+      logger.error('Failed to initialize job queue producer', {
         error: error instanceof Error ? error.message : String(error)
       });
       throw error;
@@ -70,10 +70,72 @@ class JobQueueService {
   }
 
   /**
+   * Initialize pg-boss in worker mode (for processing jobs)
+   * This should only be called from a dedicated worker process
+   */
+  async initWorker(): Promise<void> {
+    if (this.workerInitialized) return;
+
+    if (!this.pgBossEnabled) {
+      logger.info('pg-boss disabled (cron-only mode enabled via ENABLE_PG_BOSS!=true)');
+      this.workerInitialized = true;
+      return;
+    }
+
+    if (!this.pgBossWorkerEnabled) {
+      logger.info('pg-boss worker disabled (ENABLE_PG_BOSS_WORKER!=true)');
+      this.workerInitialized = true;
+      return;
+    }
+
+    try {
+      // Initialize producer first if not already done
+      if (!this.boss) {
+        await this.initProducer();
+      }
+
+      if (!this.boss) {
+        throw new Error('Failed to initialize pg-boss instance');
+      }
+
+      // Register work handlers (this is what makes it a worker)
+      await this.boss.work(this.WEBHOOK_PROCESSING_JOB, (async (job: PgBoss.Job<JobData>) => {
+        return await this.processWebhookJob(job);
+      }) as any);
+
+      await this.boss.work(this.REMINDER_PROCESSING_JOB, (async (job: PgBoss.Job<{ companyId: string }>) => {
+        return await this.processReminderJob(job);
+      }) as any);
+
+      this.workerInitialized = true;
+      this.initialized = true;
+
+      logger.info('Job queue worker initialized', {
+        jobTypes: [this.WEBHOOK_PROCESSING_JOB, this.REMINDER_PROCESSING_JOB],
+        workerMode: true
+      });
+    } catch (error) {
+      logger.error('Failed to initialize job queue worker', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * @deprecated Use initProducer() for serverless or initWorker() for dedicated workers
+   * Kept for backward compatibility - calls initWorker() if worker mode is enabled
+   */
+  async init() {
+    logger.warn('jobQueue.init() is deprecated; use initProducer() or initWorker() explicitly');
+    await this.initProducer();
+  }
+
+  /**
    * Enqueue a webhook processing job
    */
   async enqueueWebhookJob(data: JobData): Promise<string | null> {
-    if (!this.boss) await this.init();
+    if (!this.boss) await this.initProducer();
 
     if (!this.pgBossEnabled) {
       logger.info('Skipping webhook job enqueue because pg-boss is disabled; rely on cron processor', {
@@ -119,7 +181,7 @@ class JobQueueService {
    * Enqueue a reminder processing job for a specific company
    */
   async enqueueReminderJob(companyId: string, scheduleTime?: Date): Promise<string | null> {
-    if (!this.boss) await this.init();
+    if (!this.boss) await this.initProducer();
 
     if (!this.pgBossEnabled) {
       logger.info('Skipping reminder job enqueue because pg-boss is disabled; rely on cron processor', {
@@ -327,7 +389,7 @@ class JobQueueService {
    * Get job queue statistics
    */
   async getStats(): Promise<QueueStats> {
-    if (!this.boss) await this.init();
+    if (!this.boss) await this.initProducer();
 
     try {
       // Get queue statistics by querying pg-boss tables directly
@@ -464,8 +526,17 @@ export const jobQueue = new JobQueueService();
 // across function invocations. Graceful shutdown still works in development/local environments.
 if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
   // Initialize on module load (will be lazy loaded when first used)
-  process.on('SIGTERM', () => jobQueue.shutdown());
-  process.on('SIGINT', () => jobQueue.shutdown());
+  const handleShutdownSignal = (signal: string) => {
+    jobQueue.shutdown().catch((error) => {
+      logger.error('Job queue shutdown failed', {
+        signal,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    });
+  };
+
+  process.on('SIGTERM', () => handleShutdownSignal('SIGTERM'));
+  process.on('SIGINT', () => handleShutdownSignal('SIGINT'));
 }
 
 // Export default for convenience

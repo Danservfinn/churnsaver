@@ -5,7 +5,7 @@
 DO $$
 BEGIN
   IF EXISTS (
-    SELECT 1 FROM pg_policies WHERE polname = 'rate_limits_company_policy' AND tablename = 'rate_limits'
+    SELECT 1 FROM pg_policies WHERE policyname = 'rate_limits_company_policy' AND tablename = 'rate_limits'
   ) THEN
     EXECUTE 'DROP POLICY rate_limits_company_policy ON rate_limits';
   END IF;

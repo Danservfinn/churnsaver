@@ -39,7 +39,7 @@ END$$;
 DO $$
 BEGIN
   IF EXISTS (
-    SELECT 1 FROM pg_policies WHERE polname = 'events_webhook_insert_policy' AND tablename = 'events'
+    SELECT 1 FROM pg_policies WHERE policyname = 'events_webhook_insert_policy' AND tablename = 'events'
   ) THEN
     EXECUTE 'DROP POLICY events_webhook_insert_policy ON events';
   END IF;

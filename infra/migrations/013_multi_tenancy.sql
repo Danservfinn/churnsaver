@@ -102,7 +102,7 @@ BEGIN
   IF to_regclass('ab_test_participants') IS NOT NULL THEN
     IF NOT EXISTS (
       SELECT 1 FROM pg_policies
-      WHERE polname = 'ab_test_participants_company_select_policy'
+      WHERE policyname = 'ab_test_participants_company_select_policy'
         AND schemaname = current_schema()
         AND tablename = 'ab_test_participants'
     ) THEN
@@ -111,7 +111,7 @@ BEGIN
 
     IF NOT EXISTS (
       SELECT 1 FROM pg_policies
-      WHERE polname = 'ab_test_participants_company_insert_policy'
+      WHERE policyname = 'ab_test_participants_company_insert_policy'
         AND schemaname = current_schema()
         AND tablename = 'ab_test_participants'
     ) THEN
@@ -120,7 +120,7 @@ BEGIN
 
     IF NOT EXISTS (
       SELECT 1 FROM pg_policies
-      WHERE polname = 'ab_test_participants_company_update_policy'
+      WHERE policyname = 'ab_test_participants_company_update_policy'
         AND schemaname = current_schema()
         AND tablename = 'ab_test_participants'
     ) THEN
@@ -138,7 +138,7 @@ BEGIN
   IF to_regclass('job_queue') IS NOT NULL THEN
     IF NOT EXISTS (
       SELECT 1 FROM pg_policies
-      WHERE polname = 'job_queue_company_select_policy'
+      WHERE policyname = 'job_queue_company_select_policy'
         AND schemaname = current_schema()
         AND tablename = 'job_queue'
     ) THEN
@@ -147,7 +147,7 @@ BEGIN
 
     IF NOT EXISTS (
       SELECT 1 FROM pg_policies
-      WHERE polname = 'job_queue_company_insert_policy'
+      WHERE policyname = 'job_queue_company_insert_policy'
         AND schemaname = current_schema()
         AND tablename = 'job_queue'
     ) THEN
@@ -156,7 +156,7 @@ BEGIN
 
     IF NOT EXISTS (
       SELECT 1 FROM pg_policies
-      WHERE polname = 'job_queue_company_update_policy'
+      WHERE policyname = 'job_queue_company_update_policy'
         AND schemaname = current_schema()
         AND tablename = 'job_queue'
     ) THEN

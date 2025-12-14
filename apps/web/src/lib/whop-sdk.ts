@@ -1,8 +1,36 @@
 import { Whop } from "@whop/sdk";
 import { env, isProductionLikeEnvironment } from "@/lib/env";
-import { jwtVerify, importPKCS8, SignJWT } from 'jose';
-import { makeWebhookValidator, type PaymentWebhookData } from '@whop/api';
 import { logger } from '@/lib/logger';
+
+type HeaderLike = { get: (key: string) => string | null };
+
+const WHOP_TOKEN_HEADER = 'x-whop-user-token';
+const AUTHORIZATION_HEADER = 'authorization';
+
+function extractToken(headers: HeaderLike): string | null {
+  const headerToken = headers.get(WHOP_TOKEN_HEADER);
+  if (headerToken) return headerToken;
+
+  const authorization = headers.get(AUTHORIZATION_HEADER);
+  if (authorization?.toLowerCase().startsWith('bearer ')) {
+    const token = authorization.slice(7).trim();
+    return token.length > 0 ? token : null;
+  }
+
+  return null;
+}
+
+function buildVerificationHeaders(headers: HeaderLike, token: string): Headers {
+  const normalized = new Headers();
+  normalized.set(WHOP_TOKEN_HEADER, token);
+
+  const forwardedFor = headers.get('x-forwarded-for');
+  if (forwardedFor) {
+    normalized.set('x-forwarded-for', forwardedFor);
+  }
+
+  return normalized;
+}
 
 /**
  * Request context interface for authentication
@@ -27,12 +55,23 @@ export const whopsdk = new Whop({
 
 /**
  * Get request context from Whop token using JWT verification
- * This is the preferred method for authentication going forward
+ * Uses Whop SDK's verifyUserToken method which handles RS256 verification correctly
  */
-export async function getRequestContextSDK(request: { headers: { get: (key: string) => string | null } }): Promise<RequestContext> {
+export async function getRequestContextSDK(request: { headers: HeaderLike }): Promise<RequestContext> {
   try {
+    // In development, skip verification if no secret is set
+    // BUT: Never use APP_ID as companyId fallback - return null instead
+    if (process.env.NODE_ENV === 'development' && !env.WHOP_APP_SECRET && !env.WHOP_API_KEY) {
+      return {
+        companyId: null, // Explicitly null - require QA demo bypass or proper token for companyId (RequestContext allows null)
+        userId: 'dev-user',
+        isAuthenticated: false, // Not authenticated without proper token
+        devBypass: true,
+      };
+    }
+
     // Extract token from headers
-    const token = request.headers.get('x-whop-user-token');
+    const token = extractToken(request.headers);
     
     if (!token) {
       return {
@@ -42,46 +81,52 @@ export async function getRequestContextSDK(request: { headers: { get: (key: stri
       };
     }
 
-    // In development, skip verification if no secret is set
-    if (process.env.NODE_ENV === 'development' && !env.WHOP_APP_SECRET) {
+    const headersForSDK = buildVerificationHeaders(request.headers, token);
+    const result = await whopsdk.verifyUserToken(headersForSDK, { dontThrow: true });
+    
+    if (!result) {
+      logger.warn('Whop token verification failed', {
+        hasToken: !!token,
+        tokenLength: token.length
+      });
+      return {
+        companyId: null,
+        userId: null,
+        isAuthenticated: false
+      };
+    }
+
+    // Extract companyId and userId from verified result
+    // NEVER use app_id as companyId fallback - app_id is the app identifier, not the company
+    const resolvedCompanyId =
+      (result as any).companyId ??
+      (result as any).company_id ??
+      null;
+    const resolvedUserId = result.userId ?? (result as any).user_id ?? null;
+
+    if (!resolvedUserId) {
+      logger.warn('Whop token verified but missing user id', {
+        hasToken: true,
+        tokenLength: token.length,
+      });
       return {
         companyId: null,
         userId: null,
         isAuthenticated: false,
-        devBypass: true,
       };
     }
 
-    // Verify JWT token
-    if (env.WHOP_APP_SECRET) {
-      const secretKey = await importPKCS8(env.WHOP_APP_SECRET, 'RS256');
-      const { payload } = await jwtVerify(token, secretKey);
-      
-      const resolvedCompanyId = typeof payload.companyId === 'string' ? (payload.companyId as string) : null;
-      const resolvedUserId = typeof payload.userId === 'string' ? (payload.userId as string) : null;
-
-      return {
-        companyId: resolvedCompanyId,
-        userId: resolvedUserId,
-        isAuthenticated: true
-      };
-    }
-
-    // Fallback to SDK verification
-    const headersObj = new Headers();
-    for (const [key, value] of Object.entries(request.headers)) {
-      if (typeof value === 'string') {
-        headersObj.set(key, value);
-      }
-    }
-    const result = await whopsdk.verifyUserToken(headersObj);
     return {
-      companyId: (result as any).companyId ?? null,
-      userId: result.userId ?? null,
+      companyId: typeof resolvedCompanyId === 'string' ? resolvedCompanyId : null,
+      userId: typeof resolvedUserId === 'string' ? resolvedUserId : null,
       isAuthenticated: true
     };
   } catch (error) {
-    // Return anonymous context on verification failure
+    // Log error and return anonymous context on verification failure
+    logger.warn('Whop token verification error', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     return {
       companyId: null,
       userId: null,
@@ -92,14 +137,22 @@ export async function getRequestContextSDK(request: { headers: { get: (key: stri
 
 /**
  * Verify user token from request headers using the Whop SDK
- * This is the preferred method for authentication going forward
+ * DEPRECATED: Use getRequestContextSDK instead. This function is kept for backward compatibility.
+ * @deprecated Use getRequestContextSDK for new code
  */
-export async function verifyUserToken(headers: Headers): Promise<{ userId: string }> {
+export async function verifyUserToken(headers: HeaderLike | Headers): Promise<Record<string, unknown> | null> {
   try {
-    const result = await whopsdk.verifyUserToken(headers);
-    return { userId: result.userId };
+    const token = extractToken(headers);
+    if (!token) return null;
+
+    const verificationHeaders = buildVerificationHeaders(headers, token);
+    const result = await whopsdk.verifyUserToken(verificationHeaders, { dontThrow: true });
+    return result as Record<string, unknown> | null;
   } catch (error) {
-    throw new Error(`Token verification failed: ${error instanceof Error ? error.message : String(error)}`);
+    logger.warn('Failed to verify Whop user token', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return null;
   }
 }
 

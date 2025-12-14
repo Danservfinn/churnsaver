@@ -1,3 +1,9 @@
+<!--
+PRODUCTION LAUNCH BLOCKER:
+Fill in actual contact information before go-live.
+Search for [OWNER_NEEDED] to find all placeholders.
+-->
+
 # Production Incident Response Plan
 
 **Version:** 1.0
@@ -572,14 +578,14 @@ Churn Saver Team
 ## Emergency Contacts
 
 ### On-Call Engineers
-- **Primary:** [Name] - [Phone] - [Email] - [Slack]
-- **Secondary:** [Name] - [Phone] - [Email] - [Slack]
-- **Tertiary:** [Name] - [Phone] - [Email] - [Slack]
+- **Primary:** Daniel Finn - +19194133445 - d@kurult.ai - N/A
+- **Secondary:** [OWNER_NEEDED] - [PHONE_NEEDED] - [EMAIL_NEEDED] - [SLACK_NEEDED]
+- **Tertiary:** [OWNER_NEEDED] - [PHONE_NEEDED] - [EMAIL_NEEDED] - [SLACK_NEEDED]
 
 ### Escalation Contacts
-- **Engineering Manager:** [Name] - [Phone] - [Email]
-- **VP Engineering:** [Name] - [Phone] - [Email]
-- **CTO:** [Name] - [Phone] - [Email]
+- **Engineering Manager:** Daniel Finn - +19194133445 - d@kurult.ai
+- **VP Engineering:** [OWNER_NEEDED] - [PHONE_NEEDED] - [EMAIL_NEEDED]
+- **CTO:** Daniel Finn - +19194133445 - d@kurult.ai
 
 ### External Support
 - **Vercel Support:** 24/7 support available

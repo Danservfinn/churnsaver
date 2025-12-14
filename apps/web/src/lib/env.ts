@@ -4,6 +4,7 @@
 export const env = {
   // Database
   DATABASE_URL: process.env.DATABASE_URL,
+  REDIS_URL: process.env.REDIS_URL,
   
   // Whop
   NEXT_PUBLIC_WHOP_APP_ID: process.env.NEXT_PUBLIC_WHOP_APP_ID,
@@ -19,13 +20,21 @@ export const env = {
   // Application
   NODE_ENV: process.env.NODE_ENV,
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+  QA_DEMO_BYPASS: process.env.QA_DEMO_BYPASS === 'true',
+  NEXT_PUBLIC_QA_DEMO_BYPASS: process.env.NEXT_PUBLIC_QA_DEMO_BYPASS === 'true',
+  QA_DEMO_COMPANY_ID: process.env.QA_DEMO_COMPANY_ID,
+  NEXT_PUBLIC_QA_DEMO_COMPANY_ID: process.env.NEXT_PUBLIC_QA_DEMO_COMPANY_ID,
+  QA_DEMO_USER_ID: process.env.QA_DEMO_USER_ID,
+  NEXT_PUBLIC_QA_DEMO_USER_ID: process.env.NEXT_PUBLIC_QA_DEMO_USER_ID,
   
   // Features
   ENABLE_ANALYTICS: process.env.ENABLE_ANALYTICS === 'true',
-  DEBUG_MODE: process.env.DEBUG_MODE === 'true',
+  DEBUG_MODE: (() => {
+    const debugValue = process.env.DEBUG_MODE ?? process.env.NEXT_PUBLIC_DEBUG_MODE;
+    return debugValue === 'true';
+  })(),
   
   // External services
-  REDIS_URL: process.env.REDIS_URL,
   SMTP_HOST: process.env.SMTP_HOST,
   SMTP_PORT: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587,
   
@@ -101,6 +110,11 @@ export function isProductionLikeEnvironment(): boolean {
     return true;
   }
 
+  // Treat Vercel preview/staging as production-like for security-sensitive checks
+  if (process.env.VERCEL_ENV === 'preview' || process.env.VERCEL_ENV === 'staging') {
+    return true;
+  }
+
   // Node.js production environment
   if (process.env.NODE_ENV === 'production') {
     return true;
@@ -162,8 +176,6 @@ export function isProductionLikeEnvironment(): boolean {
 
   // Additional environment variables indicating production
   if (
-    process.env.REDIS_URL?.includes('redislabs.com') ||
-    process.env.REDIS_URL?.includes('upstash.io') ||
     process.env.SMTP_HOST?.includes('sendgrid.net') ||
     process.env.SMTP_HOST?.includes('mailgun.org')
   ) {

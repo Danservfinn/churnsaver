@@ -2,6 +2,7 @@
 // Tests SQL injection prevention, context manipulation, race conditions
 
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
+import { randomUUID } from 'crypto';
 import { initDbWithRLS, closeDbWithRLS, sqlWithRLS, setRequestContext, clearRequestContext } from '../../src/lib/db-rls';
 
 const mockEnv = {
@@ -9,14 +10,28 @@ const mockEnv = {
   NODE_ENV: 'test'
 };
 
-const COMPANY_A = 'company_a_' + Math.random().toString(36).substr(2, 9);
-const COMPANY_B = 'company_b_' + Math.random().toString(36).substr(2, 9);
+const COMPANY_A = `company_a_${randomUUID()}`;
+const COMPANY_B = `company_b_${randomUUID()}`;
 
-describe.skip('RLS Security Tests', () => {
+async function ensureCompanies() {
+  await sqlWithRLS.execute(
+    `INSERT INTO companies (id, name) VALUES ($1, 'Company A') ON CONFLICT (id) DO NOTHING`,
+    [COMPANY_A],
+    { skipRLS: true, enforceCompanyContext: false }
+  );
+  await sqlWithRLS.execute(
+    `INSERT INTO companies (id, name) VALUES ($1, 'Company B') ON CONFLICT (id) DO NOTHING`,
+    [COMPANY_B],
+    { skipRLS: true, enforceCompanyContext: false }
+  );
+}
+
+describe('RLS Security Tests', () => {
   beforeAll(async () => {
     Object.assign(process.env, mockEnv);
     try {
       await initDbWithRLS();
+      await ensureCompanies();
     } catch (error) {
       console.warn('Database connection failed, skipping RLS security tests:', error);
     }
@@ -99,14 +114,9 @@ describe.skip('RLS Security Tests', () => {
         isAuthenticated: true
       });
 
-      // Context should be sanitized/set properly
-      const result = await sqlWithRLS.select(
-        'SELECT * FROM test_rls_security'
-      );
-
-      // Should only return Company A's data (if any matches the sanitized context)
-      // Or fail safely if context is invalid
-      expect(result.length).toBeGreaterThanOrEqual(0);
+      await expect(
+        sqlWithRLS.select('SELECT * FROM test_rls_security')
+      ).rejects.toThrow();
     });
 
     it('should prevent SQL injection in query text', async () => {
@@ -120,9 +130,7 @@ describe.skip('RLS Security Tests', () => {
       const maliciousQuery = `SELECT * FROM test_rls_security WHERE id = '${COMPANY_A}' OR '1'='1'`;
 
       // Parameterized queries should prevent this, but test that RLS still applies
-      await expect(
-        sqlWithRLS.query(maliciousQuery)
-      ).rejects.toThrow();
+      await expect(sqlWithRLS.query(maliciousQuery)).rejects.toThrow();
     });
   });
 
@@ -254,12 +262,9 @@ describe.skip('RLS Security Tests', () => {
     it('should prevent access without context', async () => {
       clearRequestContext();
 
-      const result = await sqlWithRLS.select(
-        'SELECT * FROM test_rls_security'
-      );
-
-      // Should return no rows without context
-      expect(result).toHaveLength(0);
+      await expect(
+        sqlWithRLS.select('SELECT * FROM test_rls_security')
+      ).rejects.toThrow();
     });
 
     it('should prevent access with invalid context', async () => {
@@ -279,17 +284,13 @@ describe.skip('RLS Security Tests', () => {
         isAuthenticated: true
       });
 
-      // skipRLS should require explicit setting and proper authorization
-      // In production, this should be restricted
-      const result = await sqlWithRLS.select(
-        'SELECT * FROM test_rls_security',
-        [],
-        { skipRLS: true }
-      );
-
-      // Without RLS, should see all data
-      // But in production, skipRLS should require admin/system privileges
-      expect(result.length).toBeGreaterThanOrEqual(0);
+      await expect(
+        sqlWithRLS.select(
+          'SELECT * FROM test_rls_security',
+          [],
+          { skipRLS: true }
+        )
+      ).rejects.toThrow();
     });
   });
 

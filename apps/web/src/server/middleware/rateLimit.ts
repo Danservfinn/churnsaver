@@ -43,12 +43,6 @@ export async function checkRateLimit(
     // Calculate when the next bucket starts (for reset time)
     const nextBucketStart = new Date(bucketStartTimeMs + config.windowMs);
 
-    // First, clean up expired buckets (older than current bucket)
-    await sql.execute(
-      `DELETE FROM rate_limits WHERE window_bucket_start < $1`,
-      [windowBucketStart]
-    );
-
     // Get current count for this identifier in the current bucket
     const rows = await sql.select<{ count: number }>(
       `SELECT count FROM rate_limits WHERE company_key = $1 AND window_bucket_start = $2`,
@@ -244,15 +238,25 @@ export function withRateLimit(
 ) {
   return async (request: Request, context?: any) => {
     try {
-      // Default identifier function (uses company header or global)
+      // Default identifier function (uses client IP when available, otherwise global)
       const identifierFn = getIdentifier || ((req: Request) => {
-        const companyId = req.headers.get('x-company-id') || req.headers.get('X-Company-Id');
-        return companyId ? `${config.keyPrefix}:${companyId}` : `${config.keyPrefix}:global`;
+        const forwarded = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+        const ip = forwarded || req.headers.get('x-real-ip') || 'global';
+        return `${config.keyPrefix}:${ip}`;
       });
 
       const identifier = identifierFn(request);
 
       const rateLimitResult = await checkRateLimit(identifier, config);
+
+      // Emit metrics for rate limit usage to support post-launch tuning
+      logger.metric('rate_limit.request', 1, {
+        identifier,
+        windowMs: config.windowMs,
+        remaining: rateLimitResult.remaining,
+        resetAt: rateLimitResult.resetAt.toISOString(),
+        allowed: rateLimitResult.allowed
+      });
 
       if (!rateLimitResult.allowed) {
         // Return 429 Too Many Requests

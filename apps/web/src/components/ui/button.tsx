@@ -48,35 +48,45 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const Comp = asChild ? Slot : "button"
     const isDisabled = disabled || loading
     
-    // When using Slot (asChild), don't apply role and tabIndex (child may already be a button)
-    // But still pass through disabled and other props
-    const buttonProps = asChild ? {
-      disabled: isDisabled,
-    } : {
-      role: "button" as const,
-      tabIndex: 0,
-      disabled: isDisabled,
+    // Slot requires exactly one React element child. When asChild is true, we render ONLY `children`
+    // and require consumers to inline any icons/spinners inside the child element.
+    if (asChild) {
+      return (
+        <Comp
+          className={cn(buttonVariants({ variant, size, className }))}
+          ref={ref}
+          aria-label={ariaLabel}
+          aria-describedby={ariaDescribedBy}
+          aria-expanded={ariaExpanded}
+          aria-pressed={ariaPressed}
+          aria-disabled={isDisabled || undefined}
+          data-disabled={isDisabled ? '' : undefined}
+          {...props}
+        >
+          {children}
+        </Comp>
+      )
     }
-    
+
     return (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
+        role="button"
+        tabIndex={0}
+        disabled={isDisabled}
         aria-label={ariaLabel}
         aria-describedby={ariaDescribedBy}
         aria-expanded={ariaExpanded}
         aria-pressed={ariaPressed}
-        {...buttonProps}
         {...props}
       >
-        {loading && (
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-        )}
-        {success && !loading && (
-          <CheckCircle2 className="mr-2 h-4 w-4" aria-hidden="true" />
-        )}
+        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+        {success && !loading && <CheckCircle2 className="mr-2 h-4 w-4" aria-hidden="true" />}
         {icon && !loading && !success && (
-          <span className="mr-2" aria-hidden="true">{icon}</span>
+          <span className="mr-2" aria-hidden="true">
+            {icon}
+          </span>
         )}
         {children}
       </Comp>

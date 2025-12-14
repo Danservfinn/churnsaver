@@ -330,7 +330,30 @@ export class WebhookValidator {
   private config: WhopSdkConfig;
 
   constructor(config?: WhopSdkConfig) {
-    this.config = config || whopConfig.get();
+    try {
+      this.config = config || whopConfig.get();
+    } catch (error) {
+      logger.error('Failed to initialize WebhookValidator', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      // Minimal fallback config so module import never crashes builds.
+      // Validation will correctly fail at runtime if webhookSecret is missing.
+      this.config = config || {
+        appId: 'test-app-id',
+        webhookSecret: undefined,
+        apiKey: undefined,
+        apiBaseUrl: 'https://api.whop.com/api/v1',
+        requestTimeout: 30000,
+        maxRetries: 3,
+        retryDelay: 1000,
+        enableMetrics: true,
+        enableLogging: true,
+        enableRetry: true,
+        environment: 'development',
+        debugMode: true,
+      };
+    }
   }
 
   /**

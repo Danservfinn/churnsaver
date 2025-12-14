@@ -212,9 +212,11 @@ export function withSystemRLSContext(
     
     try {
       // Set system context
+      // NEVER use APP_ID as companyId fallback - require explicit companyId for tenant-scoped operations
+      // For system-wide operations (e.g., maintenance), companyId can be undefined, but RLS policies must handle it
       const systemContext = {
-        companyId: context?.companyId || process.env.NEXT_PUBLIC_WHOP_APP_ID || process.env.WHOP_APP_ID,
-        userId: context?.userId || 'system',
+        companyId: context?.companyId ?? undefined, // Explicit undefined - no APP_ID fallback
+        userId: context?.userId ?? 'system',
         isAuthenticated: true
       };
 

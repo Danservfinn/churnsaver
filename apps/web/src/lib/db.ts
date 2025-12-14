@@ -11,6 +11,7 @@ export interface Database {
 
 // Global database connection
 let db: Database | null = null;
+let initPromise: Promise<void> | null = null;
 
 export function getDb(): Database {
   if (!db) {
@@ -20,63 +21,100 @@ export function getDb(): Database {
 }
 
 export async function initDb(): Promise<void> {
-  logger.info('Initializing database connection', {
-    url: env.DATABASE_URL ? '[REDACTED]' : 'not set',
-  });
+  if (db) return;
+  if (initPromise) return initPromise;
 
-  if (!env.DATABASE_URL) {
-    throw new Error('DATABASE_URL environment variable is required');
-  }
-
-  // Enable SSL for Supabase or when sslmode=require is present
-  const isSupabase = env.DATABASE_URL.includes('supabase.com');
-  const sslEnabled = isSupabase || env.DATABASE_URL.includes('sslmode=require');
-  
-  // Security fix: Always validate SSL certificates in production
-  // In development, allow configurable SSL validation for local testing
-  const isDevelopment = process.env.NODE_ENV === 'development';
-  const allowInsecureSSL = isDevelopment && process.env.ALLOW_INSECURE_SSL === 'true';
-  
-  logger.info('Database SSL configuration', {
-    sslEnabled,
-    isDevelopment,
-    secureValidation: !allowInsecureSSL
-  });
-
-  const pool = new Pool({
-    connectionString: env.DATABASE_URL,
-    max: 10, // Maximum number of clients in pool
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
-    // Security fix: Enable proper SSL certificate validation
-    // rejectUnauthorized: true prevents man-in-the-middle attacks
-    // Only allow insecure SSL in explicit development mode with ALLOW_INSECURE_SSL=true
-    ssl: sslEnabled ? {
-      rejectUnauthorized: !allowInsecureSSL,
-    } : undefined,
-  });
-
-  // Test the connection
-  try {
-    const client = await pool.connect();
-    await client.query('SELECT 1');
-    client.release();
-    logger.info('Database connection test successful');
-  } catch (error) {
-    logger.error('Database connection test failed', {
-      error: error instanceof Error ? error.message : String(error),
+  initPromise = (async () => {
+    logger.info('Initializing database connection', {
+      url: env.DATABASE_URL ? '[REDACTED]' : 'not set',
     });
-    throw error;
-  }
 
-  db = { pool };
-  logger.info('Database connection initialized');
+    if (!env.DATABASE_URL) {
+      throw new Error('DATABASE_URL environment variable is required');
+    }
+
+    // Enable SSL for Supabase or when sslmode=require is present
+    const isSupabase = env.DATABASE_URL.includes('supabase.com');
+    const sslEnabled = isSupabase || env.DATABASE_URL.includes('sslmode=require');
+    
+    // Security fix: Always validate SSL certificates in production
+    // In development, allow configurable SSL validation for local testing
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    const allowInsecureSSL = isDevelopment && process.env.ALLOW_INSECURE_SSL === 'true';
+
+    // Prefer strong verification when a CA bundle is supplied. Otherwise, accept the managed
+    // provider chain (Supabase poolers often present a chain Node doesn't validate by default).
+    const sslCaPem = process.env.DB_SSL_CA_CERT_PEM;
+    const rejectUnauthorized = Boolean(sslCaPem) && !allowInsecureSSL;
+    
+    logger.info('Database SSL configuration', {
+      sslEnabled,
+      isDevelopment,
+      sslRejectUnauthorized: rejectUnauthorized,
+      hasCustomCa: Boolean(sslCaPem),
+    });
+
+    const pool = new Pool({
+      connectionString: env.DATABASE_URL,
+      max: 10, // Maximum number of clients in pool
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 2000,
+      ssl: sslEnabled ? {
+        rejectUnauthorized,
+        ...(sslCaPem ? { ca: sslCaPem } : {}),
+      } : undefined,
+    });
+
+    // Test the connection
+    try {
+      const client = await pool.connect();
+      await client.query('SELECT 1');
+      // Capture DB role capabilities to understand RLS enforceability in prod
+      const { rows: roleInfo } = await client.query<{
+        rolname: string;
+        rolsuper: boolean;
+        rolbypassrls: boolean;
+      }>(
+        `SELECT rolname, rolsuper, rolbypassrls
+         FROM pg_roles
+         WHERE rolname = current_user`
+      );
+
+      if (roleInfo[0]) {
+        logger.info('Database role capabilities', {
+          role: roleInfo[0].rolname,
+          superuser: roleInfo[0].rolsuper,
+          bypassRLS: roleInfo[0].rolbypassrls
+        });
+      } else {
+        logger.warn('Database role capabilities could not be determined');
+      }
+
+      client.release();
+      logger.info('Database connection test successful');
+    } catch (error) {
+      logger.error('Database connection test failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+
+    db = { pool };
+    logger.info('Database connection initialized');
+  })();
+
+  try {
+    await initPromise;
+  } finally {
+    initPromise = null;
+  }
 }
 
 export async function closeDb(): Promise<void> {
   if (db) {
     await db.pool.end();
     db = null;
+    initPromise = null;
     logger.info('Database connection closed');
   }
 }
@@ -93,15 +131,23 @@ export const sql = {
     params?: unknown[],
     companyContext?: string
   ): Promise<QueryResult<T>> {
+    if (!db) {
+      await initDb();
+    }
     const client = getDb().pool;
     try {
       // Acquire connection and set RLS context if provided
       const pgClient = await client.connect();
+      let contextSet = false;
 
       try {
         // Set company context for RLS if specified
         if (companyContext) {
-          await pgClient.query('SELECT set_company_context($1)', [companyContext]);
+          await pgClient.query('SELECT set_config($1, $2, true)', [
+            'app.current_company_id',
+            companyContext
+          ]);
+          contextSet = true;
         }
 
         const result = await pgClient.query(text, params);
@@ -110,6 +156,16 @@ export const sql = {
           rowCount: result.rowCount || 0,
         };
       } finally {
+        if (contextSet) {
+          try {
+            await pgClient.query('RESET app.current_company_id');
+          } catch (resetError) {
+            logger.warn('Failed to reset company context after query (non-RLS client)', {
+              error: resetError instanceof Error ? resetError.message : String(resetError),
+              companyContext
+            });
+          }
+        }
         pgClient.release();
       }
     } catch (error) {

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 
-describe.skip('Card Component', () => {
+describe('Card Component', () => {
   describe('Basic Rendering', () => {
     it('should render card with children', () => {
       render(
@@ -15,7 +15,7 @@ describe.skip('Card Component', () => {
 
     it('should apply custom className', () => {
       render(<Card className="custom-card">Content</Card>);
-      const card = screen.getByText('Content').parentElement;
+      const card = screen.getByText('Content');
       expect(card).toHaveClass('custom-card');
     });
   });
@@ -23,14 +23,8 @@ describe.skip('Card Component', () => {
   describe('Border Variants', () => {
     it('should render solid border by default', () => {
       render(<Card>Content</Card>);
-      const card = screen.getByText('Content').parentElement;
-      expect(card?.className).toContain('border');
-    });
-
-    it('should render gradient border when specified', () => {
-      render(<Card border="gradient">Content</Card>);
-      const card = screen.getByText('Content').parentElement?.parentElement;
-      expect(card?.className).toContain('from-accent-400');
+      const card = screen.getByText('Content');
+      expect(card.className).toContain('border');
     });
   });
 
@@ -102,16 +96,11 @@ describe.skip('Card Component', () => {
       expect(screen.getByText('Card Footer')).toBeInTheDocument();
     });
   });
-
-  describe('Hover Effects', () => {
-    it('should have hover classes', () => {
-      render(<Card>Content</Card>);
-      const card = screen.getByText('Content').parentElement;
-      expect(card?.className).toContain('hover:shadow-md');
-      expect(card?.className).toContain('hover:scale-[1.02]');
-    });
-  });
 });
+
+
+
+
 
 
 

@@ -2,6 +2,7 @@
 // Tests sqlWithRLS functionality with different company contexts
 
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
+import { randomUUID } from 'crypto';
 import { initDbWithRLS, closeDbWithRLS, sqlWithRLS, setRequestContext, clearRequestContext } from '../../src/lib/db-rls';
 
 // Mock environment for testing
@@ -13,10 +14,23 @@ const mockEnv = {
 };
 
 // Test company IDs for isolation testing
-const COMPANY_A = 'company_a_' + Math.random().toString(36).substr(2, 9);
-const COMPANY_B = 'company_b_' + Math.random().toString(36).substr(2, 9);
+const COMPANY_A = `company_a_${randomUUID()}`;
+const COMPANY_B = `company_b_${randomUUID()}`;
 
-describe.skip('RLS Policy Enforcement - Unit Tests', () => {
+async function ensureCompanies() {
+  await sqlWithRLS.execute(
+    `INSERT INTO companies (id, name) VALUES ($1, 'Company A') ON CONFLICT (id) DO NOTHING`,
+    [COMPANY_A],
+    { skipRLS: true, enforceCompanyContext: false }
+  );
+  await sqlWithRLS.execute(
+    `INSERT INTO companies (id, name) VALUES ($1, 'Company B') ON CONFLICT (id) DO NOTHING`,
+    [COMPANY_B],
+    { skipRLS: true, enforceCompanyContext: false }
+  );
+}
+
+describe('RLS Policy Enforcement - Unit Tests', () => {
   beforeAll(async () => {
     // Mock environment variables
     Object.assign(process.env, mockEnv);
@@ -24,6 +38,7 @@ describe.skip('RLS Policy Enforcement - Unit Tests', () => {
     // Initialize database with RLS support
     try {
       await initDbWithRLS();
+      await ensureCompanies();
     } catch (error) {
       // If database connection fails, skip tests
       console.warn('Database connection failed, skipping RLS tests:', error);
@@ -82,11 +97,13 @@ describe.skip('RLS Policy Enforcement - Unit Tests', () => {
       expect(result.rows[0].current_company_id).toBe(COMPANY_A);
     });
 
-    it('should handle queries without company context', async () => {
+    it('should handle queries without company context when explicitly allowed', async () => {
       clearRequestContext();
 
       const result = await sqlWithRLS.query(
-        'SELECT 1 as test'
+        'SELECT 1 as test',
+        [],
+        { enforceCompanyContext: false, skipRLS: true }
       );
 
       expect(result.rows).toHaveLength(1);
@@ -308,7 +325,7 @@ describe.skip('RLS Policy Enforcement - Unit Tests', () => {
       );
 
       // Should affect 0 rows due to RLS
-      expect(result).toBe(0);
+      expect(typeof result === 'number' ? result : result.rowCount).toBe(0);
     });
   });
 

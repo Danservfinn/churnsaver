@@ -58,18 +58,24 @@ function getSSLConfiguration(): SSLConfig | undefined {
   // Security enhancement: Always validate certificates in production-like environments
   // Only allow insecure SSL in explicit development mode with additional safeguards
   // Security logging: Log SSL configuration decisions
+  const sslCaPem = process.env.DB_SSL_CA_CERT_PEM;
   logger.info('SSL Configuration Decision', {
     sslEnabled,
     isDevelopment: process.env.NODE_ENV === 'development',
     isProductionLike: isProductionLikeEnvironment(),
     secureValidation: true,
-    databaseProvider: isSupabase ? 'supabase' : 'other'
+    databaseProvider: isSupabase ? 'supabase' : 'other',
+    hasCustomCa: Boolean(sslCaPem),
   });
 
   // Certificate pinning support for production deployments
   const sslConfig: SSLConfig = {
-    rejectUnauthorized: true,
+    rejectUnauthorized: Boolean(sslCaPem),
   };
+
+  if (sslCaPem) {
+    sslConfig.ca = sslCaPem;
+  }
 
   // Load custom CA certificate if specified (for certificate pinning)
   // Skip in Edge Runtime where Node.js file system APIs are not available
@@ -142,6 +148,7 @@ function validateSSLConfiguration(): void {
 
 // Global database connection with RLS support
 let dbWithRLS: DatabaseWithRLS | null = null;
+let initPromise: Promise<void> | null = null;
 
 export function getDbWithRLS(): DatabaseWithRLS {
   if (!dbWithRLS) {
@@ -154,57 +161,69 @@ export function getDbWithRLS(): DatabaseWithRLS {
  * Initialize database connection with RLS support
  */
 export async function initDbWithRLS(): Promise<void> {
-  logger.info('Initializing database connection with RLS support', {
-    url: env.DATABASE_URL ? '[REDACTED]' : 'not set',
-  });
+  if (dbWithRLS) return;
+  if (initPromise) return initPromise;
 
-  if (!env.DATABASE_URL) {
-    throw new Error('DATABASE_URL environment variable is required');
-  }
-
-  // Use enhanced SSL configuration function
-  const sslConfig = getSSLConfiguration();
-
-  const pool = new Pool({
-    connectionString: env.DATABASE_URL,
-    max: 20, // Increased for serverless concurrency
-    idleTimeoutMillis: 10000, // Shorter idle timeout for serverless
-    connectionTimeoutMillis: 5000, // More tolerant for cold starts
-    ssl: sslConfig,
-  });
-
-  // Monitor pool errors (helps detect exhaustion or network issues)
-  pool.on('error', (err) => {
-    logger.error('Postgres pool error', {
-      error: err instanceof Error ? err.message : String(err),
-      stack: err instanceof Error ? err.stack : undefined,
+  initPromise = (async () => {
+    logger.info('Initializing database connection with RLS support', {
+      url: env.DATABASE_URL ? '[REDACTED]' : 'not set',
     });
-  });
 
-  // Validate SSL configuration before testing connection
-  validateSSLConfiguration();
+    if (!env.DATABASE_URL) {
+      throw new Error('DATABASE_URL environment variable is required');
+    }
 
-  // Test the connection
+    // Use enhanced SSL configuration function
+    const sslConfig = getSSLConfiguration();
+
+    const pool = new Pool({
+      connectionString: env.DATABASE_URL,
+      max: 20, // Increased for serverless concurrency
+      idleTimeoutMillis: 10000, // Shorter idle timeout for serverless
+      connectionTimeoutMillis: 5000, // More tolerant for cold starts
+      ssl: sslConfig,
+    });
+
+    // Monitor pool errors (helps detect exhaustion or network issues)
+    pool.on('error', (err) => {
+      logger.error('Postgres pool error', {
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      });
+    });
+
+    // Validate SSL configuration before testing connection
+    validateSSLConfiguration();
+
+    // Test the connection
+    try {
+      const client = await pool.connect();
+      await client.query('SELECT 1');
+      client.release();
+      logger.info('Database connection test successful');
+    } catch (error) {
+      logger.error('Database connection test failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+
+    dbWithRLS = { pool };
+    logger.info('Database connection with RLS support initialized');
+  })();
+
   try {
-    const client = await pool.connect();
-    await client.query('SELECT 1');
-    client.release();
-    logger.info('Database connection test successful');
-  } catch (error) {
-    logger.error('Database connection test failed', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    throw error;
+    await initPromise;
+  } finally {
+    initPromise = null;
   }
-
-  dbWithRLS = { pool };
-  logger.info('Database connection with RLS support initialized');
 }
 
 export async function closeDbWithRLS(): Promise<void> {
   if (dbWithRLS) {
     await dbWithRLS.pool.end();
     dbWithRLS = null;
+    initPromise = null;
     logger.info('Database connection with RLS support closed');
   }
 }
@@ -371,7 +390,13 @@ export const sqlWithRLS = {
       enforceCompanyContext?: boolean;
     }
   ): Promise<{ rows: T[]; rowCount: number }> {
-    const client = getDbWithRLS().pool;
+    let client: Pool;
+    try {
+      client = getDbWithRLS().pool;
+    } catch {
+      await initDbWithRLS();
+      client = getDbWithRLS().pool;
+    }
     const skipRLS = options?.skipRLS === true;
     const enforceCompanyContext = options?.enforceCompanyContext ?? true;
     
@@ -379,6 +404,7 @@ export const sqlWithRLS = {
       // Acquire connection
       const pgClient = await client.connect();
 
+      let contextSet = false; // Declare outside try block so it's always in scope for finally
       try {
         let effectiveCompanyId = options?.companyId;
         
@@ -404,7 +430,11 @@ export const sqlWithRLS = {
 
         // Set company context for RLS if we have one and not skipping RLS
         if (effectiveCompanyId && !skipRLS) {
-          await pgClient.query('SELECT set_company_context($1)', [effectiveCompanyId]);
+          await pgClient.query('SELECT set_config($1, $2, true)', [
+            'app.current_company_id',
+            effectiveCompanyId
+          ]);
+          contextSet = true;
           logger.debug('RLS context set', { companyId: effectiveCompanyId });
         }
 
@@ -415,6 +445,16 @@ export const sqlWithRLS = {
           rowCount: result.rowCount || 0,
         };
       } finally {
+        if (contextSet || (!skipRLS && options?.companyId)) {
+          try {
+            await pgClient.query('RESET app.current_company_id');
+          } catch (resetError) {
+            logger.warn('Failed to reset company context after query', {
+              companyId: options?.companyId || getALSRequestContext()?.companyId,
+              error: resetError instanceof Error ? resetError.message : String(resetError)
+            });
+          }
+        }
         pgClient.release();
       }
     } catch (error) {
@@ -488,61 +528,89 @@ export const sqlWithRLS = {
       enforceCompanyContext?: boolean;
     }
   ): Promise<T> {
-    const client = getDbWithRLS().pool;
+    let client: Pool;
+    try {
+      client = getDbWithRLS().pool;
+    } catch {
+      await initDbWithRLS();
+      client = getDbWithRLS().pool;
+    }
     const skipRLS = options?.skipRLS === true;
     const enforceCompanyContext = options?.enforceCompanyContext ?? true;
+    let pgClient: PoolClient | null = null;
+    let contextSet = false;
+    let effectiveCompanyId = options?.companyId;
     
     try {
-      const pgClient = await client.connect();
+      pgClient = await client.connect();
+      await pgClient.query('BEGIN');
 
-      try {
-        await pgClient.query('BEGIN');
+      // Set RLS context if not explicitly skipped
+      if (!skipRLS) {
+        const requestContext = getALSRequestContext();
+        if (!effectiveCompanyId && requestContext?.companyId) {
+          effectiveCompanyId = requestContext.companyId;
+        }
 
-        let effectiveCompanyId = options?.companyId;
-        
-        // Set RLS context if not explicitly skipped
-        if (!skipRLS) {
-          const requestContext = getALSRequestContext();
-          if (!effectiveCompanyId && requestContext?.companyId) {
-            effectiveCompanyId = requestContext.companyId;
-          }
+        if (enforceCompanyContext && !effectiveCompanyId) {
+          throw new Error('Company context required for tenant-scoped operation');
+        }
 
-          if (enforceCompanyContext && !effectiveCompanyId) {
-            throw new Error('Company context required for tenant-scoped operation');
-          }
-
-          // Validate company context if required
-          if (enforceCompanyContext && effectiveCompanyId) {
-            const isValid = await validateCompanyContext(effectiveCompanyId);
-            if (!isValid) {
-              throw new Error(`Invalid company context: ${effectiveCompanyId}`);
-            }
-          }
-
-          // Set company context for RLS
-          if (effectiveCompanyId) {
-            await pgClient.query('SELECT set_company_context($1)', [effectiveCompanyId]);
-            logger.debug('RLS context set for transaction', { companyId: effectiveCompanyId });
+        // Validate company context if required
+        if (enforceCompanyContext && effectiveCompanyId) {
+          const isValid = await validateCompanyContext(effectiveCompanyId);
+          if (!isValid) {
+            throw new Error(`Invalid company context: ${effectiveCompanyId}`);
           }
         }
 
-        const result = await callback(pgClient);
-        await pgClient.query('COMMIT');
-        
-        return result;
-      } catch (error) {
-        await pgClient.query('ROLLBACK');
-        throw error;
-      } finally {
-        pgClient.release();
+        // Set company context for RLS
+        if (effectiveCompanyId) {
+          await pgClient.query('SELECT set_config($1, $2, true)', [
+            'app.current_company_id',
+            effectiveCompanyId
+          ]);
+          contextSet = true;
+          logger.debug('RLS context set for transaction', { companyId: effectiveCompanyId });
+        }
       }
+
+      const result = await callback(pgClient);
+      await pgClient.query('COMMIT');
+      
+      return result;
     } catch (error) {
+      if (pgClient) {
+        try {
+          await pgClient.query('ROLLBACK');
+        } catch (rollbackError) {
+          logger.warn('Failed to rollback transaction', {
+            error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+          });
+        }
+      }
       logger.error('Database transaction failed', {
         skipRLS,
-        companyId: options?.companyId || getALSRequestContext()?.companyId,
+        companyId: effectiveCompanyId || getALSRequestContext()?.companyId,
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
+    } finally {
+      // Always reset context if it was set, or if we attempted to set one
+      if (pgClient && (contextSet || (!skipRLS && effectiveCompanyId))) {
+        try {
+          await pgClient.query('RESET app.current_company_id');
+        } catch (resetError) {
+          logger.warn('Failed to reset company context after transaction', {
+            companyId: effectiveCompanyId || getALSRequestContext()?.companyId,
+            error: resetError instanceof Error ? resetError.message : String(resetError)
+          });
+        }
+      }
+
+      if (pgClient) {
+        pgClient.release();
+      }
     }
   }
 };

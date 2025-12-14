@@ -39,23 +39,28 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run unit tests
-        run: |
-          # Run existing test scripts
-          pnpm test || true
-          
-          # Run additional unit tests if they exist
-          if [ -d "test/unit" ]; then
-            echo "Running unit tests from test/unit directory"
-            find test/unit -name "*.test.js" -o -name "*.test.ts" | xargs node
-          fi
+        working-directory: apps/web
+        run: pnpm test:ci
+
+      - name: Run security tests
+        working-directory: apps/web
+        run: pnpm test:security
+
+      - name: Run webhook tests
+        working-directory: apps/web
+        run: pnpm test:webhooks
+
+      - name: Run RLS unit tests
+        working-directory: apps/web
+        run: pnpm test:rls
 
       - name: Upload unit test results
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-results-${{ matrix.node-version }}
           path: |
-            test-results/
-            coverage/
+            apps/web/test-results/
+            apps/web/coverage/
 
   integration-tests:
     runs-on: ubuntu-latest
@@ -111,7 +116,19 @@ jobs:
             GRANT ALL PRIVILEGES ON DATABASE churn_saver_test TO postgres;
           "
 
+      - name: Setup test database with roles
+        run: |
+          psql -h localhost -p 5432 -U postgres -d churn_saver_test <<'EOF'
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated; END IF;
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon; END IF;
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role; END IF;
+          END $$;
+          EOF
+
       - name: Run database migrations
+        working-directory: apps/web
         run: |
           # Set database URL for tests
           export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/churn_saver_test"
@@ -120,27 +137,28 @@ jobs:
           pnpm run db:migrate
 
       - name: Run integration tests
+        working-directory: apps/web
         run: |
           # Set test environment
           export NODE_ENV=test
           export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/churn_saver_test"
           
-          # Run integration tests
-          if [ -d "test/integration" ]; then
-            echo "Running integration tests"
-            find test/integration -name "*.test.js" -o -name "*.test.ts" | xargs node
-          fi
+          # Run API integration tests (includes DB-backed tests)
+          pnpm test:integration
           
-          # Run API integration tests
-          pnpm test:integration || true
+          # Run RLS integration tests if they exist
+          if [ -d "test/integration" ] && find test/integration -name "*rls*.test.ts" | grep -q .; then
+            echo "Running RLS integration tests"
+            pnpm vitest run --config vitest.integration.config.ts test/integration/*rls*.test.ts
+          fi
 
       - name: Upload integration test results
         uses: actions/upload-artifact@v4
         with:
           name: integration-test-results
           path: |
-            test-results/
-            coverage/
+            apps/web/test-results/
+            apps/web/coverage/
 
   migration-tests:
     runs-on: ubuntu-latest
@@ -196,15 +214,31 @@ jobs:
             GRANT ALL PRIVILEGES ON DATABASE test_migrations TO postgres;
           "
 
+      - name: Setup test database with roles
+        run: |
+          psql -h localhost -p 5432 -U postgres -d test_migrations <<'EOF'
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated; END IF;
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon; END IF;
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role; END IF;
+          END $$;
+          EOF
+
       - name: Run migration tests
         working-directory: apps/web
         run: |
           export NODE_ENV=test
-          export TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test_migrations"
-          pnpm test test/migrations/migration-test.ts
+          export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test_migrations"
+          # Run migration tests if they exist
+          if [ -f "test/migrations/remove-default-company-id.test.ts" ]; then
+            pnpm vitest run test/migrations/remove-default-company-id.test.ts
+          else
+            echo "No migration tests found, skipping"
+          fi
         env:
           NODE_ENV: test
-          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_migrations
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_migrations
 
       - name: Upload migration test results
         uses: actions/upload-artifact@v4
@@ -212,7 +246,7 @@ jobs:
         with:
           name: migration-test-results
           path: |
-            test-results/
+            apps/web/test-results/
 
   e2e-tests:
     runs-on: ubuntu-latest
@@ -244,6 +278,7 @@ jobs:
           pnpm exec playwright install-deps
 
       - name: Build application
+        working-directory: apps/web
         run: pnpm build
 
       - name: Run E2E tests
@@ -261,8 +296,8 @@ jobs:
         with:
           name: e2e-test-results
           path: |
-            test-results/
-            playwright-report/
+            apps/web/test-results/
+            apps/web/playwright-report/
 
   performance-tests:
     runs-on: ubuntu-latest
@@ -323,15 +358,16 @@ jobs:
         run: |
           lhci autorun \
             --config=.lighthouserc.js \
-            --upload.target=temporary-public-storage || true
+            --upload.target=temporary-public-storage
         env:
           LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
 
       - name: Stop application
         if: always()
+        working-directory: apps/web
         run: |
           if [ -f app.pid ]; then
-            kill $(cat app.pid) || true
+            kill "$(cat app.pid)"
           fi
 
       - name: Upload performance test results
@@ -374,9 +410,11 @@ jobs:
           npm install -g pa11y
 
       - name: Build application
+        working-directory: apps/web
         run: pnpm build
 
       - name: Run accessibility tests
+        working-directory: apps/web
         run: |
           # Start application
           pnpm start &
@@ -405,8 +443,8 @@ jobs:
         with:
           name: accessibility-test-results
           path: |
-            accessibility-results.json
-            pa11y-results.json
+            apps/web/accessibility-results.json
+            apps/web/pa11y-results.json
 
   test-coverage:
     runs-on: ubuntu-latest

@@ -1,13 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Playwright configuration for E2E tests
- * Supports both local dev server and staging environment
- * Set E2E_BASE_URL environment variable to test against staging
+ * Playwright configuration for Churn Saver E2E tests
+ * Track: D1 - E2E Infrastructure Setup
  */
-const baseURL = process.env.E2E_BASE_URL || 'http://localhost:3000';
-const isStaging = baseURL.includes('staging') || (baseURL.startsWith('https://') && !baseURL.includes('localhost'));
-
 export default defineConfig({
   testDir: './test/e2e',
   fullyParallel: true,
@@ -15,54 +11,36 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: [
-    ['html'],
-    ['list'],
-    ...(process.env.CI ? [['github'] as const] : []),
+    ['html', { outputFolder: 'playwright-report' }],
+    ['json', { outputFile: 'test-results/e2e-results.json' }]
   ],
   use: {
-    baseURL,
+    baseURL: process.env.E2E_BASE_URL || 'http://localhost:3000',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
   },
-
   projects: [
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
-    ...(isStaging
-      ? []
-      : [
-          {
-            name: 'firefox',
-            use: { ...devices['Desktop Firefox'] },
-          },
-          {
-            name: 'webkit',
-            use: { ...devices['Desktop Safari'] },
-          },
-          {
-            name: 'Mobile Chrome',
-            use: { ...devices['Pixel 5'] },
-          },
-          {
-            name: 'Mobile Safari',
-            use: { ...devices['iPhone 12'] },
-          },
-        ]),
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+    },
+    {
+      name: 'mobile-chrome',
+      use: { ...devices['Pixel 5'] },
+    },
   ],
-
-  // Only start webServer for local testing
-  ...(isStaging
-    ? {}
-    : {
-        webServer: {
-          command: 'pnpm dev',
-          url: 'http://localhost:3000',
-          reuseExistingServer: !process.env.CI,
-          timeout: 120 * 1000,
-        },
-      }),
+  webServer: {
+    command: 'pnpm dev',
+    url: 'http://localhost:3000',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120000,
+  },
 });
-

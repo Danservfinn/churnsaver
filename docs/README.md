@@ -7,7 +7,7 @@ Welcome to the Churn Saver developer documentation. This comprehensive guide cov
 ### 🚀 Getting Started
 - [**Overview**](getting-started/overview.md) - High-level platform introduction and key concepts
 - [**Setup Guide**](getting-started/setup.md) - Complete local development environment setup
-- [**Architecture**](getting-started/architecture.md) - System design, components, and data flow
+- [**Architecture**](../apps/web/docs/architecture/ARCHITECTURE.md) - System design, components, data flow, and cost projections
 
 ### 🎯 Core Features
 - [**Recovery System**](features/recovery-system.md) - Automated customer recovery workflows and case management

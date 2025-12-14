@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { isQaDemoBypassEnabled } from '@/lib/qaDemo';
 
 export interface WhopContextType {
   companyId: string;
@@ -90,12 +91,52 @@ function storeWhopToken(token: string | null): void {
 }
 
 export function WhopProvider({ children }: WhopProviderProps) {
-  const [companyId, setCompanyId] = useState<string>(env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'unknown');
+  // NEVER use APP_ID as companyId fallback - use 'unknown' until proper context is loaded
+  const [companyId, setCompanyId] = useState<string>('unknown');
   const [userId, setUserId] = useState<string>('anonymous');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [authToken, setAuthToken] = useState<string | null>(null);
+  const [qaBypassEnabled, setQaBypassEnabled] = useState<boolean>(false);
+
+  const resolveQaDemoBypass = () => {
+    // NEVER use WHOP_APP_ID as companyId fallback - use explicit demo company ID or fallback to 'demo-company'
+    const companyFallback = env.NEXT_PUBLIC_QA_DEMO_COMPANY_ID || env.QA_DEMO_COMPANY_ID || 'demo-company';
+    const userFallback = env.NEXT_PUBLIC_QA_DEMO_USER_ID || env.QA_DEMO_USER_ID || 'demo-user';
+
+    let queryEnabled = false;
+    let storedEnabled = false;
+
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const raw = params.get('qa_demo') || params.get('demo');
+      const normalized = raw?.toLowerCase();
+      if (normalized && ['1', 'true', 'yes', 'on'].includes(normalized)) {
+        queryEnabled = true;
+        try {
+          localStorage.setItem('qa_demo_bypass', 'true');
+        } catch {
+          // ignore storage errors
+        }
+      }
+
+      try {
+        storedEnabled = localStorage.getItem('qa_demo_bypass') === 'true';
+      } catch {
+        storedEnabled = false;
+      }
+    }
+
+    const envEnabled = env.NEXT_PUBLIC_QA_DEMO_BYPASS || env.QA_DEMO_BYPASS || false;
+    const enabled = (!process.env.VERCEL_ENV || process.env.VERCEL_ENV === 'preview' || process.env.NODE_ENV !== 'production') && (envEnabled || queryEnabled || storedEnabled);
+
+    return {
+      enabled,
+      companyId: companyFallback,
+      userId: userFallback,
+    };
+  };
 
   /**
    * Get authentication headers for API calls
@@ -104,6 +145,10 @@ export function WhopProvider({ children }: WhopProviderProps) {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
+
+    if (qaBypassEnabled || isQaDemoBypassEnabled()) {
+      headers['x-qa-demo-bypass'] = '1';
+    }
 
     const token = authToken || extractWhopToken();
     if (token) {
@@ -119,6 +164,21 @@ export function WhopProvider({ children }: WhopProviderProps) {
       setIsLoading(true);
       setError(null);
 
+      const qaBypass = resolveQaDemoBypass();
+      if (qaBypass.enabled) {
+        setCompanyId(qaBypass.companyId);
+        setUserId(qaBypass.userId);
+        setIsAuthenticated(true);
+        setQaBypassEnabled(true);
+        setIsLoading(false);
+        setError(null);
+        logger.info?.('QA demo bypass enabled in client context', {
+          companyId: qaBypass.companyId,
+          userId: qaBypass.userId,
+        });
+        return;
+      }
+
       // Extract token from various sources
       const token = extractWhopToken();
       if (token) {
@@ -132,17 +192,17 @@ export function WhopProvider({ children }: WhopProviderProps) {
       if (!inIframe && !token) {
         // Not in iframe and no token, use default context
         // In development mode, allow bypassing authentication for local testing
+        // BUT: Never use APP_ID as companyId - use 'unknown' or require QA demo bypass
         const devMode = env.DEBUG_MODE && env.NODE_ENV === 'development';
-        const devCompanyId = env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'dev-company';
         
-        setCompanyId(devCompanyId);
+        setCompanyId('unknown'); // Explicitly unknown - no APP_ID fallback
         setUserId(devMode ? 'dev-user' : 'anonymous');
-        setIsAuthenticated(devMode); // Allow authenticated state in dev mode
+        setIsAuthenticated(false); // Not authenticated without proper token
         
         logger.info('Whop context initialized for standalone app', {
-          companyId: devCompanyId,
+          companyId: 'unknown',
           userId: devMode ? 'dev-user' : 'anonymous',
-          isAuthenticated: devMode,
+          isAuthenticated: false,
           devMode
         });
         return;
@@ -161,7 +221,8 @@ export function WhopProvider({ children }: WhopProviderProps) {
           const contextData = await response.json();
           const data = contextData.data || contextData;
           
-          setCompanyId(data.companyId || env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'unknown');
+          // Never use APP_ID as fallback - use 'unknown' if API doesn't provide companyId
+          setCompanyId(data.companyId || 'unknown');
           setUserId(data.userId || 'anonymous');
           setIsAuthenticated(data.isAuthenticated || false);
 
@@ -178,17 +239,17 @@ export function WhopProvider({ children }: WhopProviderProps) {
             hasToken: !!token
           });
         } else {
-          // If API fails but we have a token, try dev mode fallback
+          // If API fails but we have a token, log error but don't use APP_ID fallback
           if (env.NODE_ENV === 'development' && token) {
-            logger.warn('API context fetch failed, using dev mode fallback', {
+            logger.warn('API context fetch failed - cannot determine companyId without API response', {
               status: response.status,
               hasToken: !!token
             });
             
-            const devCompanyId = env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'dev-company';
-            setCompanyId(devCompanyId);
+            // Don't use APP_ID - set to unknown and require proper API response
+            setCompanyId('unknown');
             setUserId('dev-user');
-            setIsAuthenticated(true);
+            setIsAuthenticated(false); // Not authenticated if API fails
             return;
           }
           
@@ -200,14 +261,14 @@ export function WhopProvider({ children }: WhopProviderProps) {
           error: apiError instanceof Error ? apiError.message : String(apiError)
         });
 
-        // In development, allow authenticated state if we have a token
+        // In development, log but don't use APP_ID fallback
         if (env.NODE_ENV === 'development' && token) {
-          const devCompanyId = env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'dev-company';
-          setCompanyId(devCompanyId);
+          // Token exists but API failed - cannot determine companyId
+          setCompanyId('unknown');
           setUserId('dev-user');
-          setIsAuthenticated(true);
+          setIsAuthenticated(false); // Not authenticated if API fails
         } else {
-          setCompanyId(env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'unknown');
+          setCompanyId('unknown'); // Never use APP_ID as fallback
           setUserId('anonymous');
           setIsAuthenticated(false);
         }
@@ -220,8 +281,8 @@ export function WhopProvider({ children }: WhopProviderProps) {
         error: errorMessage
       });
 
-      // Set fallback values
-      setCompanyId(env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'unknown');
+      // Set fallback values - never use APP_ID as companyId
+      setCompanyId('unknown');
       setUserId('anonymous');
       setIsAuthenticated(false);
     } finally {

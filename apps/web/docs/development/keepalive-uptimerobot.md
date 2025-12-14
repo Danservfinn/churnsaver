@@ -11,3 +11,9 @@ Notes:
 - Endpoint is read-only and fast; no auth required.
 - If you later move to Supabase Pro, you can delete this monitor.
 
+
+
+
+
+
+

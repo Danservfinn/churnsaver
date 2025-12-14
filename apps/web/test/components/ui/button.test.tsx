@@ -8,7 +8,7 @@ afterEach(() => {
   cleanup();
 });
 
-describe.skip('Button Component', () => {
+describe('Button Component', () => {
   describe('Rendering', () => {
     it('should render button with text', () => {
       render(<Button>Click me</Button>);
@@ -23,7 +23,7 @@ describe.skip('Button Component', () => {
     });
 
     it('should render all variants correctly', () => {
-      const variants = ['default', 'destructive', 'outline', 'secondary', 'ghost', 'link', 'playful', 'illustrated'] as const;
+      const variants = ['default', 'destructive', 'outline', 'secondary', 'ghost', 'link'] as const;
       
       variants.forEach((variant) => {
         const { unmount } = render(<Button variant={variant}>Test {variant}</Button>);
@@ -156,18 +156,17 @@ describe.skip('Button Component', () => {
     });
 
     it('should apply variant classes', () => {
-      render(<Button variant="playful">Playful</Button>);
+      render(<Button variant="default">Primary</Button>);
       const button = screen.getByRole('button');
-      expect(button.className).toContain('from-accent-400');
+      expect(button.className).toContain('bg-primary');
+      expect(button.className).toContain('inline-flex');
     });
   });
 
   describe('AsChild Prop', () => {
     it('should render as child element when asChild is true', () => {
       render(
-        <Button asChild>
-          <a href="/test">Link Button</a>
-        </Button>
+        <Button asChild><a href="/test">Link Button</a></Button>
       );
       // When asChild is true, Button should render as the child element (link)
       const link = screen.getByRole('link', { name: /link button/i });

@@ -1,6 +1,7 @@
 // Query performance monitoring and slow query logging
 // Integrates with database layer to track and alert on performance issues
 
+import { randomInt } from 'crypto';
 import { sql } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { metrics } from '@/lib/metrics';
@@ -26,8 +27,8 @@ export interface SlowQueryAlert {
 
 // Configuration for query monitoring
 export const QUERY_MONITOR_CONFIG = {
-  slowQueryThreshold: 1000, // 1 second
-  verySlowQueryThreshold: 5000, // 5 seconds
+  slowQueryThreshold: Number(process.env.SLOW_QUERY_THRESHOLD_MS || 100), // default 100ms
+  verySlowQueryThreshold: Number(process.env.VERY_SLOW_QUERY_THRESHOLD_MS || 1000),
   enableDetailedLogging: process.env.NODE_ENV !== 'production',
   enableMetrics: true,
   sampleRate: 0.1, // Sample 10% of queries for detailed analysis
@@ -50,10 +51,17 @@ export function logQueryMetrics(metrics: QueryMetrics): void {
       endpoint: metrics.endpoint,
       timestamp: metrics.timestamp.toISOString(),
     });
+
+    logger.metric('db.slow_query', metrics.duration, {
+      companyId: metrics.companyId,
+      endpoint: metrics.endpoint,
+      rowCount: metrics.rowCount
+    });
   }
 
   // Sample detailed metrics for analysis
-  if (Math.random() < QUERY_MONITOR_CONFIG.sampleRate) {
+  const sample = randomInt(0, 1_000_000) / 1_000_000;
+  if (sample < QUERY_MONITOR_CONFIG.sampleRate) {
     logger.debug('Query performance sample', {
       query: metrics.query.substring(0, 200),
       duration: metrics.duration,

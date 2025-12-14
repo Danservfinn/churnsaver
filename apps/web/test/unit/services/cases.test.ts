@@ -263,7 +263,7 @@ describe('Case Service Unit Tests', () => {
   });
 
   describe('updateRecoveryCase', () => {
-    test('should update case attempts and last_nudge_at', async () => {
+    test('should update case failure_reason without mutating nudge attempt counters', async () => {
       const existingCase: RecoveryCase = createTestRecoveryCase({
         id: 'case_test_123',
         attempts: 2,
@@ -279,8 +279,6 @@ describe('Case Service Unit Tests', () => {
 
       const updatedCase: RecoveryCase = {
         ...existingCase,
-        attempts: 3,
-        last_nudge_at: new Date(),
         failure_reason: event.reason,
       };
 
@@ -294,13 +292,12 @@ describe('Case Service Unit Tests', () => {
       const result = await updateRecoveryCase(existingCase, event);
 
       expect(result).not.toBeNull();
-      expect(result?.attempts).toBe(3);
-      expect(result?.last_nudge_at).not.toBeNull();
+      expect(result?.attempts).toBe(existingCase.attempts);
+      expect(result?.last_nudge_at).toBe(existingCase.last_nudge_at);
       expect(sql.insert).toHaveBeenCalledWith(
         expect.stringContaining('UPDATE recovery_cases'),
         expect.arrayContaining([
           existingCase.id,
-          expect.any(Date), // last_nudge_at
           event.reason,
         ]),
         expect.objectContaining({ companyId: existingCase.company_id ?? companyA })

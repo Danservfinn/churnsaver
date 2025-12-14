@@ -7,6 +7,7 @@ import { errors } from '@/lib/apiResponse';
 import { getWebhookCompanyContext } from '@/lib/whop-sdk';
 import { logger } from '@/lib/logger';
 import { env, isProductionLikeEnvironment, validateWebhookTimestampSkew } from '@/lib/env';
+import { checkRequestSize, DEFAULT_LIMITS } from '@/middleware/requestSizeLimit';
 
 // Disable middleware for this route
 export const runtime = 'nodejs';
@@ -44,8 +45,38 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
     // === DEBUG LOGGING END ===
 
+    // Check request size before processing (webhook-specific limit)
+    const contentLength = request.headers.get('content-length');
+    if (contentLength) {
+      const sizeBytes = parseInt(contentLength, 10);
+      if (!isNaN(sizeBytes) && sizeBytes > DEFAULT_LIMITS.webhook) {
+        logger.warn('Webhook request size limit exceeded', {
+          sizeBytes,
+          limitBytes: DEFAULT_LIMITS.webhook,
+          ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+        });
+        return NextResponse.json(
+          { error: 'Request payload too large', maxSize: `${DEFAULT_LIMITS.webhook / 1024 / 1024}MB` },
+          { status: 413 }
+        );
+      }
+    }
+
     // Get raw body first for rate limiting and signature validation
     const body = await request.text();
+    
+    // Double-check body size after reading (in case content-length was missing or wrong)
+    if (body.length > DEFAULT_LIMITS.webhook) {
+      logger.warn('Webhook body size limit exceeded after reading', {
+        sizeBytes: body.length,
+        limitBytes: DEFAULT_LIMITS.webhook,
+        ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+      });
+      return NextResponse.json(
+        { error: 'Request payload too large', maxSize: `${DEFAULT_LIMITS.webhook / 1024 / 1024}MB` },
+        { status: 413 }
+      );
+    }
     
     // === DEBUG LOGGING START ===
     if (debugLoggingEnabled) {
@@ -162,14 +193,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // Rate limit passed, now process the webhook (includes signature validation)
-    // Create a new request with the body text since we already consumed it
-    const newRequest = new NextRequest(request.url, {
-      method: request.method,
-      headers: request.headers,
-      body: body
-    });
-    
-    const webhookResult = await handleWhopWebhook(newRequest);
+    // Pass body and headers directly to avoid consuming request body twice
+    const webhookResult = await handleWhopWebhook(body, request.headers);
     
     // Return the webhook processing result
     return webhookResult;
@@ -205,7 +230,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       error: error instanceof Error ? error.message : String(error)
     });
     
-    return handleWhopWebhook(request);
+    // Get body for webhook processing (may have been consumed, so try to get it)
+    try {
+      const body = await request.text();
+      return handleWhopWebhook(body, request.headers);
+    } catch (bodyError) {
+      logger.error('Failed to read request body in error handler', {
+        error: bodyError instanceof Error ? bodyError.message : String(bodyError)
+      });
+      return NextResponse.json(
+        { error: 'Failed to process webhook' },
+        { status: 500 }
+      );
+    }
   }
 }
 

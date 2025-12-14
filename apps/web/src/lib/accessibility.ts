@@ -206,11 +206,18 @@ export class AccessibilityUtils {
   static setupPageChangeAnnouncements(enabled: boolean = true): void {
     if (!enabled) return;
 
+    // Guard against non-browser runtimes and test teardown
+    if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return;
+
+    const doc = document;
+    const body = doc.body;
+    if (!body) return;
+
     // Announce page changes to screen readers
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
-        if (mutation.type === 'childList' && mutation.target === document.body) {
-          const title = document.title;
+        if (mutation.type === 'childList' && mutation.target === body) {
+          const title = doc.title;
           if (title) {
             this.announceToScreenReader(`Page: ${title}`);
           }
@@ -218,7 +225,7 @@ export class AccessibilityUtils {
       });
     });
 
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(body, { childList: true, subtree: true });
   }
 
   /**

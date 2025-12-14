@@ -1,6 +1,8 @@
+import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { initDbWithRLS, sqlWithRLS } from '@/lib/db-rls';
 import { logger } from '@/lib/logger';
+import { assertCompanyContext } from '@/server/services/shared/jobHelpers';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,12 +12,40 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const adminToken = process.env.ADMIN_API_TOKEN;
   const providedToken = request.headers.get('x-admin-token');
+  const clientIp =
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    request.headers.get('x-real-ip') ||
+    'unknown';
 
-  if (!adminToken || adminToken.length < 16 || providedToken !== adminToken) {
-    logger.error('Unauthorized attempt to call admin resolve endpoint', {
+  // Require strong token and exact match
+  if (!adminToken || adminToken.length < 32) {
+    logger.error('Admin resolve endpoint misconfigured (token missing/weak)', {
       hasTokenConfigured: !!adminToken,
       tokenLength: adminToken?.length,
-      ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
+      ip: clientIp
+    });
+    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+  }
+
+  // Optional IP allowlist: comma-separated (standardize to ADMIN_IP_ALLOWLIST)
+  const allowedIps = (process.env.ADMIN_IP_ALLOWLIST || process.env.ADMIN_ALLOWED_IPS)?.split(',').map((ip) => ip.trim()).filter(Boolean) || [];
+  const ipAllowed = allowedIps.length === 0 || allowedIps.includes(clientIp);
+
+  const tokensMatch = (() => {
+    if (!providedToken) return false;
+    const providedBuffer = Buffer.from(providedToken, 'utf8');
+    const adminBuffer = Buffer.from(adminToken, 'utf8');
+    if (providedBuffer.length !== adminBuffer.length) return false;
+    return timingSafeEqual(providedBuffer, adminBuffer);
+  })();
+
+  if (!tokensMatch || !ipAllowed) {
+    logger.warn('Unauthorized attempt to call admin resolve endpoint', {
+      hasTokenConfigured: true,
+      tokenLength: adminToken.length,
+      ip: clientIp,
+      ipAllowed,
+      allowedIpsCount: allowedIps.length
     });
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -33,6 +63,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'eventId and companyId are required' }, { status: 400 });
   }
 
+  const companyContext = await assertCompanyContext(companyId);
+  if (!companyContext.isValid) {
+    return NextResponse.json({ error: companyContext.error || 'Invalid company' }, { status: 400 });
+  }
+
   try {
     const result = await sqlWithRLS.execute(
       `UPDATE events
@@ -40,9 +75,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
            company_resolution_status = 'resolved',
            processed = false,
            error = NULL
-       WHERE whop_event_id = $1`,
+       WHERE whop_event_id = $1
+         AND company_id = $2`,
       [eventId, companyId],
-      { skipRLS: true, enforceCompanyContext: false }
+      { companyId, enforceCompanyContext: true }
     );
 
     if (result.rowCount === 0) {

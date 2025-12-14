@@ -3,11 +3,12 @@
 // PUT /api/settings - Update settings for company
 
 import { NextRequest, NextResponse } from 'next/server';
-import { sql, initDb } from '@/lib/db';
+import { initDbWithRLS, sqlWithRLS } from '@/lib/db-rls';
 import { logger } from '@/lib/logger';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
 import { SettingsUpdateSchema, validateAndTransform } from '@/lib/validation';
 import { requireAuthContext } from '@/lib/auth/requireAuth';
+import { getQaDemoSettings, isQaDemoBypassEnabled } from '@/lib/qaDemo';
 
 interface CreatorSettings {
   company_id: string;
@@ -30,21 +31,30 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const startTime = Date.now();
 
   try {
+    if (isQaDemoBypassEnabled(request)) {
+      logger.info('QA demo bypass: returning mock creator settings');
+      return NextResponse.json(getQaDemoSettings());
+    }
+
     // Initialize database connection
-    await initDb();
+    await initDbWithRLS();
 
     const auth = await requireAuthContext(request);
     if (!auth.success || !auth.context) {
       return auth.response ?? NextResponse.json({ error: auth.error || 'Authentication required' }, { status: auth.status || 401 });
     }
     const companyId = auth.context.companyId;
+    if (!companyId) {
+      return NextResponse.json({ error: 'Company context required' }, { status: 400 });
+    }
 
     logger.info('Fetching creator settings', { companyId });
 
     // Try to get existing settings
-    const existingSettings = await sql.select(
+    const existingSettings = await sqlWithRLS.select(
       'SELECT company_id, enable_push, enable_dm, incentive_days, reminder_offsets_days, updated_at FROM creator_settings WHERE company_id = $1',
-      [companyId]
+      [companyId],
+      { companyId, enforceCompanyContext: true }
     );
 
     let settings: CreatorSettings;
@@ -55,7 +65,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     } else {
       // Create default settings
       const defaultWithCompanyId = { ...DEFAULT_SETTINGS, company_id: companyId };
-      await sql.execute(
+      await sqlWithRLS.execute(
         'INSERT INTO creator_settings (company_id, enable_push, enable_dm, incentive_days, reminder_offsets_days) VALUES ($1, $2, $3, $4, $5)',
         [
           companyId,
@@ -63,13 +73,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           defaultWithCompanyId.enable_dm,
           defaultWithCompanyId.incentive_days,
           defaultWithCompanyId.reminder_offsets_days
-        ]
+        ],
+        { companyId, enforceCompanyContext: true }
       );
 
       // Fetch the newly created settings
-      const newSettings = await sql.select(
+      const newSettings = await sqlWithRLS.select(
         'SELECT company_id, enable_push, enable_dm, incentive_days, reminder_offsets_days, updated_at FROM creator_settings WHERE company_id = $1',
-        [companyId]
+        [companyId],
+        { companyId, enforceCompanyContext: true }
       );
 
       settings = newSettings[0] as CreatorSettings;
@@ -123,13 +135,16 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
 
   try {
     // Initialize database connection
-    await initDb();
+    await initDbWithRLS();
 
     const auth = await requireAuthContext(request);
     if (!auth.success || !auth.context) {
       return auth.response ?? NextResponse.json({ error: auth.error || 'Authentication required' }, { status: auth.status || 401 });
     }
     const companyId = auth.context.companyId;
+    if (!companyId) {
+      return NextResponse.json({ error: 'Company context required' }, { status: 400 });
+    }
 
     // Apply rate limiting for creator-facing settings updates (30/min per company)
     const rateLimitResult = await checkRateLimit(
@@ -160,6 +175,16 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
 
     const validatedInput = validation.data;
 
+    if (isQaDemoBypassEnabled(request)) {
+      const mock = {
+        ...getQaDemoSettings(),
+        ...validatedInput,
+        updated_at: new Date().toISOString(),
+      };
+      logger.info('QA demo bypass: accepting mock settings update', { mock });
+      return NextResponse.json(mock);
+    }
+
     // Sort and deduplicate reminder offsets (business logic, not schema concern)
     const sortedUniqueOffsets = [...new Set(validatedInput.reminder_offsets_days)].sort((a, b) => a - b);
 
@@ -169,7 +194,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     });
 
     // Upsert settings
-    await sql.execute(
+    await sqlWithRLS.execute(
       `INSERT INTO creator_settings (
         company_id, enable_push, enable_dm, incentive_days, reminder_offsets_days, updated_at
       ) VALUES ($1, $2, $3, $4, $5, now())
@@ -185,13 +210,15 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
         validatedInput.enable_dm,
         validatedInput.incentive_days,
         sortedUniqueOffsets
-      ]
+      ],
+      { companyId, enforceCompanyContext: true }
     );
 
     // Fetch and return updated settings
-    const updatedSettings = await sql.select(
+    const updatedSettings = await sqlWithRLS.select(
       'SELECT company_id, enable_push, enable_dm, incentive_days, reminder_offsets_days, updated_at FROM creator_settings WHERE company_id = $1',
-      [companyId]
+      [companyId],
+      { companyId, enforceCompanyContext: true }
     );
 
     const settings = updatedSettings[0] as CreatorSettings;

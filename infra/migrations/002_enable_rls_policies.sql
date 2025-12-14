@@ -8,6 +8,31 @@ ALTER TABLE recovery_cases ENABLE ROW LEVEL SECURITY;
 ALTER TABLE creator_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE recovery_actions ENABLE ROW LEVEL SECURITY;
 
+-- Drop all existing policies to allow idempotent migration runs
+DO $$
+BEGIN
+  -- Drop policies on events table
+  DROP POLICY IF EXISTS events_webhook_insert_policy ON events;
+  DROP POLICY IF EXISTS events_company_select_policy ON events;
+  DROP POLICY IF EXISTS events_company_update_policy ON events;
+  
+  -- Drop policies on recovery_cases table
+  DROP POLICY IF EXISTS recovery_cases_company_insert_policy ON recovery_cases;
+  DROP POLICY IF EXISTS recovery_cases_company_select_policy ON recovery_cases;
+  DROP POLICY IF EXISTS recovery_cases_company_update_policy ON recovery_cases;
+  
+  -- Drop policies on creator_settings table
+  DROP POLICY IF EXISTS creator_settings_company_insert_policy ON creator_settings;
+  DROP POLICY IF EXISTS creator_settings_company_select_policy ON creator_settings;
+  DROP POLICY IF EXISTS creator_settings_company_update_policy ON creator_settings;
+  
+  -- Drop policies on recovery_actions table
+  DROP POLICY IF EXISTS recovery_actions_company_insert_policy ON recovery_actions;
+  DROP POLICY IF EXISTS recovery_actions_company_select_policy ON recovery_actions;
+  DROP POLICY IF EXISTS recovery_actions_company_delete_policy ON recovery_actions;
+END
+$$;
+
 -- Create a function to set session variables for company context
 -- This is used by application code to set the company context for queries
 CREATE OR REPLACE FUNCTION set_company_context(company_id_param text)
@@ -111,6 +136,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+DROP TRIGGER IF EXISTS recovery_cases_updated_at_trigger ON recovery_cases;
 CREATE TRIGGER recovery_cases_updated_at_trigger
   BEFORE UPDATE ON recovery_cases
   FOR EACH ROW
@@ -130,6 +156,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+DROP TRIGGER IF EXISTS creator_settings_updated_at_trigger ON creator_settings;
 CREATE TRIGGER creator_settings_updated_at_trigger
   BEFORE UPDATE ON creator_settings
   FOR EACH ROW

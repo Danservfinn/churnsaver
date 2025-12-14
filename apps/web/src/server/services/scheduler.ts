@@ -109,7 +109,7 @@ class ServerlessScheduler {
       });
 
       // Initialize job queue
-      await jobQueue.init();
+      await jobQueue.initProducer();
 
       // Process each company using shared discovery and batch processing
       for (const companyId of companyIds) {

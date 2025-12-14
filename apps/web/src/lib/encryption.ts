@@ -187,7 +187,12 @@ export async function decrypt(encryptedData: string, key?: string): Promise<stri
     const encrypted = combined.subarray(DEFAULT_CONFIG.ivLength + DEFAULT_CONFIG.authTagLength);
     
     // Create decipher with validated key and extracted IV
-    const decipher = createDecipheriv(DEFAULT_CONFIG.algorithm, encryptionKey, iv) as DecipherGCM;
+    const decipher = createDecipheriv(
+      DEFAULT_CONFIG.algorithm,
+      encryptionKey,
+      iv,
+      { authTagLength: DEFAULT_CONFIG.authTagLength }
+    ) as DecipherGCM;
     decipher.setAuthTag(authTag);
     
     let decrypted = decipher.update(encrypted);

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getRequestContext } from '@/lib/auth/whop';
 import { isProductionLikeEnvironment } from '@/lib/env';
+import { getQaDemoContext, isQaDemoBypassEnabled } from '@/lib/qaDemo';
 
 export interface AuthResult {
   success: boolean;
@@ -11,6 +12,13 @@ export interface AuthResult {
 }
 
 export async function requireAuthContext(request: NextRequest): Promise<AuthResult> {
+  if (isQaDemoBypassEnabled(request)) {
+    return {
+      success: true,
+      context: getQaDemoContext(),
+    };
+  }
+
   const context = await getRequestContext(request);
 
   if (!context.companyId) {

@@ -44,7 +44,14 @@ export default defineConfig({
       // Server-dependent suites run separately
       'test/e2e-server/**',
       // Legacy security suite requiring Jest-style mocks
-      'test/security/sql-injection.test.ts'
+      'test/security/sql-injection.test.ts',
+
+      // DB-dependent suites (CI unit job has no Postgres service)
+      'test/unit/rls-policy-enforcement.test.ts',
+      'test/security/rls-security.test.ts',
+
+      // Invalid/non-actionable security test (does not exercise app code)
+      'test/security/path-traversal.test.ts'
     ],
     
     // Test file patterns
@@ -54,7 +61,8 @@ export default defineConfig({
       'test/security/**/*.test.{js,ts,tsx}',
       'test/security/**/*.spec.{js,ts,tsx}',
       'test/components/**/*.test.{js,ts,tsx}',
-      'test/components/**/*.spec.{js,ts,tsx}'
+      'test/components/**/*.spec.{js,ts,tsx}',
+      'test/webhooks/**/*.test.{js,ts,tsx}'
     ],
     
     // Test environment and setup

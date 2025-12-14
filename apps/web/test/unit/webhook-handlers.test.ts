@@ -25,17 +25,19 @@ vi.mock('@/server/webhooks/whop', async (importOriginal) => {
 
   return {
     ...actual,
-    handleWhopWebhook: vi.fn(async (req: NextRequest) => {
-      const signature = req.headers.get('x-whop-signature') || '';
-      const timestamp = req.headers.get('x-whop-timestamp');
+    handleWhopWebhook: vi.fn(
+      async (_body: string, headers: Headers | { get: (key: string) => string | null }) => {
+        const signature = headers.get('x-whop-signature') || '';
+        const timestamp = headers.get('x-whop-timestamp');
 
-      // Simplified validation: require sha256=<hex> shape to simulate signature check
-      if (!signature.startsWith('sha256=')) {
-        return NextResponse.json({ error: 'invalid signature' }, { status: 401 });
+        // Simplified validation: require sha256=<hex> shape to simulate signature check
+        if (!signature.startsWith('sha256=')) {
+          return NextResponse.json({ error: 'invalid signature' }, { status: 401 });
+        }
+
+        return NextResponse.json({ status: 'ok' }, { status: 200 });
       }
-
-      return NextResponse.json({ status: 'ok' }, { status: 200 });
-    }),
+    ),
   };
 });
 
@@ -45,7 +47,7 @@ describe('Webhook Route Handler (no server)', () => {
   const secret = env.WHOP_WEBHOOK_SECRET || 'whsec_test_secret';
 
   beforeEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   const buildRequest = (payload: object, signature: string, timestamp?: string) =>

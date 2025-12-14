@@ -492,7 +492,7 @@ CRON_SECRET=your-cron-secret
 ### Development Tasks
 
 1. **Explore the Codebase**:
-   - Review the [Architecture Guide](architecture.md)
+   - Review the [Architecture Guide](../../apps/web/docs/architecture/ARCHITECTURE.md)
    - Understand the [API Reference](../api/rest-api.md)
    - Check out the [Testing Guide](../testing/overview.md)
 
@@ -555,4 +555,4 @@ npx prisma migrate dev # Create migrations
 
 ---
 
-**Ready to start developing?** The application should now be running at [http://localhost:3000](http://localhost:3000). Check the [Architecture Guide](architecture.md) to understand how everything fits together.
+**Ready to start developing?** The application should now be running at [http://localhost:3000](http://localhost:3000). Check the [Architecture Guide](../../apps/web/docs/architecture/ARCHITECTURE.md) to understand how everything fits together.

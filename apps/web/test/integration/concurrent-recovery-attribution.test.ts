@@ -20,6 +20,16 @@ async function cleanupTestData() {
   );
 }
 
+async function ensureSubscriptionRow() {
+  await sqlWithRLS.execute(
+    `INSERT INTO company_subscriptions (company_id, tier, total_recoveries_used, monthly_recovered_revenue_cents, month_start_date)
+     VALUES ($1, 'free', 0, 0, CURRENT_DATE)
+     ON CONFLICT (company_id) DO NOTHING`,
+    [COMPANY_ID],
+    { skipRLS: true }
+  );
+}
+
 describe('Concurrent recovery attribution enforces single success', () => {
   beforeAll(async () => {
     await initDbWithRLS();
@@ -36,8 +46,11 @@ describe('Concurrent recovery attribution enforces single success', () => {
   });
 
   it('processes concurrent recovery attempts only once (unique recovery_source_event_id)', async () => {
+    await ensureSubscriptionRow();
+
     const caseId = randomUUID();
     const eventId = `evt_recovery_${randomUUID()}`;
+    const amountCents = 1234;
 
     await sqlWithRLS.execute(
       `INSERT INTO recovery_cases (id, company_id, membership_id, user_id, first_failure_at, status, recovered_amount_cents)
@@ -49,8 +62,8 @@ describe('Concurrent recovery attribution enforces single success', () => {
     setRequestContext({ companyId: COMPANY_ID, userId: USER_ID, isAuthenticated: true });
 
     const [first, second] = await Promise.allSettled([
-      markCaseRecoveredByMembership(COMPANY_ID, MEMBERSHIP_ID, 1234, new Date(), 30, eventId),
-      markCaseRecoveredByMembership(COMPANY_ID, MEMBERSHIP_ID, 1234, new Date(), 30, eventId),
+      markCaseRecoveredByMembership(COMPANY_ID, MEMBERSHIP_ID, amountCents, new Date(), 30, eventId),
+      markCaseRecoveredByMembership(COMPANY_ID, MEMBERSHIP_ID, amountCents, new Date(), 30, eventId),
     ]);
 
     const successes =
@@ -66,54 +79,20 @@ describe('Concurrent recovery attribution enforces single success', () => {
 
     expect(rows[0].status).toBe('recovered');
     expect(rows[0].recovery_source_event_id).toBe(eventId);
-    expect(rows[0].recovered_amount_cents).toBe(1234);
+    expect(rows[0].recovered_amount_cents).toBe(amountCents);
+
+    const subs = await sqlWithRLS.select<{
+      total_recoveries_used: number;
+      monthly_recovered_revenue_cents: number;
+    }>(
+      `SELECT total_recoveries_used, monthly_recovered_revenue_cents
+       FROM company_subscriptions
+       WHERE company_id = $1`,
+      [COMPANY_ID],
+      { skipRLS: true, enforceCompanyContext: false }
+    );
+
+    expect(subs[0].total_recoveries_used).toBe(1);
+    expect(subs[0].monthly_recovered_revenue_cents).toBe(amountCents);
   });
 });
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { sqlWithRLS } from '@/lib/db-rls';
-import { markCaseRecoveredByMembership } from '@/server/services/cases';
-
-describe('Concurrent Recovery Attribution', () => {
-  const testCompanyId = 'test-company-concurrent';
-  const testMembershipId = 'test-membership-concurrent';
-  const testEventId = 'test-event-concurrent';
-  let testCaseId: string;
-
-  beforeEach(async () => {
-    const result = await sqlWithRLS.insert<{ id: string }>(
-      `INSERT INTO recovery_cases (company_id, membership_id, user_id, status, first_failure_at)
-       VALUES ($1, $2, $3, 'open', NOW())
-       RETURNING id`,
-      [testCompanyId, testMembershipId, 'test-user'],
-      { companyId: testCompanyId }
-    );
-    testCaseId = result!.id;
-  });
-
-  afterEach(async () => {
-    await sqlWithRLS.execute(
-      `DELETE FROM recovery_cases WHERE company_id = $1`,
-      [testCompanyId],
-      { skipRLS: true }
-    );
-  });
-
-  it('should attribute recovery to only one concurrent request', async () => {
-    const results = await Promise.allSettled([
-      markCaseRecoveredByMembership(testCompanyId, testMembershipId, 1000, new Date(), 14, testEventId),
-      markCaseRecoveredByMembership(testCompanyId, testMembershipId, 1000, new Date(), 14, testEventId)
-    ]);
-
-    const successes = results.filter((r) => r.status === 'fulfilled' && r.value === true);
-
-    const cases = await sqlWithRLS.select<{ recovery_source_event_id: string | null }>(
-      `SELECT recovery_source_event_id FROM recovery_cases WHERE id = $1`,
-      [testCaseId],
-      { companyId: testCompanyId }
-    );
-
-    expect(cases[0].recovery_source_event_id).toBe(testEventId);
-    expect(successes.length).toBeGreaterThanOrEqual(1);
-  });
-});
-

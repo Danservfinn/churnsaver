@@ -8,8 +8,11 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   return (
     <ToastProvider>
       <div className="flex min-h-screen flex-col bg-background">
+        <a href="#main-content" className="skip-link">
+          Skip to main content
+        </a>
         <AppHeader />
-        <main className="flex-1 overflow-auto">
+        <main id="main-content" className="flex-1 overflow-auto">
           {children}
         </main>
         <AppFooter />

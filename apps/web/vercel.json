@@ -19,6 +19,19 @@
   ],
   "headers": [
     {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "frame-ancestors 'self' https://*.whop.com https://whop.com"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "ALLOW-FROM https://whop.com"
+        }
+      ]
+    },
+    {
       "source": "/api/webhooks/(.*)",
       "headers": [
         {

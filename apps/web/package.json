@@ -49,6 +49,7 @@
 		"@opentelemetry/sdk-node": "^0.207.0",
 		"@opentelemetry/semantic-conventions": "^1.37.0",
 		"@radix-ui/react-slot": "^1.2.3",
+		"@sentry/nextjs": "^10.30.0",
 		"@supabase/supabase-js": "^2.86.2",
 		"@tailwindcss/postcss": "^4.1.15",
 		"@types/bcrypt": "^6.0.0",

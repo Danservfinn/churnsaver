@@ -578,14 +578,14 @@ Churn Saver Team
 ## Emergency Contacts
 
 ### On-Call Engineers
-- **Primary:** [OWNER_NEEDED] - [OWNER_NEEDED] - [OWNER_NEEDED] - [OWNER_NEEDED]
-- **Secondary:** [OWNER_NEEDED] - [OWNER_NEEDED] - [OWNER_NEEDED] - [OWNER_NEEDED]
-- **Tertiary:** [OWNER_NEEDED] - [OWNER_NEEDED] - [OWNER_NEEDED] - [OWNER_NEEDED]
+- **Primary:** Daniel Finn - +19194133445 - d@kurult.ai - N/A
+- **Secondary:** [OWNER_NEEDED] - [PHONE_NEEDED] - [EMAIL_NEEDED] - [SLACK_NEEDED]
+- **Tertiary:** [OWNER_NEEDED] - [PHONE_NEEDED] - [EMAIL_NEEDED] - [SLACK_NEEDED]
 
 ### Escalation Contacts
-- **Engineering Manager:** [OWNER_NEEDED] - [OWNER_NEEDED] - [OWNER_NEEDED]
-- **VP Engineering:** [OWNER_NEEDED] - [OWNER_NEEDED] - [OWNER_NEEDED]
-- **CTO:** [OWNER_NEEDED] - [OWNER_NEEDED] - [OWNER_NEEDED]
+- **Engineering Manager:** Daniel Finn - +19194133445 - d@kurult.ai
+- **VP Engineering:** [OWNER_NEEDED] - [PHONE_NEEDED] - [EMAIL_NEEDED]
+- **CTO:** Daniel Finn - +19194133445 - d@kurult.ai
 
 ### External Support
 - **Vercel Support:** 24/7 support available

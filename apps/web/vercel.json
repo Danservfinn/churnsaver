@@ -28,6 +28,10 @@
         {
           "key": "X-Frame-Options",
           "value": "ALLOW-FROM https://whop.com"
+        },
+        {
+          "key": "x-vercel-sso-protection",
+          "value": "none"
         }
       ]
     },

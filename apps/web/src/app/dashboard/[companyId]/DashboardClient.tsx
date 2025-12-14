@@ -4,10 +4,9 @@ import { useEffect, useState } from 'react';
 import { KpiTile } from '@/components/dashboard/KpiTile';
 import { CasesTable } from '@/components/dashboard/CasesTable';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useToast } from '@/components/ui/toast';
 import { Download, RefreshCw, Settings, TrendingUp, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
@@ -60,7 +59,6 @@ interface CasesResponse {
 }
 
 export function DashboardClient({ companyId, userId, companyName, userName }: DashboardClientProps) {
-  const { addToast } = useToast();
   const [kpis, setKpis] = useState<DashboardKPIs | null>(null);
   const [casesData, setCasesData] = useState<CasesResponse | null>(null);
   const [isLoadingKpis, setIsLoadingKpis] = useState(true);
@@ -79,22 +77,10 @@ export function DashboardClient({ companyId, userId, companyName, userName }: Da
         const data = await response.json();
         setKpis(data);
       } else {
-        const errorMessage = `Failed to load KPIs: ${response.status} ${response.statusText}`;
-        setKpiError(errorMessage);
-        addToast({
-          type: 'error',
-          title: 'Failed to load KPIs',
-          message: 'Unable to fetch dashboard metrics. Please try again.',
-        });
+        setKpiError(`Failed to load KPIs: ${response.status} ${response.statusText}`);
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch KPIs';
-      setKpiError(errorMessage);
-      addToast({
-        type: 'error',
-        title: 'Failed to load KPIs',
-        message: 'Unable to fetch dashboard metrics. Please try again.',
-      });
+      setKpiError(error instanceof Error ? error.message : 'Failed to fetch KPIs');
     } finally {
       setIsLoadingKpis(false);
     }
@@ -110,22 +96,10 @@ export function DashboardClient({ companyId, userId, companyName, userName }: Da
         const data = await response.json();
         setCasesData(data);
       } else {
-        const errorMessage = `Failed to load cases: ${response.status} ${response.statusText}`;
-        setCasesError(errorMessage);
-        addToast({
-          type: 'error',
-          title: 'Failed to load cases',
-          message: 'Unable to fetch recovery cases. Please try again.',
-        });
+        setCasesError(`Failed to load cases: ${response.status} ${response.statusText}`);
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch cases';
-      setCasesError(errorMessage);
-      addToast({
-        type: 'error',
-        title: 'Failed to load cases',
-        message: 'Unable to fetch recovery cases. Please try again.',
-      });
+      setCasesError(error instanceof Error ? error.message : 'Failed to fetch cases');
     } finally {
       setIsLoadingCases(false);
     }

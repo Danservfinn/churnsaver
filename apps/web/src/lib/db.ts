@@ -41,11 +41,17 @@ export async function initDb(): Promise<void> {
     // In development, allow configurable SSL validation for local testing
     const isDevelopment = process.env.NODE_ENV === 'development';
     const allowInsecureSSL = isDevelopment && process.env.ALLOW_INSECURE_SSL === 'true';
+
+    // Prefer strong verification when a CA bundle is supplied. Otherwise, accept the managed
+    // provider chain (Supabase poolers often present a chain Node doesn't validate by default).
+    const sslCaPem = process.env.DB_SSL_CA_CERT_PEM;
+    const rejectUnauthorized = Boolean(sslCaPem) && !allowInsecureSSL;
     
     logger.info('Database SSL configuration', {
       sslEnabled,
       isDevelopment,
-      secureValidation: !allowInsecureSSL
+      sslRejectUnauthorized: rejectUnauthorized,
+      hasCustomCa: Boolean(sslCaPem),
     });
 
     const pool = new Pool({
@@ -53,11 +59,9 @@ export async function initDb(): Promise<void> {
       max: 10, // Maximum number of clients in pool
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 2000,
-      // Security fix: Enable proper SSL certificate validation
-      // rejectUnauthorized: true prevents man-in-the-middle attacks
-      // Only allow insecure SSL in explicit development mode with ALLOW_INSECURE_SSL=true
       ssl: sslEnabled ? {
-        rejectUnauthorized: !allowInsecureSSL,
+        rejectUnauthorized,
+        ...(sslCaPem ? { ca: sslCaPem } : {}),
       } : undefined,
     });
 

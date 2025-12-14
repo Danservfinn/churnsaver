@@ -108,3 +108,4 @@ echo "Next steps:"
 echo "1. Set environment variables in Vercel (see VERCEL_STAGING_ENV_VARS.md)"
 echo "2. Trigger a new deployment"
 echo "3. Run full integration tests with real webhook payloads"
+

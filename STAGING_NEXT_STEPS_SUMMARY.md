@@ -139,3 +139,4 @@ Once staging is fully configured and tested:
 5. Configure Whop production webhook
 6. Run production smoke tests
 7. Submit to Whop App Store (if applicable)
+

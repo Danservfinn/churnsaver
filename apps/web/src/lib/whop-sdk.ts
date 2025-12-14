@@ -97,10 +97,10 @@ export async function getRequestContextSDK(request: { headers: HeaderLike }): Pr
     }
 
     // Extract companyId and userId from verified result
+    // NEVER use app_id as companyId fallback - app_id is the app identifier, not the company
     const resolvedCompanyId =
       (result as any).companyId ??
       (result as any).company_id ??
-      (result as any).app_id ??
       null;
     const resolvedUserId = result.userId ?? (result as any).user_id ?? null;
 

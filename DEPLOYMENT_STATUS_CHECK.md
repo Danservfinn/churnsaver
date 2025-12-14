@@ -65,3 +65,4 @@ Once deployment completes, these should appear automatically:
 **Status**: ⏳ **WAITING FOR FIRST DEPLOYMENT**
 
 The project `churnsaver-o3gl` exists and has environment variables configured, but no deployment has been created yet. Once a deployment is triggered (either automatically via Git or manually), the cron schedules will appear automatically.
+

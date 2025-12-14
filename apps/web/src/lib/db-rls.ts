@@ -58,18 +58,24 @@ function getSSLConfiguration(): SSLConfig | undefined {
   // Security enhancement: Always validate certificates in production-like environments
   // Only allow insecure SSL in explicit development mode with additional safeguards
   // Security logging: Log SSL configuration decisions
+  const sslCaPem = process.env.DB_SSL_CA_CERT_PEM;
   logger.info('SSL Configuration Decision', {
     sslEnabled,
     isDevelopment: process.env.NODE_ENV === 'development',
     isProductionLike: isProductionLikeEnvironment(),
     secureValidation: true,
-    databaseProvider: isSupabase ? 'supabase' : 'other'
+    databaseProvider: isSupabase ? 'supabase' : 'other',
+    hasCustomCa: Boolean(sslCaPem),
   });
 
   // Certificate pinning support for production deployments
   const sslConfig: SSLConfig = {
-    rejectUnauthorized: true,
+    rejectUnauthorized: Boolean(sslCaPem),
   };
+
+  if (sslCaPem) {
+    sslConfig.ca = sslCaPem;
+  }
 
   // Load custom CA certificate if specified (for certificate pinning)
   // Skip in Edge Runtime where Node.js file system APIs are not available

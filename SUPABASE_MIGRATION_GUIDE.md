@@ -162,3 +162,4 @@ After migrations complete:
 - **Use pooler connection (6543) for Vercel runtime**
 - Migrations are idempotent where possible, but some may need manual intervention if partially applied
 - Always verify RLS policies after migrations complete
+

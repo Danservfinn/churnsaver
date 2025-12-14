@@ -53,3 +53,4 @@
      - `/api/cron/process-queue` - `* * * * *`
      - `/api/cron/reminders` - `*/15 * * * *`
      - `/api/cron/maintenance` - `0 * * * *`
+

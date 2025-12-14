@@ -95,3 +95,4 @@ vercel env add WHOP_API_KEY production preview development --sensitive
 2. Trigger a new deployment: `vercel --prod` or via dashboard
 3. Verify cron schedules: https://vercel.com/dannys-projects-de68569e/churnsaver-o3gl/settings/crons
 4. Run smoke tests: `bash apps/web/scripts/staging-smoke-tests.sh`
+

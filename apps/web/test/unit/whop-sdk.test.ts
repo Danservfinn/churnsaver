@@ -71,6 +71,63 @@ describe('whop-sdk authentication', () => {
     });
   });
 
+  it('returns null companyId when token verified but companyId missing', async () => {
+    verifyUserTokenMock.mockResolvedValueOnce({
+      userId: 'user-1',
+      // companyId is missing
+    });
+    const { getRequestContextSDK } = await loadModule();
+
+    const headers = new Headers();
+    headers.set('x-whop-user-token', 'valid-token-no-company');
+
+    const result = await getRequestContextSDK({ headers });
+
+    expect(verifyUserTokenMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      companyId: null,
+      userId: 'user-1',
+      isAuthenticated: true,
+    });
+  });
+
+  it('returns unauthenticated when token verified but userId missing', async () => {
+    verifyUserTokenMock.mockResolvedValueOnce({
+      companyId: 'company-1',
+      // userId is missing
+    });
+    const { getRequestContextSDK } = await loadModule();
+
+    const headers = new Headers();
+    headers.set('x-whop-user-token', 'valid-token-no-user');
+
+    const result = await getRequestContextSDK({ headers });
+
+    expect(verifyUserTokenMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      companyId: null,
+      userId: null,
+      isAuthenticated: false,
+    });
+  });
+
+  it('never uses app_id as companyId fallback', async () => {
+    verifyUserTokenMock.mockResolvedValueOnce({
+      userId: 'user-1',
+      app_id: 'app_should_not_be_used',
+      // companyId and company_id are both missing
+    });
+    const { getRequestContextSDK } = await loadModule();
+
+    const headers = new Headers();
+    headers.set('x-whop-user-token', 'token-with-app-id');
+
+    const result = await getRequestContextSDK({ headers });
+
+    expect(result.companyId).toBeNull();
+    expect(result.companyId).not.toBe('app_should_not_be_used');
+  });
+
   it('verifyUserToken helper returns SDK result when token exists', async () => {
     const { verifyUserToken } = await loadModule();
 
@@ -96,5 +153,6 @@ describe('whop-sdk authentication', () => {
     });
   });
 });
+
 
 

@@ -53,6 +53,10 @@ https://[PRODUCTION_DOMAIN]/api/webhooks/whop
 ```
 
 **Webhook Events**: Same as staging
+- `payment_failed`
+- `payment_succeeded`
+- `membership_activated`
+- `membership_deactivated`
 
 **Webhook Secret**: Generate new secure secret for production
 
@@ -98,11 +102,11 @@ Navigate to: App Settings → API Keys
 # Generate test signature
 WEBHOOK_SECRET="your_webhook_secret"
 TIMESTAMP=$(date +%s)
-PAYLOAD='{"type":"membership.payment_failed","membership_id":"test_mem_123","data":{}}'
+PAYLOAD='{"type":"payment_failed","membership_id":"test_mem_123","data":{}}'
 SIGNATURE=$(echo -n "${TIMESTAMP}.${PAYLOAD}" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | cut -d' ' -f2)
 
 # Send test webhook
-curl -X POST https://churnsaver-o3gl-hlqdg3fn8-dannys-projects-de68569e.vercel.app/api/webhooks/whop \
+curl -X POST https://churnsaver-staging.vercel.app/api/webhooks/whop \
   -H "Content-Type: application/json" \
   -H "x-whop-signature: ${SIGNATURE}" \
   -H "x-whop-timestamp: ${TIMESTAMP}" \
@@ -136,3 +140,4 @@ Before submitting to Whop App Store:
 - Whop Developer Docs: https://dev.whop.com
 - Whop API Reference: https://dev.whop.com/api-reference
 - Webhook Documentation: https://dev.whop.com/apps/webhooks
+

@@ -63,3 +63,4 @@
 ## Summary
 
 ✅ **First deployment successful!** The project `churnsaver-o3gl` is now live on Vercel. Cron schedules are configured but limited to hourly runs due to Hobby plan restrictions. To enable more frequent cron jobs (every minute for process-queue), upgrade to Vercel Pro plan.
+

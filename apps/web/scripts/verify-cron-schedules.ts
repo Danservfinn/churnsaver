@@ -39,9 +39,8 @@ async function checkCronSchedules() {
     console.log('Cron schedules:', JSON.stringify(data, null, 2));
     
     const expectedCrons = [
-      { path: '/api/cron/process-queue', schedule: '* * * * *' },
-      { path: '/api/cron/reminders', schedule: '*/15 * * * *' },
-      { path: '/api/cron/maintenance', schedule: '0 * * * *' },
+      { path: '/api/cron/process-queue', schedule: '0 0 * * *' },
+      { path: '/api/cron/maintenance', schedule: '0 0 * * *' },
     ];
     
     if (data.crons && Array.isArray(data.crons)) {
@@ -68,3 +67,4 @@ async function checkCronSchedules() {
 }
 
 checkCronSchedules();
+

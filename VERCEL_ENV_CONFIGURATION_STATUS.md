@@ -65,3 +65,4 @@ You can use Vercel's "Import .env" feature with the content from `vercel-env-imp
 2. Verify cron schedules appear
 3. Run smoke tests
 4. Configure Whop webhook
+

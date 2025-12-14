@@ -56,3 +56,4 @@ Check if these exist for all environments (production/preview/development):
 The automation script (`apps/web/scripts/add-vercel-env-vars.ts`) successfully added most variables. It can be reused in the future by:
 1. Setting required environment variables
 2. Running: `npx tsx scripts/add-vercel-env-vars.ts`
+

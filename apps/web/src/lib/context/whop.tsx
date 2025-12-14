@@ -101,7 +101,8 @@ export function WhopProvider({ children }: WhopProviderProps) {
   const [qaBypassEnabled, setQaBypassEnabled] = useState<boolean>(false);
 
   const resolveQaDemoBypass = () => {
-    const companyFallback = env.NEXT_PUBLIC_QA_DEMO_COMPANY_ID || env.QA_DEMO_COMPANY_ID || env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID || 'demo-company';
+    // NEVER use WHOP_APP_ID as companyId fallback - use explicit demo company ID or fallback to 'demo-company'
+    const companyFallback = env.NEXT_PUBLIC_QA_DEMO_COMPANY_ID || env.QA_DEMO_COMPANY_ID || 'demo-company';
     const userFallback = env.NEXT_PUBLIC_QA_DEMO_USER_ID || env.QA_DEMO_USER_ID || 'demo-user';
 
     let queryEnabled = false;

@@ -40,3 +40,4 @@ After successful deployment with correct Root Directory, you should see:
 - `/api/cron/maintenance` - Schedule: `0 * * * *` (hourly)
 
 If cron jobs don't appear, the Root Directory is likely incorrect or `vercel.json` isn't being read.
+

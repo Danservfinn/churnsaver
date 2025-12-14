@@ -85,3 +85,4 @@ After deployment, verify cron schedules are active:
    - `/api/cron/maintenance` - Schedule: `0 * * * *` (hourly)
 
 If crons are not showing, they may need to be configured manually or will appear after the first deployment with `vercel.json` present.
+

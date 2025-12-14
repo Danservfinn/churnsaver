@@ -747,8 +747,8 @@ export function getWhopOAuthService(): WhopOAuthService | null {
   return _whopOAuthService;
 }
 
-// For backwards compatibility
-export const whopOAuthService = new Proxy({} as WhopOAuthService | null, {
+// For backwards compatibility - lazy proxy
+export const whopOAuthService = new Proxy({} as WhopOAuthService, {
   get(_target, prop) {
     const service = getWhopOAuthService();
     if (!service) return undefined;

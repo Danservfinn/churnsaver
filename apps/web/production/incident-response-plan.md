@@ -1,3 +1,9 @@
+<!--
+PRODUCTION LAUNCH BLOCKER:
+Fill in actual contact information before go-live.
+Search for [OWNER_NEEDED] to find all placeholders.
+-->
+
 # Production Incident Response Plan
 
 **Version:** 1.0
@@ -572,14 +578,14 @@ Churn Saver Team
 ## Emergency Contacts
 
 ### On-Call Engineers
-- **Primary:** [Name] - [Phone] - [Email] - [Slack]
-- **Secondary:** [Name] - [Phone] - [Email] - [Slack]
-- **Tertiary:** [Name] - [Phone] - [Email] - [Slack]
+- **Primary:** [OWNER_NEEDED] - [OWNER_NEEDED] - [OWNER_NEEDED] - [OWNER_NEEDED]
+- **Secondary:** [OWNER_NEEDED] - [OWNER_NEEDED] - [OWNER_NEEDED] - [OWNER_NEEDED]
+- **Tertiary:** [OWNER_NEEDED] - [OWNER_NEEDED] - [OWNER_NEEDED] - [OWNER_NEEDED]
 
 ### Escalation Contacts
-- **Engineering Manager:** [Name] - [Phone] - [Email]
-- **VP Engineering:** [Name] - [Phone] - [Email]
-- **CTO:** [Name] - [Phone] - [Email]
+- **Engineering Manager:** [OWNER_NEEDED] - [OWNER_NEEDED] - [OWNER_NEEDED]
+- **VP Engineering:** [OWNER_NEEDED] - [OWNER_NEEDED] - [OWNER_NEEDED]
+- **CTO:** [OWNER_NEEDED] - [OWNER_NEEDED] - [OWNER_NEEDED]
 
 ### External Support
 - **Vercel Support:** 24/7 support available

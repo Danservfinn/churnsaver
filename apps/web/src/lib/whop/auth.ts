@@ -1073,9 +1073,23 @@ export class WhopAuthService {
 }
 
 /**
- * Default authentication service instance
+ * Default authentication service instance (lazy initialized)
  */
-export const whopAuthService = new WhopAuthService();
+let _whopAuthService: WhopAuthService | null = null;
+
+export function getWhopAuthService(): WhopAuthService {
+  if (!_whopAuthService) {
+    _whopAuthService = new WhopAuthService();
+  }
+  return _whopAuthService;
+}
+
+// For backwards compatibility - lazy proxy
+export const whopAuthService = new Proxy({} as WhopAuthService, {
+  get(_target, prop) {
+    return (getWhopAuthService() as any)[prop];
+  },
+});
 
 /**
  * Authentication middleware factory

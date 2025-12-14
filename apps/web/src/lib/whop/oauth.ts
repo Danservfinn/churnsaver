@@ -714,33 +714,46 @@ export class WhopOAuthService {
 }
 
 /**
- * Default OAuth service instance
+ * Default OAuth service instance (lazy initialized)
  */
-export const whopOAuthService = (() => {
-  try {
-    // Try to get OAuth configuration from environment
-    const oauthConfig: OAuthConfig = {
-      clientId: process.env.WHOP_OAUTH_CLIENT_ID || '',
-      clientSecret: process.env.WHOP_OAUTH_CLIENT_SECRET || '',
-      redirectUri: process.env.WHOP_OAUTH_REDIRECT_URI || `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback`,
-      scope: ['read', 'write']
-    };
+let _whopOAuthService: WhopOAuthService | null | undefined = undefined;
 
-    if (!oauthConfig.clientId || !oauthConfig.clientSecret) {
-      logger.warn('OAuth service not properly configured - missing client credentials', {
-        hasClientId: !!oauthConfig.clientId,
-        hasClientSecret: !!oauthConfig.clientSecret
+export function getWhopOAuthService(): WhopOAuthService | null {
+  if (_whopOAuthService === undefined) {
+    try {
+      const oauthConfig: OAuthConfig = {
+        clientId: process.env.WHOP_OAUTH_CLIENT_ID || '',
+        clientSecret: process.env.WHOP_OAUTH_CLIENT_SECRET || '',
+        redirectUri: process.env.WHOP_OAUTH_REDIRECT_URI || `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback`,
+        scope: ['read', 'write']
+      };
+
+      if (!oauthConfig.clientId || !oauthConfig.clientSecret) {
+        logger.warn('OAuth service not properly configured - missing client credentials', {
+          hasClientId: !!oauthConfig.clientId,
+          hasClientSecret: !!oauthConfig.clientSecret
+        });
+        _whopOAuthService = null;
+      } else {
+        _whopOAuthService = new WhopOAuthService(oauthConfig);
+      }
+    } catch (error) {
+      logger.error('Failed to initialize OAuth service', {
+        error: error instanceof Error ? error.message : String(error)
       });
-      return null;
+      _whopOAuthService = null;
     }
-
-    return new WhopOAuthService(oauthConfig);
-  } catch (error) {
-    logger.error('Failed to initialize OAuth service', {
-      error: error instanceof Error ? error.message : String(error)
-    });
-    return null;
   }
-})();
+  return _whopOAuthService;
+}
+
+// For backwards compatibility
+export const whopOAuthService = new Proxy({} as WhopOAuthService | null, {
+  get(_target, prop) {
+    const service = getWhopOAuthService();
+    if (!service) return undefined;
+    return (service as any)[prop];
+  },
+});
 
 // Types are already exported as interfaces above, no need to re-export

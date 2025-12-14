@@ -539,34 +539,22 @@ export function createWhopApiClient(config?: WhopSdkConfig): WhopApiClient {
 }
 
 /**
- * Default client instance for general use
+ * Default client instance for general use (lazy initialized)
  */
-export const whopApiClient = (() => {
-  try {
-    return new WhopApiClient();
-  } catch (error) {
-    // Return a mock client in case of configuration error
-    logger.error('Failed to initialize Whop API client', { error: error instanceof Error ? error.message : String(error) });
-    
-    // Return a minimal mock implementation
-    return {
-      request: async () => {
-        throw new Error('Whop API client not initialized due to configuration error');
-      },
-      get: async () => {
-        throw new Error('Whop API client not initialized due to configuration error');
-      },
-      post: async () => {
-        throw new Error('Whop API client not initialized due to configuration error');
-      },
-      put: async () => {
-        throw new Error('Whop API client not initialized due to configuration error');
-      },
-      delete: async () => {
-        throw new Error('Whop API client not initialized due to configuration error');
-      }
-    } as any;
+let _whopApiClient: WhopApiClient | null = null;
+
+export function getWhopApiClient(): WhopApiClient {
+  if (!_whopApiClient) {
+    _whopApiClient = new WhopApiClient();
   }
-})();
+  return _whopApiClient;
+}
+
+// For backwards compatibility - lazy proxy
+export const whopApiClient = new Proxy({} as WhopApiClient, {
+  get(_target, prop) {
+    return (getWhopApiClient() as any)[prop];
+  },
+});
 
 // Export types for external use

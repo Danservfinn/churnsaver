@@ -45,13 +45,26 @@ export interface RequestContext {
 
 /**
  * Canonical Whop SDK client instance
- * Initialized with environment variables for consistent usage across the application
- * Note: Uses lazy initialization to avoid build-time errors when env vars are missing
+ * Uses lazy initialization to avoid build-time errors when env vars are missing
  */
-export const whopsdk = new Whop({
-  appID: process.env.NEXT_PUBLIC_WHOP_APP_ID,
-  apiKey: process.env.WHOP_API_KEY,
-  webhookKey: process.env.WHOP_WEBHOOK_SECRET ? btoa(process.env.WHOP_WEBHOOK_SECRET) : undefined,
+let _whopsdk: Whop | null = null;
+
+function getWhopSdk(): Whop {
+  if (!_whopsdk) {
+    _whopsdk = new Whop({
+      appID: process.env.NEXT_PUBLIC_WHOP_APP_ID,
+      apiKey: process.env.WHOP_API_KEY,
+      webhookKey: process.env.WHOP_WEBHOOK_SECRET ? btoa(process.env.WHOP_WEBHOOK_SECRET) : undefined,
+    });
+  }
+  return _whopsdk;
+}
+
+// Export a proxy that lazily initializes the SDK
+export const whopsdk = new Proxy({} as Whop, {
+  get(_target, prop) {
+    return (getWhopSdk() as any)[prop];
+  },
 });
 
 /**

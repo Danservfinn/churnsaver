@@ -46,11 +46,12 @@ export interface RequestContext {
 /**
  * Canonical Whop SDK client instance
  * Initialized with environment variables for consistent usage across the application
+ * Note: Uses lazy initialization to avoid build-time errors when env vars are missing
  */
 export const whopsdk = new Whop({
-  appID: env.NEXT_PUBLIC_WHOP_APP_ID || env.WHOP_APP_ID,
-  apiKey: env.WHOP_API_KEY,
-  webhookKey: env.WHOP_WEBHOOK_SECRET ? Buffer.from(env.WHOP_WEBHOOK_SECRET, "utf8").toString("base64") : undefined,
+  appID: process.env.NEXT_PUBLIC_WHOP_APP_ID,
+  apiKey: process.env.WHOP_API_KEY,
+  webhookKey: process.env.WHOP_WEBHOOK_SECRET ? btoa(process.env.WHOP_WEBHOOK_SECRET) : undefined,
 });
 
 /**

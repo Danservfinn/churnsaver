@@ -293,6 +293,7 @@ export default function DashboardCompanyPage({
             size="sm"
             className="gap-2"
             aria-label="Export cases to CSV"
+            data-testid="export-csv-button"
           >
             <Download className="h-4 w-4" />
             Export CSV
@@ -343,6 +344,7 @@ export default function DashboardCompanyPage({
             subtitle="Currently being recovered"
             isLoading={isLoadingKpis}
             variant="warning"
+            data-testid="kpi-active-cases"
           />
 
           <KpiTile
@@ -351,6 +353,7 @@ export default function DashboardCompanyPage({
             subtitle="Successful recoveries"
             isLoading={isLoadingKpis}
             variant="success"
+            data-testid="kpi-recoveries"
           />
 
           <KpiTile
@@ -359,6 +362,7 @@ export default function DashboardCompanyPage({
             subtitle={`${kpis?.windowDays || 14}-day attribution window`}
             isLoading={isLoadingKpis}
             variant="info"
+            data-testid="kpi-recovery-rate"
           />
 
           <KpiTile
@@ -367,6 +371,7 @@ export default function DashboardCompanyPage({
             subtitle="Revenue attributed to recoveries"
             isLoading={isLoadingKpis}
             variant="success"
+            data-testid="kpi-recovered-revenue"
           />
         </div>
       )}
@@ -423,6 +428,7 @@ export default function DashboardCompanyPage({
           disabled={isLoadingKpis || isLoadingCases}
           variant="outline"
           className="gap-2"
+          data-testid="refresh-data-button"
         >
           <RefreshCw className={`h-4 w-4 ${(isLoadingKpis || isLoadingCases) ? 'animate-spin' : ''}`} />
           Refresh Data

@@ -4,25 +4,36 @@
 @import "../styles/backgrounds.css" layer(utilities);
 @config '../../tailwind.config.ts';
 
+/* 
+ * Churn Saver runs inside Whop's dark-themed iframe.
+ * We use transparent backgrounds and dark theme colors by default
+ * to seamlessly integrate with Whop's UI.
+ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #18181b;
-  --card: #ffffff;
-  --card-foreground: #18181b;
-  --border: #e4e4e7;
-  --input: #e4e4e7;
+  /* Dark theme as default - Whop iframe is always dark */
+  --background: transparent;
+  --foreground: #fafafa;
+  --card: rgba(24, 24, 27, 0.8);
+  --card-foreground: #fafafa;
+  --border: #27272a;
+  --input: #27272a;
   --ring: #f97316;
-  --muted: #f4f4f5;
-  --muted-foreground: #71717a;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
   --primary: #f97316;
   --primary-foreground: #ffffff;
-  --secondary: #f4f4f5;
-  --secondary-foreground: #18181b;
+  --secondary: #27272a;
+  --secondary-foreground: #fafafa;
   --accent: #f97316;
   --accent-foreground: #ffffff;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
   --radius: 0.5rem;
+  
+  /* Popover/dropdown backgrounds need to be opaque */
+  --popover: #18181b;
+  --popover-foreground: #fafafa;
 }
 
 @theme inline {
@@ -43,26 +54,27 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #09090b;
-    --foreground: #fafafa;
-    --card: #18181b;
-    --card-foreground: #fafafa;
-    --border: #27272a;
-    --input: #27272a;
-    --muted: #27272a;
-    --muted-foreground: #a1a1aa;
-    --primary: #f97316;
-    --primary-foreground: #ffffff;
-    --secondary: #27272a;
-    --secondary-foreground: #fafafa;
-    --accent: #f97316;
-    --accent-foreground: #ffffff;
+/* Light mode override - only if explicitly requested outside Whop iframe */
+@media (prefers-color-scheme: light) {
+  :root:not(.whop-iframe) {
+    --background: #ffffff;
+    --foreground: #18181b;
+    --card: #ffffff;
+    --card-foreground: #18181b;
+    --border: #e4e4e7;
+    --input: #e4e4e7;
+    --muted: #f4f4f5;
+    --muted-foreground: #71717a;
+    --secondary: #f4f4f5;
+    --secondary-foreground: #18181b;
+    --popover: #ffffff;
+    --popover-foreground: #18181b;
   }
 }
 
@@ -104,7 +116,7 @@ html {
   scroll-behavior: smooth;
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar - dark themed */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

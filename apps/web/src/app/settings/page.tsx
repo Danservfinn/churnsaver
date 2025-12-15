@@ -488,7 +488,7 @@ export default function Settings() {
                   </label>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {REMINDER_OFFSETS.map(offset => {
-                      const isChecked = settings?.reminder_offsets_days?.includes(offset.value) ?? DEFAULT_SETTINGS.reminder_offsets_days.includes(offset.value);
+                      const isChecked = reminderOffsets.includes(offset.value);
                       return (
                         <label
                           key={offset.value}

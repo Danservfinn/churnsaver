@@ -20,6 +20,7 @@ interface CreatorSettings {
   incentive_days: number;
   reminder_offsets_days: number[];
   reminder_time: string;
+  reminder_timezone: string;
   updated_at: string;
 }
 
@@ -47,6 +48,7 @@ const DEFAULT_SETTINGS: CreatorSettings = {
   incentive_days: 3,
   reminder_offsets_days: [0, 2, 4],
   reminder_time: '10:00',
+  reminder_timezone: 'America/New_York',
   updated_at: new Date().toISOString()
 };
 
@@ -87,6 +89,23 @@ const TIME_OPTIONS = [
   { value: '20:00', label: '8:00 PM' },
 ];
 
+const TIMEZONE_OPTIONS = [
+  { value: 'America/New_York', label: 'Eastern Time (ET)' },
+  { value: 'America/Chicago', label: 'Central Time (CT)' },
+  { value: 'America/Denver', label: 'Mountain Time (MT)' },
+  { value: 'America/Los_Angeles', label: 'Pacific Time (PT)' },
+  { value: 'America/Anchorage', label: 'Alaska Time (AKT)' },
+  { value: 'Pacific/Honolulu', label: 'Hawaii Time (HT)' },
+  { value: 'Europe/London', label: 'London (GMT/BST)' },
+  { value: 'Europe/Paris', label: 'Central European (CET)' },
+  { value: 'Europe/Berlin', label: 'Berlin (CET)' },
+  { value: 'Asia/Tokyo', label: 'Tokyo (JST)' },
+  { value: 'Asia/Shanghai', label: 'China (CST)' },
+  { value: 'Asia/Singapore', label: 'Singapore (SGT)' },
+  { value: 'Australia/Sydney', label: 'Sydney (AEST)' },
+  { value: 'UTC', label: 'UTC' },
+];
+
 export default function Settings() {
   const { addToast } = useToast();
   const { getAuthHeaders } = useWhop();
@@ -97,6 +116,7 @@ export default function Settings() {
   const [incentiveDays, setIncentiveDays] = useState<number>(DEFAULT_SETTINGS.incentive_days);
   const [reminderOffsets, setReminderOffsets] = useState<number[]>(DEFAULT_SETTINGS.reminder_offsets_days);
   const [reminderTime, setReminderTime] = useState<string>(DEFAULT_SETTINGS.reminder_time);
+  const [reminderTimezone, setReminderTimezone] = useState<string>(DEFAULT_SETTINGS.reminder_timezone);
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -140,6 +160,7 @@ export default function Settings() {
       setIncentiveDays(settingsData.incentive_days);
       setReminderOffsets(settingsData.reminder_offsets_days);
       setReminderTime(settingsData.reminder_time || DEFAULT_SETTINGS.reminder_time);
+      setReminderTimezone(settingsData.reminder_timezone || DEFAULT_SETTINGS.reminder_timezone);
 
       if (subscriptionRes.ok) {
         const subscriptionData = await subscriptionRes.json();
@@ -244,7 +265,8 @@ export default function Settings() {
       enable_dm: enableDm,
       incentive_days: incentiveDays,
       reminder_offsets_days: reminderOffsets,
-      reminder_time: reminderTime
+      reminder_time: reminderTime,
+      reminder_timezone: reminderTimezone
     });
   };
 
@@ -255,6 +277,7 @@ export default function Settings() {
       setIncentiveDays(DEFAULT_SETTINGS.incentive_days);
       setReminderOffsets(DEFAULT_SETTINGS.reminder_offsets_days);
       setReminderTime(DEFAULT_SETTINGS.reminder_time);
+      setReminderTimezone(DEFAULT_SETTINGS.reminder_timezone);
       await saveSettings(DEFAULT_SETTINGS);
     }
   };
@@ -507,27 +530,47 @@ export default function Settings() {
                   </Alert>
                 )}
                 
-                {/* Time of Day Selector */}
+                {/* Time and Timezone Selectors */}
                 <div>
-                  <label htmlFor="reminder_time" className="block text-sm font-medium text-foreground mb-2">
+                  <label className="block text-sm font-medium text-foreground mb-2">
                     Time of Day
                   </label>
-                  <select
-                    id="reminder_time"
-                    name="reminder_time"
-                    data-testid="reminder-time-input"
-                    className="w-full md:w-64 px-4 py-2 border border-input rounded-md bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-transparent transition-colors"
-                    value={reminderTime}
-                    onChange={(e) => setReminderTime(e.target.value)}
-                  >
-                    {TIME_OPTIONS.map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="flex-1">
+                      <select
+                        id="reminder_time"
+                        name="reminder_time"
+                        data-testid="reminder-time-input"
+                        className="w-full px-4 py-2 border border-input rounded-md bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-transparent transition-colors"
+                        value={reminderTime}
+                        onChange={(e) => setReminderTime(e.target.value)}
+                      >
+                        {TIME_OPTIONS.map(option => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <select
+                        id="reminder_timezone"
+                        name="reminder_timezone"
+                        data-testid="reminder-timezone-input"
+                        className="w-full px-4 py-2 border border-input rounded-md bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-transparent transition-colors"
+                        value={reminderTimezone}
+                        onChange={(e) => setReminderTimezone(e.target.value)}
+                      >
+                        {TIMEZONE_OPTIONS.map(option => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                   <p className="text-sm text-muted-foreground mt-2">
-                    Reminders will be sent at this time (in your local timezone)
+                    Reminders will be sent at this time in the selected timezone
                   </p>
                 </div>
 

@@ -87,51 +87,59 @@ export default function ExperiencePage({
   const isDemo = isQaDemoClient();
 
   // Fetch experience info to get company_id
+  // Note: Using a ref to avoid dependency on getAuthHeaders which changes every render
   useEffect(() => {
+    let mounted = true;
+
     const fetchExperience = async () => {
       try {
         setIsLoadingExperience(true);
         setExperienceError(null);
 
+        console.log('[Experience] Fetching experience info for:', experienceId);
+
         // Call our API to get experience info (which fetches from Whop SDK)
         const response = await fetch(`/api/experiences/${experienceId}`, {
-          headers: getAuthHeaders(),
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
         });
+
+        console.log('[Experience] API response status:', response.status);
+
+        if (!mounted) return;
 
         if (response.ok) {
           const data = await response.json();
+          console.log('[Experience] Got company_id:', data.company_id);
           setExperienceInfo(data);
           setCompanyId(data.company_id);
-          logger.info('Experience info loaded', {
-            experienceId,
-            companyId: data.company_id,
-          });
         } else {
-          // If API doesn't exist yet, try to extract company from experience ID pattern
-          // or use a fallback approach
-          logger.warn('Failed to fetch experience info', {
-            experienceId,
-            status: response.status,
-          });
-
-          // For now, set a placeholder - we'll need to create the API endpoint
-          setExperienceError('Unable to load experience info');
+          const errorText = await response.text();
+          console.error('[Experience] API error:', response.status, errorText);
+          setExperienceError(`Unable to load experience: ${response.status}`);
         }
       } catch (error) {
-        logger.error('Error fetching experience', {
-          experienceId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        setExperienceError('Failed to load experience');
+        console.error('[Experience] Fetch error:', error);
+        if (mounted) {
+          setExperienceError('Failed to load experience');
+        }
       } finally {
-        setIsLoadingExperience(false);
+        if (mounted) {
+          setIsLoadingExperience(false);
+        }
       }
     };
 
     if (experienceId) {
       fetchExperience();
     }
-  }, [experienceId, getAuthHeaders]);
+
+    return () => {
+      mounted = false;
+    };
+  }, [experienceId]); // Only depend on experienceId, not getAuthHeaders
 
   // Fetch KPIs when we have company ID
   const fetchKpis = async () => {

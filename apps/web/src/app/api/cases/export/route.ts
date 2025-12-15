@@ -18,7 +18,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     // Get company context from request
     const context = await getRequestContextSDK(request);
-    const companyId = context.companyId ?? undefined;
+    
+    // Get companyId from query params (preferred - survives proxy) or auth context
+    const { searchParams } = new URL(request.url);
+    const queryCompanyId = searchParams.get('companyId');
+    const companyId = queryCompanyId || context.companyId || undefined;
 
     // Enforce authentication in production for creator-facing endpoints
     if (isProductionLikeEnvironment() && !context.isAuthenticated) {
@@ -50,9 +54,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const { searchParams } = new URL(request.url);
-
-    // Parse filters (same as cases API)
+    // Parse filters (same as cases API) - searchParams already declared above
     const status = searchParams.get('status'); // 'open', 'recovered', 'closed_no_recovery'
     const startDate = searchParams.get('startDate'); // ISO date string
     const endDate = searchParams.get('endDate'); // ISO date string

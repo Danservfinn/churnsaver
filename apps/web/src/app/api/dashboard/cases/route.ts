@@ -53,9 +53,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return auth.response ?? errorResponses.unauthorizedResponse(auth.error || 'Authentication required');
     }
 
-    const { companyId, userId, isAuthenticated } = auth.context;
+    // Get companyId from query params (preferred - survives proxy) or auth context
+    const { searchParams } = new URL(request.url);
+    const queryCompanyId = searchParams.get('companyId');
+    const { companyId: authCompanyId, userId, isAuthenticated } = auth.context;
+    const companyId = queryCompanyId || authCompanyId;
+    
     if (!companyId) {
-      logger.warn('Dashboard cases request missing companyId in auth context');
+      logger.warn('Dashboard cases request missing companyId in both query params and auth context');
       return errorResponses.badRequestResponse('Company context is required');
     }
 
@@ -85,9 +90,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       });
     }
 
-    const { searchParams } = new URL(request.url);
-
-    // Parse pagination parameters
+    // Parse pagination parameters (searchParams already declared above)
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const limit = Math.max(1, Math.min(1000, parseInt(searchParams.get('limit') || '50', 10)));
     const offset = (page - 1) * limit;

@@ -21,14 +21,9 @@ export async function requireAuthContext(request: NextRequest): Promise<AuthResu
 
   const context = await getRequestContext(request);
 
-  if (!context.companyId) {
-    return {
-      success: false,
-      error: 'Company context required',
-      status: 400,
-      response: NextResponse.json({ error: 'Company context required' }, { status: 400 })
-    };
-  }
+  // Note: companyId may come from query params in routes, so we don't require it here
+  // Routes that need companyId should check both context.companyId and query params
+  // See Whop docs: "The company id will be passed in the path parameters when your app is loaded"
 
   if (isProductionLikeEnvironment() && !context.isAuthenticated) {
     return {

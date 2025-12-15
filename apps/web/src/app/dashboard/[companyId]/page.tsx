@@ -100,7 +100,7 @@ export default function DashboardCompanyPage({
     try {
       setIsLoadingKpis(true);
       setKpiError(null);
-      const response = await fetch('/api/dashboard/kpis?window=14', {
+      const response = await fetch(`/api/dashboard/kpis?window=14&companyId=${encodeURIComponent(urlCompanyId)}`, {
         headers: getAuthHeaders({ companyId: urlCompanyId }),
       });
       if (response.ok) {
@@ -136,7 +136,7 @@ export default function DashboardCompanyPage({
     try {
       setIsLoadingCases(true);
       setCasesError(null);
-      const response = await fetch(`/api/dashboard/cases?page=${page}&limit=10`, {
+      const response = await fetch(`/api/dashboard/cases?page=${page}&limit=10&companyId=${encodeURIComponent(urlCompanyId)}`, {
         headers: getAuthHeaders({ companyId: urlCompanyId }),
       });
       if (response.ok) {
@@ -205,6 +205,8 @@ export default function DashboardCompanyPage({
     }
 
     const params = new URLSearchParams();
+    // Include companyId for proxy compatibility
+    params.append('companyId', urlCompanyId);
     if (casesData?.filters.status) {
       params.append('status', casesData.filters.status);
     }

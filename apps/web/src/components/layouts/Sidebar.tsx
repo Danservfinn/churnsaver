@@ -6,14 +6,10 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
-  Users,
-  FileText,
   Settings,
   ChevronLeft,
   ChevronRight,
-  Zap,
 } from 'lucide-react';
-import { useWhop } from '@/lib/context/whop';
 
 interface NavItem {
   label: string;
@@ -28,30 +24,24 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
   const pathname = usePathname();
-  const { companyId } = useWhop();
 
-  const basePath = companyId ? `/dashboard/${companyId}` : '/dashboard';
+  // Extract companyId from URL path instead of context
+  // Whop passes companyId via URL, not JWT token
+  const pathParts = pathname.split('/');
+  const dashboardIndex = pathParts.indexOf('dashboard');
+  const urlCompanyId = dashboardIndex >= 0 && pathParts[dashboardIndex + 1] 
+    ? pathParts[dashboardIndex + 1] 
+    : null;
 
+  const basePath = urlCompanyId ? `/dashboard/${urlCompanyId}` : '/dashboard';
+
+  // Only include routes that actually exist
+  // Note: /cases, /memberships, /incentives pages don't exist yet
   const navItems: NavItem[] = [
     {
       label: 'Dashboard',
       href: basePath,
       icon: LayoutDashboard,
-    },
-    {
-      label: 'Cases',
-      href: `${basePath}/cases`,
-      icon: FileText,
-    },
-    {
-      label: 'Memberships',
-      href: `${basePath}/memberships`,
-      icon: Users,
-    },
-    {
-      label: 'Incentives',
-      href: `${basePath}/incentives`,
-      icon: Zap,
     },
     {
       label: 'Settings',

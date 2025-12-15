@@ -55,10 +55,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Company context is required' }, { status: 400 });
     }
 
-    // Apply rate limiting for creator-facing case actions (30/min per company)
+    // Apply rate limiting for dashboard reads (120/min per company)
     const rateLimitResult = await checkRateLimit(
-      `case_action:dashboard_${companyId}`,
-      RATE_LIMIT_CONFIGS.caseActions
+      `api_read:dashboard_kpis_${companyId}`,
+      RATE_LIMIT_CONFIGS.apiRead
     );
 
     if (!rateLimitResult.allowed) {

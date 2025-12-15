@@ -4,6 +4,7 @@ import './globals.css';
 import { logger } from '@/lib/logger';
 import WhopClientWrapper from '@/components/layouts/WhopClientWrapper';
 import { WhopProvider } from '@/lib/context/whop';
+import { ToastProvider } from '@/components/ui/toast';
 import { AccessibilityUtils } from '@/lib/accessibility';
 import { accessibilityConfig, applyAccessibilityClasses } from '@/lib/accessibilityConfig';
 
@@ -66,9 +67,11 @@ export default function RootLayout({
         `}
       >
         <WhopProvider>
-          <WhopClientWrapper>
-            {children}
-          </WhopClientWrapper>
+          <ToastProvider>
+            <WhopClientWrapper>
+              {children}
+            </WhopClientWrapper>
+          </ToastProvider>
         </WhopProvider>
       </body>
     </html>

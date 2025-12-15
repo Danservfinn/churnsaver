@@ -60,15 +60,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     // Apply rate limiting for dashboard reads (120/min per company)
-    const rateLimitResult = await checkRateLimit(
-      `api_read:dashboard_cases_${companyId}`,
-      RATE_LIMIT_CONFIGS.apiRead
-    );
+    // Wrap in try-catch to prevent rate limit DB issues from blocking requests
+    try {
+      const rateLimitResult = await checkRateLimit(
+        `api_read:dashboard_cases_${companyId}`,
+        RATE_LIMIT_CONFIGS.apiRead
+      );
 
-    if (!rateLimitResult.allowed) {
-      return errorResponses.unprocessableEntityResponse('Rate limit exceeded', {
-        retryAfter: rateLimitResult.retryAfter,
-        resetAt: rateLimitResult.resetAt.toISOString(),
+      if (!rateLimitResult.allowed) {
+        logger.warn('Dashboard cases rate limit exceeded', {
+          companyId,
+          retryAfter: rateLimitResult.retryAfter,
+        });
+        return errorResponses.unprocessableEntityResponse('Rate limit exceeded', {
+          retryAfter: rateLimitResult.retryAfter,
+          resetAt: rateLimitResult.resetAt.toISOString(),
+        });
+      }
+    } catch (rateLimitError) {
+      // Log but continue if rate limiting fails - don't block the request
+      logger.error('Rate limit check failed for dashboard cases', {
+        companyId,
+        error: rateLimitError instanceof Error ? rateLimitError.message : String(rateLimitError),
       });
     }
 

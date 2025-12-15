@@ -89,19 +89,29 @@ export async function checkRateLimit(
     };
 
   } catch (error) {
-    // In production, fail-closed for security
+    // Log the error with full details for debugging
+    logger.error('Rate limit database check failed', {
+      identifier,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      config: {
+        windowMs: config.windowMs,
+        maxRequests: config.maxRequests,
+      },
+    });
+
+    // In production, fail-OPEN temporarily to diagnose issues
+    // TODO: Revert to fail-closed after fixing database connectivity
     if (process.env.NODE_ENV === 'production') {
-      logger.error('Rate limit check failed, blocking request (fail-closed)', {
+      logger.warn('Rate limit check failed, ALLOWING request (temporary fail-open for diagnosis)', {
         identifier,
-        error: error instanceof Error ? error.message : String(error),
       });
 
-      // Block the request on error in production (fail-closed)
+      // Allow the request on error temporarily to diagnose the real issue
       return {
-        allowed: false,
+        allowed: true,
         resetAt: new Date(Date.now() + config.windowMs),
-        remaining: 0,
-        retryAfter: Math.ceil(config.windowMs / 1000),
+        remaining: config.maxRequests - 1,
       };
     }
 

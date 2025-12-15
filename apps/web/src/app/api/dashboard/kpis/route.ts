@@ -56,16 +56,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     // Apply rate limiting for dashboard reads (120/min per company)
-    const rateLimitResult = await checkRateLimit(
-      `api_read:dashboard_kpis_${companyId}`,
-      RATE_LIMIT_CONFIGS.apiRead
-    );
-
-    if (!rateLimitResult.allowed) {
-      return NextResponse.json(
-        { error: 'Rate limit exceeded', retryAfter: rateLimitResult.retryAfter, resetAt: rateLimitResult.resetAt.toISOString() },
-        { status: 422 }
+    // Wrap in try-catch to prevent rate limit DB issues from blocking requests
+    try {
+      const rateLimitResult = await checkRateLimit(
+        `api_read:dashboard_kpis_${companyId}`,
+        RATE_LIMIT_CONFIGS.apiRead
       );
+
+      if (!rateLimitResult.allowed) {
+        logger.warn('Dashboard KPIs rate limit exceeded', {
+          companyId,
+          retryAfter: rateLimitResult.retryAfter,
+        });
+        return NextResponse.json(
+          { error: 'Rate limit exceeded', retryAfter: rateLimitResult.retryAfter, resetAt: rateLimitResult.resetAt.toISOString() },
+          { status: 429 }
+        );
+      }
+    } catch (rateLimitError) {
+      // Log but continue if rate limiting fails - don't block the request
+      logger.error('Rate limit check failed for dashboard KPIs', {
+        companyId,
+        error: rateLimitError instanceof Error ? rateLimitError.message : String(rateLimitError),
+      });
     }
 
     // Validate query parameters using zod schema

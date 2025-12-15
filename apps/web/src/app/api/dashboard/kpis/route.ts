@@ -49,23 +49,41 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return auth.response ?? NextResponse.json({ error: auth.error || 'Authentication required' }, { status: auth.status || 401 });
     }
 
-    const { companyId, userId, isAuthenticated } = auth.context;
+    // Get companyId from query params (preferred - survives proxy) or auth context
+    const queryParams = new URL(request.url).searchParams;
+    const queryCompanyId = queryParams.get('companyId');
+    const { companyId: authCompanyId, userId, isAuthenticated } = auth.context;
+    const companyId = queryCompanyId || authCompanyId;
+    
     if (!companyId) {
-      logger.warn('Dashboard KPIs request missing companyId in auth context');
+      logger.warn('Dashboard KPIs request missing companyId in both query params and auth context');
       return NextResponse.json({ error: 'Company context is required' }, { status: 400 });
     }
 
-    // Apply rate limiting for creator-facing case actions (30/min per company)
-    const rateLimitResult = await checkRateLimit(
-      `case_action:dashboard_${companyId}`,
-      RATE_LIMIT_CONFIGS.caseActions
-    );
-
-    if (!rateLimitResult.allowed) {
-      return NextResponse.json(
-        { error: 'Rate limit exceeded', retryAfter: rateLimitResult.retryAfter, resetAt: rateLimitResult.resetAt.toISOString() },
-        { status: 422 }
+    // Apply rate limiting for dashboard reads (120/min per company)
+    // Wrap in try-catch to prevent rate limit DB issues from blocking requests
+    try {
+      const rateLimitResult = await checkRateLimit(
+        `api_read:dashboard_kpis_${companyId}`,
+        RATE_LIMIT_CONFIGS.apiRead
       );
+
+      if (!rateLimitResult.allowed) {
+        logger.warn('Dashboard KPIs rate limit exceeded', {
+          companyId,
+          retryAfter: rateLimitResult.retryAfter,
+        });
+        return NextResponse.json(
+          { error: 'Rate limit exceeded', retryAfter: rateLimitResult.retryAfter, resetAt: rateLimitResult.resetAt.toISOString() },
+          { status: 429 }
+        );
+      }
+    } catch (rateLimitError) {
+      // Log but continue if rate limiting fails - don't block the request
+      logger.error('Rate limit check failed for dashboard KPIs', {
+        companyId,
+        error: rateLimitError instanceof Error ? rateLimitError.message : String(rateLimitError),
+      });
     }
 
     // Validate query parameters using zod schema

@@ -53,28 +53,44 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return auth.response ?? errorResponses.unauthorizedResponse(auth.error || 'Authentication required');
     }
 
-    const { companyId, userId, isAuthenticated } = auth.context;
+    // Get companyId from query params (preferred - survives proxy) or auth context
+    const { searchParams } = new URL(request.url);
+    const queryCompanyId = searchParams.get('companyId');
+    const { companyId: authCompanyId, userId, isAuthenticated } = auth.context;
+    const companyId = queryCompanyId || authCompanyId;
+    
     if (!companyId) {
-      logger.warn('Dashboard cases request missing companyId in auth context');
+      logger.warn('Dashboard cases request missing companyId in both query params and auth context');
       return errorResponses.badRequestResponse('Company context is required');
     }
 
-    // Apply rate limiting for creator-facing case actions (30/min per company)
-    const rateLimitResult = await checkRateLimit(
-      `case_action:dashboard_${companyId}`,
-      RATE_LIMIT_CONFIGS.caseActions
-    );
+    // Apply rate limiting for dashboard reads (120/min per company)
+    // Wrap in try-catch to prevent rate limit DB issues from blocking requests
+    try {
+      const rateLimitResult = await checkRateLimit(
+        `api_read:dashboard_cases_${companyId}`,
+        RATE_LIMIT_CONFIGS.apiRead
+      );
 
-    if (!rateLimitResult.allowed) {
-      return errorResponses.unprocessableEntityResponse('Rate limit exceeded', {
-        retryAfter: rateLimitResult.retryAfter,
-        resetAt: rateLimitResult.resetAt.toISOString(),
+      if (!rateLimitResult.allowed) {
+        logger.warn('Dashboard cases rate limit exceeded', {
+          companyId,
+          retryAfter: rateLimitResult.retryAfter,
+        });
+        return errorResponses.unprocessableEntityResponse('Rate limit exceeded', {
+          retryAfter: rateLimitResult.retryAfter,
+          resetAt: rateLimitResult.resetAt.toISOString(),
+        });
+      }
+    } catch (rateLimitError) {
+      // Log but continue if rate limiting fails - don't block the request
+      logger.error('Rate limit check failed for dashboard cases', {
+        companyId,
+        error: rateLimitError instanceof Error ? rateLimitError.message : String(rateLimitError),
       });
     }
 
-    const { searchParams } = new URL(request.url);
-
-    // Parse pagination parameters
+    // Parse pagination parameters (searchParams already declared above)
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const limit = Math.max(1, Math.min(1000, parseInt(searchParams.get('limit') || '50', 10)));
     const offset = (page - 1) * limit;

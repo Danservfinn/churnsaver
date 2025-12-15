@@ -451,6 +451,121 @@ Before you merge
 - [ ] No TODOs that block shipping
 
 
+## Database Migrations
+Migrations are located in `infra/migrations/` and follow sequential numbering.
+
+Run migrations
+```bash
+# Navigate to infra directory
+cd infra
+
+# Run pending migrations (check package.json for exact script)
+pnpm run migrate
+
+# Or run manually with psql
+psql $DATABASE_URL -f migrations/0XX_name.sql
+```
+
+Create a new migration
+```bash
+# Create new migration file with next sequence number
+touch infra/migrations/0XX_description.sql
+
+# Always create a rollback file
+touch infra/migrations/0XX_rollback.sql
+```
+
+Migration conventions
+- Use `CREATE ... IF NOT EXISTS` for idempotency
+- Use `CONCURRENTLY` for index creation in production
+- Include rollback script for every migration
+- Add `COMMENT ON` for documentation
+
+
+## E2E Testing with Playwright
+E2E tests are located in `apps/web/test/e2e/` and use Playwright.
+
+Run E2E tests
+```bash
+# From apps/web directory
+cd apps/web
+
+# List all E2E tests
+pnpm exec playwright test --list
+
+# Run all E2E tests
+pnpm exec playwright test
+
+# Run with UI (interactive)
+pnpm exec playwright test --ui
+
+# Run specific test file
+pnpm exec playwright test test/e2e/webhook-to-recovery.spec.ts
+
+# Run in headed mode (see browser)
+pnpm exec playwright test --headed
+
+# Generate report
+pnpm exec playwright show-report
+```
+
+Create new E2E test
+```bash
+# Create new spec file
+touch apps/web/test/e2e/my-feature.spec.ts
+```
+
+E2E test conventions
+- Name files with `.spec.ts` extension
+- Use `test.describe()` for grouping related tests
+- Use `data-testid` attributes for element selection
+- Clean up test data after each test
+
+
+## Performance Testing with k6
+Performance tests are located in `apps/web/test/performance/`.
+
+Install k6
+```bash
+# macOS
+brew install k6
+
+# Or download from https://k6.io/
+```
+
+Run performance tests
+```bash
+# Run load test
+k6 run apps/web/test/performance/webhook-load.js
+
+# Run with environment variables
+k6 run -e BASE_URL=https://staging.example.com apps/web/test/performance/webhook-load.js
+
+# Run with custom duration
+k6 run --duration 30s apps/web/test/performance/webhook-load.js
+```
+
+Performance targets
+- Webhook throughput: 1000 req/min
+- API p95 latency: <500ms
+- Error rate: <1%
+
+
+## Security Testing
+Security tests are located in `apps/web/test/security/`.
+
+Run security tests
+```bash
+pnpm turbo run test --filter web -- --run apps/web/test/security/
+```
+
+Key security tests
+- RLS bypass prevention
+- Webhook signature validation
+- Company context validation
+- Cross-tenant isolation
+
+
 ## FAQ
 How do I run only affected packages?
 ```bash

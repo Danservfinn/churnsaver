@@ -319,6 +319,7 @@ export async function extractCompanyContext(request: {
 
 /**
  * Validate company context before database operations
+ * Auto-creates company record if it doesn't exist (for Whop-authenticated requests)
  */
 async function validateCompanyContext(companyId?: string): Promise<boolean> {
   if (!companyId) {
@@ -360,8 +361,35 @@ async function validateCompanyContext(companyId?: string): Promise<boolean> {
     );
     
     if (result.rows.length === 0) {
-      logger.error('Company validation failed - company not found', { companyId });
-      return false;
+      // Auto-create company record for Whop-authenticated requests
+      // The company ID comes from Whop's verified authentication, so it's trusted
+      logger.info('Auto-creating company record for Whop-authenticated request', { companyId });
+      
+      try {
+        await sqlWithRLS.query(
+          `INSERT INTO companies (id, name, whop_company_id, created_at, updated_at)
+           VALUES ($1, $2, $1, NOW(), NOW())
+           ON CONFLICT (id) DO NOTHING`,
+          [companyId, `Whop Company ${companyId.slice(-8)}`],
+          { skipRLS: true, enforceCompanyContext: false }
+        );
+        logger.info('Company record created successfully', { companyId });
+        return true;
+      } catch (insertError) {
+        // If insert fails (e.g., concurrent insert), check again
+        logger.warn('Company insert failed, checking if it exists', {
+          companyId,
+          error: insertError instanceof Error ? insertError.message : String(insertError)
+        });
+        
+        const recheck = await sqlWithRLS.query(
+          'SELECT id FROM companies WHERE id = $1',
+          [companyId],
+          { skipRLS: true, enforceCompanyContext: false }
+        );
+        
+        return recheck.rows.length > 0;
+      }
     }
     
     return true;

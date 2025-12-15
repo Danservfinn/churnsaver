@@ -62,7 +62,7 @@ export default function DashboardCompanyPage({
   params: Promise<{ companyId: string }>;
 }) {
   const { companyId: urlCompanyId } = use(params);
-  const { isAuthenticated, userId } = useWhopAuth();
+  const { isAuthenticated, userId, isLoading: isAuthLoading } = useWhopAuth();
   const { companyId: contextCompanyId } = useWhopCompany();
   const { refreshContext, getAuthHeaders } = useWhop();
   const router = useRouter();
@@ -245,6 +245,19 @@ export default function DashboardCompanyPage({
             </CardDescription>
           </CardHeader>
         </Card>
+      </div>
+    );
+  }
+
+  // Show loading state while authentication context is being fetched
+  // This prevents showing "Authentication Required" before we know the auth state
+  if (isAuthLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Authenticating...</p>
+        </div>
       </div>
     );
   }

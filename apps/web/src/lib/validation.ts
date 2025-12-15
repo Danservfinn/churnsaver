@@ -16,15 +16,20 @@ export const StringFieldSchema = z.string().min(1).max(255); // Reasonable defau
 export type SettingsUpdateInput = z.infer<typeof SettingsUpdateSchema>;
 
 // KPI query validation
+// Note: companyId is passed via query params when Whop proxies iframe requests
+// (Whop JWT tokens contain userId but NOT companyId - companyId comes from URL path params)
 export const KpiQuerySchema = z.object({
   window: z.string().regex(/^\d+$/).transform(val => parseInt(val, 10)).refine(val => val >= 1 && val <= 365, {
     message: "Window must be between 1 and 365 days"
-  }).optional().default(14)
+  }).optional().default(14),
+  companyId: z.string().max(100).optional() // Whop company ID from URL path/query params
 }).strict();
 
 export type KpiQueryInput = z.infer<typeof KpiQuerySchema>;
 
 // Case API query validation (pagination, filters)
+// Note: companyId is passed via query params when Whop proxies iframe requests
+// (Whop JWT tokens contain userId but NOT companyId - companyId comes from URL path params)
 export const CaseQuerySchema = z.object({
   page: z.string().regex(/^\d+$/).transform(val => parseInt(val, 10)).refine(val => val >= 1, {
     message: "Page must be >= 1"
@@ -32,7 +37,8 @@ export const CaseQuerySchema = z.object({
   limit: z.string().regex(/^\d+$/).transform(val => parseInt(val, 10)).refine(val => val >= 1 && val <= 100, {
     message: "Limit must be between 1 and 100"
   }).optional().default(50),
-  status: z.enum(['open', 'recovered']).optional()
+  status: z.enum(['open', 'recovered']).optional(),
+  companyId: z.string().max(100).optional() // Whop company ID from URL path/query params
 }).strict();
 
 export type CaseQueryInput = z.infer<typeof CaseQuerySchema>;

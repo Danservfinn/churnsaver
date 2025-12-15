@@ -64,7 +64,7 @@ export default function DashboardCompanyPage({
   const { companyId: urlCompanyId } = use(params);
   const { isAuthenticated, userId } = useWhopAuth();
   const { companyId: contextCompanyId } = useWhopCompany();
-  const { refreshContext } = useWhop();
+  const { refreshContext, getAuthHeaders } = useWhop();
   const router = useRouter();
 
   const { addToast } = useToast();
@@ -94,7 +94,9 @@ export default function DashboardCompanyPage({
     try {
       setIsLoadingKpis(true);
       setKpiError(null);
-      const response = await fetch('/api/dashboard/kpis?window=14');
+      const response = await fetch('/api/dashboard/kpis?window=14', {
+        headers: getAuthHeaders({ companyId: urlCompanyId }),
+      });
       if (response.ok) {
         const data = await response.json();
         setKpis(data);
@@ -128,7 +130,9 @@ export default function DashboardCompanyPage({
     try {
       setIsLoadingCases(true);
       setCasesError(null);
-      const response = await fetch(`/api/dashboard/cases?page=${page}&limit=10`);
+      const response = await fetch(`/api/dashboard/cases?page=${page}&limit=10`, {
+        headers: getAuthHeaders({ companyId: urlCompanyId }),
+      });
       if (response.ok) {
         const data = await response.json();
         setCasesData(data);

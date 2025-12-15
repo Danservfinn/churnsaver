@@ -9,7 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { Settings as SettingsIcon, Bell, MessageSquare, Gift, Clock, RotateCcw, CheckCircle2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
-import { useWhop } from '@/lib/context/whop';
+import { useWhop, useWhopCompany } from '@/lib/context/whop';
 import { Badge } from '@/components/ui/badge';
 import { logger } from '@/lib/logger';
 
@@ -70,6 +70,7 @@ const REMINDER_OFFSETS = [
 export default function Settings() {
   const { addToast } = useToast();
   const { getAuthHeaders } = useWhop();
+  const { companyId } = useWhopCompany();
   const [settings, setSettings] = useState<CreatorSettings | null>(null);
   const [enablePush, setEnablePush] = useState<boolean>(true);
   const [enableDm, setEnableDm] = useState<boolean>(true);
@@ -96,8 +97,8 @@ export default function Settings() {
       setError(null);
 
       const [settingsRes, subscriptionRes] = await Promise.all([
-        fetch('/api/settings', { headers: getAuthHeaders() }),
-        fetch('/api/subscription', { headers: getAuthHeaders() }),
+        fetch('/api/settings', { headers: getAuthHeaders({ companyId: companyId || undefined }) }),
+        fetch('/api/subscription', { headers: getAuthHeaders({ companyId: companyId || undefined }) }),
       ]);
 
       if (!settingsRes.ok) {
@@ -149,7 +150,7 @@ export default function Settings() {
 
       const response = await fetch('/api/settings', {
         method: 'PUT',
-        headers: getAuthHeaders(),
+        headers: getAuthHeaders({ companyId: companyId || undefined }),
         body: JSON.stringify(updatedSettings),
       });
 

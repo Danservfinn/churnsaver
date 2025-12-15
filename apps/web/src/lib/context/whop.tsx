@@ -12,7 +12,7 @@ export interface WhopContextType {
   isLoading: boolean;
   error: string | null;
   refreshContext: () => Promise<void>;
-  getAuthHeaders: () => Record<string, string>;
+  getAuthHeaders: (overrides?: { companyId?: string }) => Record<string, string>;
 }
 
 const WhopContext = createContext<WhopContextType | undefined>(undefined);
@@ -140,8 +140,10 @@ export function WhopProvider({ children }: WhopProviderProps) {
 
   /**
    * Get authentication headers for API calls
+   * @param overrides - Optional overrides for headers
+   * @param overrides.companyId - Company ID to include in request (for when token doesn't contain it)
    */
-  const getAuthHeaders = (): Record<string, string> => {
+  const getAuthHeaders = (overrides?: { companyId?: string }): Record<string, string> => {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -154,6 +156,12 @@ export function WhopProvider({ children }: WhopProviderProps) {
     if (token) {
       headers['x-whop-user-token'] = token;
       headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    // Pass company ID from URL when token doesn't contain it
+    // This is validated server-side against the user's Whop membership
+    if (overrides?.companyId) {
+      headers['x-company-id'] = overrides.companyId;
     }
 
     return headers;

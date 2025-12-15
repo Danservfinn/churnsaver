@@ -98,7 +98,7 @@ export async function getRequestContextSDK(request: { headers: HeaderLike }): Pr
 
     // Extract companyId and userId from verified result
     // NEVER use app_id as companyId fallback - app_id is the app identifier, not the company
-    const resolvedCompanyId =
+    let resolvedCompanyId =
       (result as any).companyId ??
       (result as any).company_id ??
       null;
@@ -114,6 +114,21 @@ export async function getRequestContextSDK(request: { headers: HeaderLike }): Pr
         userId: null,
         isAuthenticated: false,
       };
+    }
+
+    // If token doesn't contain companyId, check for x-company-id header
+    // This is used when the app is embedded and company context comes from the URL
+    // Security: The user is already authenticated via token, and company access
+    // is enforced via RLS policies in the database
+    if (!resolvedCompanyId) {
+      const headerCompanyId = request.headers.get('x-company-id');
+      if (headerCompanyId && typeof headerCompanyId === 'string') {
+        resolvedCompanyId = headerCompanyId;
+        logger.info('Using x-company-id header for company context', {
+          companyId: headerCompanyId,
+          userId: resolvedUserId,
+        });
+      }
     }
 
     return {

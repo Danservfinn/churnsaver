@@ -110,7 +110,26 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       isAuthenticated
     });
 
+    // Check if recovery_type column exists (migration 022 may not be applied yet)
+    let hasRecoveryTypeColumn = false;
+    try {
+      const columnCheck = await sqlWithRLS.select<{ exists: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM information_schema.columns 
+           WHERE table_name = 'recovery_cases' AND column_name = 'recovery_type'
+         ) as exists`,
+        [],
+        { companyId, enforceCompanyContext: false, skipRLS: true }
+      );
+      hasRecoveryTypeColumn = columnCheck[0]?.exists ?? false;
+    } catch {
+      hasRecoveryTypeColumn = false;
+    }
+
+    logger.info('Schema check complete', { hasRecoveryTypeColumn });
+
     // Query KPIs in parallel (filtered by company)
+    // Use defensive queries that work with or without recovery_type column
     const [activeCasesResult, recoveriesResult, organicResult, totalCasesResult, revenueResult, organicRevenueResult] = await Promise.all([
       // Active cases (open recovery cases within window)
       sqlWithRLS.select<{ count: number }>(
@@ -123,29 +142,41 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         { companyId }
       ),
 
-      // Click-through recoveries (attributed)
-      sqlWithRLS.select<{ count: number }>(
-        `SELECT COUNT(*) as count
-         FROM recovery_cases
-         WHERE company_id = $1
-         AND status = 'recovered'
-         AND recovery_type = 'CLICK_THROUGH'
-         AND first_failure_at >= $2`,
-        [companyId, cutoffDate],
-        { companyId }
-      ),
+      // Click-through recoveries (attributed) - falls back to all recoveries if column missing
+      hasRecoveryTypeColumn
+        ? sqlWithRLS.select<{ count: number }>(
+            `SELECT COUNT(*) as count
+             FROM recovery_cases
+             WHERE company_id = $1
+             AND status = 'recovered'
+             AND recovery_type = 'CLICK_THROUGH'
+             AND first_failure_at >= $2`,
+            [companyId, cutoffDate],
+            { companyId }
+          )
+        : sqlWithRLS.select<{ count: number }>(
+            `SELECT COUNT(*) as count
+             FROM recovery_cases
+             WHERE company_id = $1
+             AND status = 'recovered'
+             AND first_failure_at >= $2`,
+            [companyId, cutoffDate],
+            { companyId }
+          ),
 
-      // Organic recoveries (not attributed)
-      sqlWithRLS.select<{ count: number }>(
-        `SELECT COUNT(*) as count
-         FROM recovery_cases
-         WHERE company_id = $1
-         AND status = 'recovered'
-         AND recovery_type = 'ORGANIC'
-         AND first_failure_at >= $2`,
-        [companyId, cutoffDate],
-        { companyId }
-      ),
+      // Organic recoveries (not attributed) - returns 0 if column missing
+      hasRecoveryTypeColumn
+        ? sqlWithRLS.select<{ count: number }>(
+            `SELECT COUNT(*) as count
+             FROM recovery_cases
+             WHERE company_id = $1
+             AND status = 'recovered'
+             AND recovery_type = 'ORGANIC'
+             AND first_failure_at >= $2`,
+            [companyId, cutoffDate],
+            { companyId }
+          )
+        : Promise.resolve([{ count: 0 }]),
 
       // Total cases (all cases within window)
       sqlWithRLS.select<{ count: number }>(
@@ -158,29 +189,41 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         { companyId }
       ),
 
-      // Click-through recovered revenue
-      sqlWithRLS.select<{ total: number }>(
-        `SELECT COALESCE(SUM(recovered_amount_cents), 0) as total
-         FROM recovery_cases
-         WHERE company_id = $1
-         AND status = 'recovered'
-         AND recovery_type = 'CLICK_THROUGH'
-         AND first_failure_at >= $2`,
-        [companyId, cutoffDate],
-        { companyId }
-      ),
+      // Click-through recovered revenue - falls back to all recovered revenue if column missing
+      hasRecoveryTypeColumn
+        ? sqlWithRLS.select<{ total: number }>(
+            `SELECT COALESCE(SUM(recovered_amount_cents), 0) as total
+             FROM recovery_cases
+             WHERE company_id = $1
+             AND status = 'recovered'
+             AND recovery_type = 'CLICK_THROUGH'
+             AND first_failure_at >= $2`,
+            [companyId, cutoffDate],
+            { companyId }
+          )
+        : sqlWithRLS.select<{ total: number }>(
+            `SELECT COALESCE(SUM(recovered_amount_cents), 0) as total
+             FROM recovery_cases
+             WHERE company_id = $1
+             AND status = 'recovered'
+             AND first_failure_at >= $2`,
+            [companyId, cutoffDate],
+            { companyId }
+          ),
 
-      // Organic revenue (for context)
-      sqlWithRLS.select<{ total: number }>(
-        `SELECT COALESCE(SUM(recovered_amount_cents), 0) as total
-         FROM recovery_cases
-         WHERE company_id = $1
-         AND status = 'recovered'
-         AND recovery_type = 'ORGANIC'
-         AND first_failure_at >= $2`,
-        [companyId, cutoffDate],
-        { companyId }
-      )
+      // Organic revenue (for context) - returns 0 if column missing
+      hasRecoveryTypeColumn
+        ? sqlWithRLS.select<{ total: number }>(
+            `SELECT COALESCE(SUM(recovered_amount_cents), 0) as total
+             FROM recovery_cases
+             WHERE company_id = $1
+             AND status = 'recovered'
+             AND recovery_type = 'ORGANIC'
+             AND first_failure_at >= $2`,
+            [companyId, cutoffDate],
+            { companyId }
+          )
+        : Promise.resolve([{ total: 0 }])
     ]);
 
     const activeCases = activeCasesResult[0]?.count || 0;

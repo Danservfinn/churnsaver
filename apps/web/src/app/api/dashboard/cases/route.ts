@@ -146,13 +146,32 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       isAuthenticated
     });
 
+    // Check if recovery_type/attributed_click_id columns exist (migration 022 may not be applied yet)
+    let hasRecoveryTypeColumn = false;
+    try {
+      const columnCheck = await sqlWithRLS.select<{ exists: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM information_schema.columns 
+           WHERE table_name = 'recovery_cases' AND column_name = 'recovery_type'
+         ) as exists`,
+        [],
+        { companyId, enforceCompanyContext: false, skipRLS: true }
+      );
+      hasRecoveryTypeColumn = columnCheck[0]?.exists ?? false;
+    } catch {
+      hasRecoveryTypeColumn = false;
+    }
+
+    // Build column list based on available schema
+    const baseColumns = 'id, membership_id, user_id, company_id, status, attempts, incentive_days, recovered_amount_cents, failure_reason, first_failure_at, last_nudge_at, created_at';
+    const selectColumns = hasRecoveryTypeColumn 
+      ? `${baseColumns}, recovery_type, attributed_click_id`
+      : `${baseColumns}, NULL as recovery_type, NULL as attributed_click_id`;
+
     // Query cases and total count in parallel with enforced RLS
     const [casesResult, totalResult] = await Promise.all([
       sqlWithRLS.select<RecoveryCaseSummary>(
-        `SELECT
-          id, membership_id, user_id, company_id, status, attempts,
-          incentive_days, recovered_amount_cents, failure_reason, recovery_type, attributed_click_id,
-          first_failure_at, last_nudge_at, created_at
+        `SELECT ${selectColumns}
          FROM recovery_cases
          ${whereClause}
          ORDER BY first_failure_at DESC

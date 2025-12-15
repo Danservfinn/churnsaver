@@ -19,6 +19,7 @@ interface CreatorSettings {
   enable_dm: boolean;
   incentive_days: number;
   reminder_offsets_days: number[];
+  reminder_time: string;
   updated_at: string;
 }
 
@@ -45,6 +46,7 @@ const DEFAULT_SETTINGS: CreatorSettings = {
   enable_dm: true,
   incentive_days: 3,
   reminder_offsets_days: [0, 2, 4],
+  reminder_time: '10:00',
   updated_at: new Date().toISOString()
 };
 
@@ -58,13 +60,31 @@ const INCENTIVE_OPTIONS = [
 ];
 
 const REMINDER_OFFSETS = [
-  { value: 0, label: 'T+0 (Immediate)' },
-  { value: 1, label: 'T+1' },
-  { value: 2, label: 'T+2' },
-  { value: 3, label: 'T+3' },
-  { value: 4, label: 'T+4' },
-  { value: 7, label: 'T+7' },
-  { value: 14, label: 'T+14' }
+  { value: 0, label: 'Day 0', description: 'Same day as failure' },
+  { value: 1, label: 'Day 1', description: '1 day after' },
+  { value: 2, label: 'Day 2', description: '2 days after' },
+  { value: 3, label: 'Day 3', description: '3 days after' },
+  { value: 4, label: 'Day 4', description: '4 days after' },
+  { value: 7, label: 'Day 7', description: '1 week after' },
+  { value: 14, label: 'Day 14', description: '2 weeks after' }
+];
+
+const TIME_OPTIONS = [
+  { value: '06:00', label: '6:00 AM' },
+  { value: '07:00', label: '7:00 AM' },
+  { value: '08:00', label: '8:00 AM' },
+  { value: '09:00', label: '9:00 AM' },
+  { value: '10:00', label: '10:00 AM' },
+  { value: '11:00', label: '11:00 AM' },
+  { value: '12:00', label: '12:00 PM' },
+  { value: '13:00', label: '1:00 PM' },
+  { value: '14:00', label: '2:00 PM' },
+  { value: '15:00', label: '3:00 PM' },
+  { value: '16:00', label: '4:00 PM' },
+  { value: '17:00', label: '5:00 PM' },
+  { value: '18:00', label: '6:00 PM' },
+  { value: '19:00', label: '7:00 PM' },
+  { value: '20:00', label: '8:00 PM' },
 ];
 
 export default function Settings() {
@@ -76,6 +96,7 @@ export default function Settings() {
   const [enableDm, setEnableDm] = useState<boolean>(true);
   const [incentiveDays, setIncentiveDays] = useState<number>(DEFAULT_SETTINGS.incentive_days);
   const [reminderOffsets, setReminderOffsets] = useState<number[]>(DEFAULT_SETTINGS.reminder_offsets_days);
+  const [reminderTime, setReminderTime] = useState<string>(DEFAULT_SETTINGS.reminder_time);
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -118,6 +139,7 @@ export default function Settings() {
       setEnableDm(settingsData.enable_dm);
       setIncentiveDays(settingsData.incentive_days);
       setReminderOffsets(settingsData.reminder_offsets_days);
+      setReminderTime(settingsData.reminder_time || DEFAULT_SETTINGS.reminder_time);
 
       if (subscriptionRes.ok) {
         const subscriptionData = await subscriptionRes.json();
@@ -221,7 +243,8 @@ export default function Settings() {
       enable_push: enablePush,
       enable_dm: enableDm,
       incentive_days: incentiveDays,
-      reminder_offsets_days: reminderOffsets
+      reminder_offsets_days: reminderOffsets,
+      reminder_time: reminderTime
     });
   };
 
@@ -231,6 +254,7 @@ export default function Settings() {
       setEnableDm(DEFAULT_SETTINGS.enable_dm);
       setIncentiveDays(DEFAULT_SETTINGS.incentive_days);
       setReminderOffsets(DEFAULT_SETTINGS.reminder_offsets_days);
+      setReminderTime(DEFAULT_SETTINGS.reminder_time);
       await saveSettings(DEFAULT_SETTINGS);
     }
   };
@@ -475,17 +499,46 @@ export default function Settings() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
+              <div className="space-y-6">
                 {validationErrors.reminder_offsets && (
                   <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>{validationErrors.reminder_offsets}</AlertDescription>
                   </Alert>
                 )}
+                
+                {/* Time of Day Selector */}
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-4">
-                    Reminder Timing (days after first failure)
+                  <label htmlFor="reminder_time" className="block text-sm font-medium text-foreground mb-2">
+                    Time of Day
                   </label>
+                  <select
+                    id="reminder_time"
+                    name="reminder_time"
+                    data-testid="reminder-time-input"
+                    className="w-full md:w-64 px-4 py-2 border border-input rounded-md bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-transparent transition-colors"
+                    value={reminderTime}
+                    onChange={(e) => setReminderTime(e.target.value)}
+                  >
+                    {TIME_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Reminders will be sent at this time (in your local timezone)
+                  </p>
+                </div>
+
+                {/* Day Selector */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Days to Send Reminders
+                  </label>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Select which days after the payment failure to send reminders
+                  </p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {REMINDER_OFFSETS.map(offset => {
                       const isChecked = reminderOffsets.includes(offset.value);
@@ -532,13 +585,18 @@ export default function Settings() {
                           )}>
                             {offset.label}
                           </span>
+                          <span className={cn(
+                            "text-xs mt-1 text-center",
+                            isChecked
+                              ? 'text-muted-foreground'
+                              : 'text-muted-foreground/70'
+                          )}>
+                            {offset.description}
+                          </span>
                         </label>
                       );
                     })}
                   </div>
-                  <p className="text-sm text-muted-foreground mt-4">
-                    Select when to send reminder notifications after a payment failure
-                  </p>
                 </div>
               </div>
             </CardContent>

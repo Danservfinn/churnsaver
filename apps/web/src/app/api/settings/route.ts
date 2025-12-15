@@ -16,6 +16,7 @@ interface CreatorSettings {
   enable_dm: boolean;
   incentive_days: number;
   reminder_offsets_days: number[];
+  reminder_time: string;
   updated_at: string;
 }
 
@@ -24,7 +25,8 @@ const DEFAULT_SETTINGS: Omit<CreatorSettings, 'company_id' | 'updated_at'> = {
   enable_push: true,
   enable_dm: true,
   incentive_days: 3,
-  reminder_offsets_days: [0, 2, 4]
+  reminder_offsets_days: [0, 2, 4],
+  reminder_time: '10:00'
 };
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -50,9 +52,30 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     logger.info('Fetching creator settings', { companyId });
 
+    // Check if reminder_time column exists (migration 034 may not be applied yet)
+    let hasReminderTimeColumn = false;
+    try {
+      const columnCheck = await sqlWithRLS.select(
+        `SELECT EXISTS (
+           SELECT 1 FROM information_schema.columns 
+           WHERE table_name = 'creator_settings' AND column_name = 'reminder_time'
+         ) as exists`,
+        [],
+        { companyId, enforceCompanyContext: false, skipRLS: true }
+      );
+      hasReminderTimeColumn = (columnCheck[0] as { exists: boolean })?.exists ?? false;
+    } catch {
+      hasReminderTimeColumn = false;
+    }
+
+    // Build SELECT columns based on available schema
+    const selectColumns = hasReminderTimeColumn
+      ? 'company_id, enable_push, enable_dm, incentive_days, reminder_offsets_days, reminder_time, updated_at'
+      : 'company_id, enable_push, enable_dm, incentive_days, reminder_offsets_days, updated_at';
+
     // Try to get existing settings
     const existingSettings = await sqlWithRLS.select(
-      'SELECT company_id, enable_push, enable_dm, incentive_days, reminder_offsets_days, updated_at FROM creator_settings WHERE company_id = $1',
+      `SELECT ${selectColumns} FROM creator_settings WHERE company_id = $1`,
       [companyId],
       { companyId, enforceCompanyContext: true }
     );
@@ -60,31 +83,56 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     let settings: CreatorSettings;
 
     if (existingSettings.length > 0) {
-      // Use existing settings
-      settings = existingSettings[0] as CreatorSettings;
+      // Use existing settings, adding default reminder_time if column doesn't exist
+      const rawSettings = existingSettings[0] as CreatorSettings;
+      settings = {
+        ...rawSettings,
+        reminder_time: rawSettings.reminder_time || DEFAULT_SETTINGS.reminder_time
+      };
     } else {
       // Create default settings
       const defaultWithCompanyId = { ...DEFAULT_SETTINGS, company_id: companyId };
-      await sqlWithRLS.execute(
-        'INSERT INTO creator_settings (company_id, enable_push, enable_dm, incentive_days, reminder_offsets_days) VALUES ($1, $2, $3, $4, $5)',
-        [
-          companyId,
-          defaultWithCompanyId.enable_push,
-          defaultWithCompanyId.enable_dm,
-          defaultWithCompanyId.incentive_days,
-          defaultWithCompanyId.reminder_offsets_days
-        ],
-        { companyId, enforceCompanyContext: true }
-      );
+      
+      // Use defensive INSERT based on column availability
+      if (hasReminderTimeColumn) {
+        await sqlWithRLS.execute(
+          'INSERT INTO creator_settings (company_id, enable_push, enable_dm, incentive_days, reminder_offsets_days, reminder_time) VALUES ($1, $2, $3, $4, $5, $6)',
+          [
+            companyId,
+            defaultWithCompanyId.enable_push,
+            defaultWithCompanyId.enable_dm,
+            defaultWithCompanyId.incentive_days,
+            defaultWithCompanyId.reminder_offsets_days,
+            defaultWithCompanyId.reminder_time
+          ],
+          { companyId, enforceCompanyContext: true }
+        );
+      } else {
+        await sqlWithRLS.execute(
+          'INSERT INTO creator_settings (company_id, enable_push, enable_dm, incentive_days, reminder_offsets_days) VALUES ($1, $2, $3, $4, $5)',
+          [
+            companyId,
+            defaultWithCompanyId.enable_push,
+            defaultWithCompanyId.enable_dm,
+            defaultWithCompanyId.incentive_days,
+            defaultWithCompanyId.reminder_offsets_days
+          ],
+          { companyId, enforceCompanyContext: true }
+        );
+      }
 
       // Fetch the newly created settings
       const newSettings = await sqlWithRLS.select(
-        'SELECT company_id, enable_push, enable_dm, incentive_days, reminder_offsets_days, updated_at FROM creator_settings WHERE company_id = $1',
+        `SELECT ${selectColumns} FROM creator_settings WHERE company_id = $1`,
         [companyId],
         { companyId, enforceCompanyContext: true }
       );
 
-      settings = newSettings[0] as CreatorSettings;
+      const rawSettings = newSettings[0] as CreatorSettings;
+      settings = {
+        ...rawSettings,
+        reminder_time: rawSettings.reminder_time || DEFAULT_SETTINGS.reminder_time
+      };
     }
 
     logger.info('Creator settings fetched', {
@@ -193,35 +241,84 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
       updates: { ...validatedInput, reminder_offsets_days: sortedUniqueOffsets }
     });
 
-    // Upsert settings
-    await sqlWithRLS.execute(
-      `INSERT INTO creator_settings (
-        company_id, enable_push, enable_dm, incentive_days, reminder_offsets_days, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, now())
-      ON CONFLICT (company_id) DO UPDATE SET
-        enable_push = EXCLUDED.enable_push,
-        enable_dm = EXCLUDED.enable_dm,
-        incentive_days = EXCLUDED.incentive_days,
-        reminder_offsets_days = EXCLUDED.reminder_offsets_days,
-        updated_at = now()`,
-      [
-        companyId,
-        validatedInput.enable_push,
-        validatedInput.enable_dm,
-        validatedInput.incentive_days,
-        sortedUniqueOffsets
-      ],
-      { companyId, enforceCompanyContext: true }
-    );
+    // Check if reminder_time column exists (migration 034 may not be applied yet)
+    let hasReminderTimeColumn = false;
+    try {
+      const columnCheck = await sqlWithRLS.select(
+        `SELECT EXISTS (
+           SELECT 1 FROM information_schema.columns 
+           WHERE table_name = 'creator_settings' AND column_name = 'reminder_time'
+         ) as exists`,
+        [],
+        { companyId, enforceCompanyContext: false, skipRLS: true }
+      );
+      hasReminderTimeColumn = (columnCheck[0] as { exists: boolean })?.exists ?? false;
+    } catch {
+      hasReminderTimeColumn = false;
+    }
+
+    // Upsert settings with defensive column handling
+    if (hasReminderTimeColumn) {
+      await sqlWithRLS.execute(
+        `INSERT INTO creator_settings (
+          company_id, enable_push, enable_dm, incentive_days, reminder_offsets_days, reminder_time, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, now())
+        ON CONFLICT (company_id) DO UPDATE SET
+          enable_push = EXCLUDED.enable_push,
+          enable_dm = EXCLUDED.enable_dm,
+          incentive_days = EXCLUDED.incentive_days,
+          reminder_offsets_days = EXCLUDED.reminder_offsets_days,
+          reminder_time = EXCLUDED.reminder_time,
+          updated_at = now()`,
+        [
+          companyId,
+          validatedInput.enable_push,
+          validatedInput.enable_dm,
+          validatedInput.incentive_days,
+          sortedUniqueOffsets,
+          validatedInput.reminder_time || DEFAULT_SETTINGS.reminder_time
+        ],
+        { companyId, enforceCompanyContext: true }
+      );
+    } else {
+      await sqlWithRLS.execute(
+        `INSERT INTO creator_settings (
+          company_id, enable_push, enable_dm, incentive_days, reminder_offsets_days, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, now())
+        ON CONFLICT (company_id) DO UPDATE SET
+          enable_push = EXCLUDED.enable_push,
+          enable_dm = EXCLUDED.enable_dm,
+          incentive_days = EXCLUDED.incentive_days,
+          reminder_offsets_days = EXCLUDED.reminder_offsets_days,
+          updated_at = now()`,
+        [
+          companyId,
+          validatedInput.enable_push,
+          validatedInput.enable_dm,
+          validatedInput.incentive_days,
+          sortedUniqueOffsets
+        ],
+        { companyId, enforceCompanyContext: true }
+      );
+    }
+
+    // Build SELECT columns based on available schema
+    const selectColumns = hasReminderTimeColumn
+      ? 'company_id, enable_push, enable_dm, incentive_days, reminder_offsets_days, reminder_time, updated_at'
+      : 'company_id, enable_push, enable_dm, incentive_days, reminder_offsets_days, updated_at';
 
     // Fetch and return updated settings
     const updatedSettings = await sqlWithRLS.select(
-      'SELECT company_id, enable_push, enable_dm, incentive_days, reminder_offsets_days, updated_at FROM creator_settings WHERE company_id = $1',
+      `SELECT ${selectColumns} FROM creator_settings WHERE company_id = $1`,
       [companyId],
       { companyId, enforceCompanyContext: true }
     );
 
-    const settings = updatedSettings[0] as CreatorSettings;
+    const rawSettings = updatedSettings[0] as CreatorSettings;
+    const settings: CreatorSettings = {
+      ...rawSettings,
+      reminder_time: rawSettings.reminder_time || DEFAULT_SETTINGS.reminder_time
+    };
 
     logger.info('Creator settings updated successfully', {
       companyId,

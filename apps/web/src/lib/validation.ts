@@ -7,8 +7,11 @@ export const SettingsUpdateSchema = z.object({
   enable_push: z.boolean().default(true),
   enable_dm: z.boolean().default(true),
   incentive_days: z.number().int().min(0).max(365).default(3),
-  reminder_offsets_days: z.array(z.number().int().min(0).max(365)).min(1).max(10).default([0, 1, 7])
-}).strict(); // No additional properties allowed
+  reminder_offsets_days: z.array(z.number().int().min(0).max(365)).min(1).max(10).default([0, 1, 7]),
+  reminder_time: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, {
+    message: "Time must be in HH:MM format (e.g., 10:00)"
+  }).optional().default('10:00')
+}); // Allow reminder_time to be optional for backward compatibility
 
 // Additional validation for string fields (if any are added later)
 export const StringFieldSchema = z.string().min(1).max(255); // Reasonable default for text fields

@@ -78,9 +78,15 @@ export default function DashboardCompanyPage({
   const [casesError, setCasesError] = useState<string | null>(null);
   const isDemo = isQaDemoClient();
 
-  // Validate companyId from URL matches context
+  // Validate companyId from URL matches context (when context provides a real company ID)
+  // Note: Whop token may not include companyId, so contextCompanyId may be 'unknown'
+  // In that case, we trust the URL companyId and let the server validate access via RLS
   useEffect(() => {
-    if (contextCompanyId && urlCompanyId && contextCompanyId !== urlCompanyId) {
+    const contextHasRealCompanyId = contextCompanyId &&
+      contextCompanyId !== 'unknown' &&
+      contextCompanyId !== 'anonymous';
+
+    if (contextHasRealCompanyId && urlCompanyId && contextCompanyId !== urlCompanyId) {
       setCompanyIdMismatch(true);
       // Redirect to correct company dashboard
       router.replace(`/dashboard/${contextCompanyId}`);
@@ -162,12 +168,14 @@ export default function DashboardCompanyPage({
   };
 
   useEffect(() => {
-    // Only fetch data if we have valid context and companyId matches
-    if (contextCompanyId && urlCompanyId === contextCompanyId && !companyIdMismatch) {
+    // Fetch data when we have a URL companyId and no mismatch
+    // Note: contextCompanyId may be 'unknown' when Whop token doesn't include it
+    // In that case, we trust the URL companyId and the server validates access via RLS
+    if (urlCompanyId && !companyIdMismatch) {
       fetchKpis();
       fetchCases(1);
     }
-  }, [contextCompanyId, urlCompanyId, companyIdMismatch]);
+  }, [urlCompanyId, companyIdMismatch]);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -211,8 +219,9 @@ export default function DashboardCompanyPage({
     window.open(exportUrl, '_blank');
   };
 
-  // Show loading state while context is being established
-  if (!contextCompanyId) {
+  // Show loading state only while we're waiting for URL params
+  // Note: We don't block on contextCompanyId since Whop token may not include it
+  if (!urlCompanyId) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
@@ -240,9 +249,10 @@ export default function DashboardCompanyPage({
     );
   }
 
-  // Show authentication required message (unless in dev mode)
-  // In dev mode, allow access with dev-company ID for local testing
-  const isDevMode = contextCompanyId === 'dev-company' || urlCompanyId === 'dev-company';
+  // Show authentication required message (unless in dev/demo mode)
+  // Allow access with dev-company ID for local testing
+  const isDevMode = contextCompanyId === 'dev-company' || urlCompanyId === 'dev-company' || isDemo;
+  // Note: isAuthenticated can be true even if companyId is unknown (Whop token verifies user but not company)
   if (!isAuthenticated && !isDevMode) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">

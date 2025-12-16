@@ -5,7 +5,7 @@
 @config '../../tailwind.config.ts';
 
 :root {
-  --background: transparent;
+  --background: #09090b;
   --foreground: #ededed;
   --card: rgba(31, 31, 35, 0.5);
   --card-foreground: #ededed;
@@ -54,21 +54,21 @@
   border-color: var(--border);
 }
 
-/* Force transparent background for Whop iframe - must come after all imports */
+/* Dark background for Whop iframe integration */
 html {
-  background: transparent !important;
-  background-color: transparent !important;
+  background: #09090b !important;
+  background-color: #09090b !important;
 }
 
 body {
-  background: transparent !important;
-  background-color: transparent !important;
+  background: #09090b !important;
+  background-color: #09090b !important;
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
 
 /* Override any .bg-background class */
 .bg-background {
-  background: transparent !important;
-  background-color: transparent !important;
+  background: #09090b !important;
+  background-color: #09090b !important;
 }

@@ -35,7 +35,7 @@ export function SidebarLayout({ children }: SidebarLayoutProps) {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: 'transparent' }}>
+    <div className="flex h-screen overflow-hidden" style={{ background: '#09090b' }}>
       {/* Mobile Overlay */}
       {isMobile && mobileOpen && (
         <div
@@ -60,7 +60,7 @@ export function SidebarLayout({ children }: SidebarLayoutProps) {
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto" style={{ background: 'transparent' }}>
+      <main className="flex-1 overflow-auto" style={{ background: '#09090b' }}>
         {/* Mobile Header */}
         {isMobile && (
           <div className="flex items-center h-16 px-4 border-b border-gray-700" style={{ background: 'rgba(31, 31, 35, 0.5)' }}>
@@ -89,7 +89,7 @@ export function SidebarLayout({ children }: SidebarLayoutProps) {
         )}
 
         {/* Page Content */}
-        <div className="p-6" style={{ background: 'transparent' }}>{children}</div>
+        <div className="p-6" style={{ background: '#09090b' }}>{children}</div>
       </main>
     </div>
   );

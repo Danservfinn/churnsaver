@@ -52,7 +52,7 @@ export default function RootLayout({
     <html
       lang="en"
       className={accessibilityConfig.enabled ? 'accessibility-enabled' : ''}
-      style={{ background: 'transparent', backgroundColor: 'transparent' }}
+      style={{ background: '#09090b', backgroundColor: '#09090b' }}
     >
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -66,7 +66,7 @@ export default function RootLayout({
           ${accessibilityConfig.colorContrast.enabled ? 'high-contrast' : ''}
           ${accessibilityConfig.reducedMotion.enabled ? 'reduced-motion' : ''}
         `}
-        style={{ background: 'transparent', backgroundColor: 'transparent' }}
+        style={{ background: '#09090b', backgroundColor: '#09090b' }}
       >
         <WhopProvider>
           <ToastProvider>

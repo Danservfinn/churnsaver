@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Settings,
   CreditCard,
+  Home,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -40,6 +41,11 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
   // Note: /cases, /memberships, /incentives pages don't exist yet
   const navItems: NavItem[] = [
     {
+      label: 'Home',
+      href: '/',
+      icon: Home,
+    },
+    {
       label: 'Dashboard',
       href: basePath,
       icon: LayoutDashboard,
@@ -57,6 +63,9 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
   ];
 
   const isActive = (href: string) => {
+    if (href === '/') {
+      return pathname === '/';
+    }
     if (href === basePath) {
       return pathname === basePath || pathname === '/dashboard';
     }

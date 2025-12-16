@@ -15,6 +15,25 @@ import Link from 'next/link';
 import { logger } from '@/lib/logger';
 import { isQaDemoClient } from '@/lib/qaDemo';
 
+// Demo token access for screenshots/testing
+const DEMO_TOKEN = 'churnsaver_demo_2024';
+const DEMO_COMPANY_ID = 'biz_demo_staging';
+
+function isDemoTokenAccess(): boolean {
+  if (typeof window === 'undefined') return false;
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('demo_token');
+  const companyId = window.location.pathname.split('/').pop();
+  return token === DEMO_TOKEN && companyId === DEMO_COMPANY_ID;
+}
+
+function getDemoTokenParam(): string {
+  if (typeof window === 'undefined') return '';
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('demo_token');
+  return token === DEMO_TOKEN ? `&demo_token=${DEMO_TOKEN}` : '';
+}
+
 interface DashboardKPIs {
   activeCases: number;
   recoveries: number;
@@ -77,6 +96,7 @@ export default function DashboardCompanyPage({
   const [kpiError, setKpiError] = useState<string | null>(null);
   const [casesError, setCasesError] = useState<string | null>(null);
   const isDemo = isQaDemoClient();
+  const isDemoToken = isDemoTokenAccess();
 
   // Validate companyId from URL matches context (when context provides a real company ID)
   // Note: Whop token may not include companyId, so contextCompanyId may be 'unknown'
@@ -100,7 +120,8 @@ export default function DashboardCompanyPage({
     try {
       setIsLoadingKpis(true);
       setKpiError(null);
-      const response = await fetch(`/api/dashboard/kpis?window=14&companyId=${encodeURIComponent(urlCompanyId)}`, {
+      const demoParam = getDemoTokenParam();
+      const response = await fetch(`/api/dashboard/kpis?window=14&companyId=${encodeURIComponent(urlCompanyId)}${demoParam}`, {
         headers: getAuthHeaders({ companyId: urlCompanyId }),
       });
       if (response.ok) {
@@ -136,7 +157,8 @@ export default function DashboardCompanyPage({
     try {
       setIsLoadingCases(true);
       setCasesError(null);
-      const response = await fetch(`/api/dashboard/cases?page=${page}&limit=10&companyId=${encodeURIComponent(urlCompanyId)}`, {
+      const demoParam = getDemoTokenParam();
+      const response = await fetch(`/api/dashboard/cases?page=${page}&limit=10&companyId=${encodeURIComponent(urlCompanyId)}${demoParam}`, {
         headers: getAuthHeaders({ companyId: urlCompanyId }),
       });
       if (response.ok) {
@@ -265,8 +287,8 @@ export default function DashboardCompanyPage({
   }
 
   // Show authentication required message (unless in dev/demo mode)
-  // Allow access with dev-company ID for local testing
-  const isDevMode = contextCompanyId === 'dev-company' || urlCompanyId === 'dev-company' || isDemo;
+  // Allow access with dev-company ID for local testing, or demo token access
+  const isDevMode = contextCompanyId === 'dev-company' || urlCompanyId === 'dev-company' || isDemo || isDemoToken;
   // Note: isAuthenticated can be true even if companyId is unknown (Whop token verifies user but not company)
   if (!isAuthenticated && !isDevMode) {
     return (

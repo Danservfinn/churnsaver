@@ -22,6 +22,62 @@ export interface WhopProviderProps {
 }
 
 /**
+ * Extract company ID from URL (path or query params)
+ * Whop passes company_id when loading apps in iframe
+ */
+function extractCompanyId(): string | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  // 1. Try URL path (for routes like /dashboard/[companyId])
+  const pathParts = window.location.pathname.split('/');
+  const dashboardIndex = pathParts.indexOf('dashboard');
+  if (dashboardIndex >= 0 && pathParts[dashboardIndex + 1]) {
+    const pathCompanyId = pathParts[dashboardIndex + 1];
+    if (pathCompanyId.startsWith('biz_')) {
+      return pathCompanyId;
+    }
+  }
+
+  // 2. Try URL query parameter (Whop iframe context)
+  const urlParams = new URLSearchParams(window.location.search);
+  const queryCompanyId = urlParams.get('company_id') || urlParams.get('companyId');
+  if (queryCompanyId) {
+    return queryCompanyId;
+  }
+
+  // 3. Try localStorage (persisted from previous navigation)
+  try {
+    const storedCompanyId = localStorage.getItem('whop_company_id');
+    if (storedCompanyId) {
+      return storedCompanyId;
+    }
+  } catch {
+    // localStorage may not be available
+  }
+
+  return null;
+}
+
+/**
+ * Store company ID for persistence across pages
+ */
+function storeCompanyId(companyId: string | null): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    if (companyId && companyId !== 'unknown') {
+      localStorage.setItem('whop_company_id', companyId);
+    }
+  } catch {
+    // localStorage may not be available
+  }
+}
+
+/**
  * Extract Whop authentication token from various sources
  */
 function extractWhopToken(): string | null {
@@ -180,6 +236,7 @@ export function WhopProvider({ children }: WhopProviderProps) {
         setQaBypassEnabled(true);
         setIsLoading(false);
         setError(null);
+        storeCompanyId(qaBypass.companyId);
         logger.info?.('QA demo bypass enabled in client context', {
           companyId: qaBypass.companyId,
           userId: qaBypass.userId,
@@ -187,8 +244,10 @@ export function WhopProvider({ children }: WhopProviderProps) {
         return;
       }
 
-      // Extract token from various sources
+      // Extract token and company ID from various sources
       const token = extractWhopToken();
+      const urlCompanyId = extractCompanyId();
+
       if (token) {
         setAuthToken(token);
         storeWhopToken(token);
@@ -200,25 +259,33 @@ export function WhopProvider({ children }: WhopProviderProps) {
       if (!inIframe && !token) {
         // Not in iframe and no token, use default context
         // In development mode, allow bypassing authentication for local testing
-        // BUT: Never use APP_ID as companyId - use 'unknown' or require QA demo bypass
+        // BUT: Never use APP_ID as companyId - use extracted companyId or 'unknown'
         const devMode = env.DEBUG_MODE && env.NODE_ENV === 'development';
-        
-        setCompanyId('unknown'); // Explicitly unknown - no APP_ID fallback
+
+        // Use company ID from URL/localStorage if available
+        const fallbackCompanyId = urlCompanyId || 'unknown';
+        setCompanyId(fallbackCompanyId);
         setUserId(devMode ? 'dev-user' : 'anonymous');
         setIsAuthenticated(false); // Not authenticated without proper token
-        
+
+        if (urlCompanyId) {
+          storeCompanyId(urlCompanyId);
+        }
+
         logger.info('Whop context initialized for standalone app', {
-          companyId: 'unknown',
+          companyId: fallbackCompanyId,
           userId: devMode ? 'dev-user' : 'anonymous',
           isAuthenticated: false,
-          devMode
+          devMode,
+          hasUrlCompanyId: !!urlCompanyId
         });
         return;
       }
 
       // Try to get context from API with token
       try {
-        const headers = getAuthHeaders();
+        // Include company ID from URL in headers for API call
+        const headers = getAuthHeaders({ companyId: urlCompanyId || undefined });
         const response = await fetch('/api/health/context', {
           method: 'GET',
           headers,
@@ -228,11 +295,17 @@ export function WhopProvider({ children }: WhopProviderProps) {
         if (response.ok) {
           const contextData = await response.json();
           const data = contextData.data || contextData;
-          
-          // Never use APP_ID as fallback - use 'unknown' if API doesn't provide companyId
-          setCompanyId(data.companyId || 'unknown');
+
+          // Use company ID from URL/localStorage as fallback if API doesn't provide one
+          const finalCompanyId = data.companyId || urlCompanyId || 'unknown';
+          setCompanyId(finalCompanyId);
           setUserId(data.userId || 'anonymous');
           setIsAuthenticated(data.isAuthenticated || false);
+
+          // Store company ID for persistence
+          if (finalCompanyId && finalCompanyId !== 'unknown') {
+            storeCompanyId(finalCompanyId);
+          }
 
           // Store token if we got authenticated context
           if (data.isAuthenticated && token) {
@@ -241,44 +314,56 @@ export function WhopProvider({ children }: WhopProviderProps) {
           }
 
           logger.info('Whop context loaded from API', {
-            companyId: data.companyId,
+            companyId: finalCompanyId,
             userId: data.userId,
             isAuthenticated: data.isAuthenticated,
-            hasToken: !!token
+            hasToken: !!token,
+            hasUrlCompanyId: !!urlCompanyId
           });
         } else {
-          // If API fails but we have a token, log error but don't use APP_ID fallback
+          // If API fails but we have a token, log error but use URL companyId if available
           if (env.NODE_ENV === 'development' && token) {
-            logger.warn('API context fetch failed - cannot determine companyId without API response', {
+            logger.warn('API context fetch failed - using URL companyId if available', {
               status: response.status,
-              hasToken: !!token
+              hasToken: !!token,
+              hasUrlCompanyId: !!urlCompanyId
             });
-            
-            // Don't use APP_ID - set to unknown and require proper API response
-            setCompanyId('unknown');
+
+            const fallbackCompanyId = urlCompanyId || 'unknown';
+            setCompanyId(fallbackCompanyId);
             setUserId('dev-user');
             setIsAuthenticated(false); // Not authenticated if API fails
+            if (urlCompanyId) {
+              storeCompanyId(urlCompanyId);
+            }
             return;
           }
-          
+
           throw new Error(`API context fetch failed: ${response.status}`);
         }
       } catch (apiError) {
         // Fallback to default context if API fails
         logger.warn('Failed to fetch context from API, using defaults', {
-          error: apiError instanceof Error ? apiError.message : String(apiError)
+          error: apiError instanceof Error ? apiError.message : String(apiError),
+          hasUrlCompanyId: !!urlCompanyId
         });
 
-        // In development, log but don't use APP_ID fallback
+        // Use URL companyId as fallback if available
+        const fallbackCompanyId = urlCompanyId || 'unknown';
+
         if (env.NODE_ENV === 'development' && token) {
-          // Token exists but API failed - cannot determine companyId
-          setCompanyId('unknown');
+          // Token exists but API failed - use URL companyId if available
+          setCompanyId(fallbackCompanyId);
           setUserId('dev-user');
           setIsAuthenticated(false); // Not authenticated if API fails
         } else {
-          setCompanyId('unknown'); // Never use APP_ID as fallback
+          setCompanyId(fallbackCompanyId);
           setUserId('anonymous');
           setIsAuthenticated(false);
+        }
+
+        if (urlCompanyId) {
+          storeCompanyId(urlCompanyId);
         }
       }
 
@@ -289,8 +374,9 @@ export function WhopProvider({ children }: WhopProviderProps) {
         error: errorMessage
       });
 
-      // Set fallback values - never use APP_ID as companyId
-      setCompanyId('unknown');
+      // Set fallback values - try URL companyId before falling back to 'unknown'
+      const fallbackCompanyId = extractCompanyId() || 'unknown';
+      setCompanyId(fallbackCompanyId);
       setUserId('anonymous');
       setIsAuthenticated(false);
     } finally {

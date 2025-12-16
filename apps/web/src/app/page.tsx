@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Bell, MessageSquare, Gift, TrendingUp, ArrowRight, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { useWhop } from '@/lib/context/whop';
+import { NotificationMockups } from '@/components/landing/NotificationMockups';
 
 export default function HomePage() {
   const { companyId } = useWhop();
@@ -105,6 +106,9 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Notification Mockups Section */}
+      <NotificationMockups />
 
       {/* Settings Preview Section */}
       {showSettings && (

@@ -159,7 +159,7 @@ export function PricingCard({
                     <>
                       <span className="font-medium">{feature.detail}</span>
                       {' '}
-                      {feature.name.toLowerCase().replace(/^./, '')}
+                      {feature.name.toLowerCase()}
                     </>
                   ) : (
                     feature.name

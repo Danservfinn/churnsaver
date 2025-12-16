@@ -266,7 +266,7 @@ export default function SecurityMonitoringDashboard() {
             <Shield className="w-8 h-8 mr-3 text-red-600" />
             Security Monitoring Dashboard
           </h1>
-          <p className="text-gray-600 mt-1">
+          <p className="text-gray-400 mt-1">
             Real-time security monitoring and threat detection
             {lastUpdated && (
               <span className="ml-2 text-sm text-gray-500">
@@ -306,8 +306,8 @@ export default function SecurityMonitoringDashboard() {
             onClick={() => setSelectedTab(key as any)}
             className={`px-4 py-2 text-sm font-medium rounded-t-lg flex items-center ${
               selectedTab === key
-                ? 'bg-white border-b-2 border-primary-500 text-primary-600'
-                : 'text-gray-500 hover:text-gray-700'
+                ? 'bg-gray-800/50 border-b-2 border-primary-500 text-primary-400'
+                : 'text-gray-500 hover:text-gray-300'
             }`}
           >
             <Icon className="w-4 h-4 mr-2" />
@@ -328,7 +328,7 @@ export default function SecurityMonitoringDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{formatNumber(data.summary.totalEvents)}</div>
-                <p className="text-xs text-gray-600">Last {data.summary.timeWindow}</p>
+                <p className="text-xs text-gray-400">Last {data.summary.timeWindow}</p>
               </CardContent>
             </Card>
 
@@ -339,7 +339,7 @@ export default function SecurityMonitoringDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{data.summary.activeAlerts}</div>
-                <p className="text-xs text-gray-600">Critical: {data.summary.criticalEvents}</p>
+                <p className="text-xs text-gray-400">Critical: {data.summary.criticalEvents}</p>
               </CardContent>
             </Card>
 
@@ -350,7 +350,7 @@ export default function SecurityMonitoringDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{data.summary.uniqueIPs}</div>
-                <p className="text-xs text-gray-600">Unique IPs monitored</p>
+                <p className="text-xs text-gray-400">Unique IPs monitored</p>
               </CardContent>
             </Card>
 
@@ -361,7 +361,7 @@ export default function SecurityMonitoringDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{data.sessionManagement.activeSessions}</div>
-                <p className="text-xs text-gray-600">{data.sessionManagement.recentInvalidations} invalidations</p>
+                <p className="text-xs text-gray-400">{data.sessionManagement.recentInvalidations} invalidations</p>
               </CardContent>
             </Card>
           </div>
@@ -379,19 +379,19 @@ export default function SecurityMonitoringDashboard() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <div className="text-lg font-semibold">{formatNumber(data.metrics.authentication.successfulLogins)}</div>
-                    <p className="text-sm text-gray-600">Successful Logins</p>
+                    <p className="text-sm text-gray-400">Successful Logins</p>
                   </div>
                   <div>
                     <div className="text-lg font-semibold text-red-600">{data.metrics.authentication.failedAttempts}</div>
-                    <p className="text-sm text-gray-600">Failed Attempts</p>
+                    <p className="text-sm text-gray-400">Failed Attempts</p>
                   </div>
                   <div>
                     <div className="text-lg font-semibold text-orange-600">{data.metrics.authentication.rateLimitHits}</div>
-                    <p className="text-sm text-gray-600">Rate Limit Hits</p>
+                    <p className="text-sm text-gray-400">Rate Limit Hits</p>
                   </div>
                   <div>
                     <div className="text-lg font-semibold text-red-600">{data.metrics.authentication.suspiciousIPs}</div>
-                    <p className="text-sm text-gray-600">Suspicious IPs</p>
+                    <p className="text-sm text-gray-400">Suspicious IPs</p>
                   </div>
                 </div>
               </CardContent>
@@ -813,19 +813,19 @@ export default function SecurityMonitoringDashboard() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="text-center">
                   <div className="text-3xl font-bold text-primary-600">{data.sessionManagement.activeSessions}</div>
-                  <p className="text-sm text-gray-600">Active Sessions</p>
+                  <p className="text-sm text-gray-400">Active Sessions</p>
                 </div>
                 <div className="text-center">
                   <div className="text-3xl font-bold text-orange-600">{data.sessionManagement.recentInvalidations}</div>
-                  <p className="text-sm text-gray-600">Recent Invalidations</p>
+                  <p className="text-sm text-gray-400">Recent Invalidations</p>
                 </div>
                 <div className="text-center">
                   <div className="text-3xl font-bold text-red-600">{data.sessionManagement.suspiciousSessions}</div>
-                  <p className="text-sm text-gray-600">Suspicious Sessions</p>
+                  <p className="text-sm text-gray-400">Suspicious Sessions</p>
                 </div>
               </div>
               <div className="mt-4 pt-4 border-t">
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-gray-400">
                   Last invalidation: {new Date(data.sessionManagement.lastInvalidation).toLocaleString()}
                 </p>
               </div>

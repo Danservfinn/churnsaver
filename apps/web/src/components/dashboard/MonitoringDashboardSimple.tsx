@@ -130,10 +130,10 @@ export default function MonitoringDashboardSimple() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'healthy': return 'text-orange-600 bg-orange-100';
-      case 'degraded': return 'text-yellow-600 bg-yellow-100';
-      case 'unhealthy': return 'text-red-600 bg-red-100';
-      default: return 'text-gray-600 bg-gray-100';
+      case 'healthy': return 'text-orange-400 bg-orange-900/50';
+      case 'degraded': return 'text-yellow-400 bg-yellow-900/50';
+      case 'unhealthy': return 'text-red-400 bg-red-900/50';
+      default: return 'text-gray-400 bg-gray-800/50';
     }
   };
 
@@ -148,11 +148,11 @@ export default function MonitoringDashboardSimple() {
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
-      case 'P0': return 'bg-red-100 text-red-800 border-red-200';
-      case 'P1': return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'P2': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'P3': return 'bg-gray-100 text-gray-800 border-gray-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'P0': return 'bg-red-900/50 text-red-300 border-red-700';
+      case 'P1': return 'bg-orange-900/50 text-orange-300 border-orange-700';
+      case 'P2': return 'bg-yellow-900/50 text-yellow-300 border-yellow-700';
+      case 'P3': return 'bg-gray-800/50 text-gray-300 border-gray-700';
+      default: return 'bg-gray-800/50 text-gray-300 border-gray-700';
     }
   };
 
@@ -191,12 +191,12 @@ export default function MonitoringDashboardSimple() {
   if (error) {
     return (
       <div className="p-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="bg-red-900/50 border border-red-700 rounded-lg p-4">
           <div className="flex items-center">
-            <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
-            <span className="text-red-700">Error loading dashboard: {error}</span>
-            <button 
-              className="ml-auto px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
+            <AlertCircle className="w-5 h-5 text-red-400 mr-2" />
+            <span className="text-red-300">Error loading dashboard: {error}</span>
+            <button
+              className="ml-auto px-3 py-1 text-sm border border-gray-700 rounded hover:bg-gray-700/50"
               onClick={fetchData}
             >
               Retry
@@ -217,7 +217,7 @@ export default function MonitoringDashboardSimple() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Monitoring Dashboard</h1>
-          <p className="text-gray-600">
+          <p className="text-gray-400">
             Real-time system monitoring and alerting
             {lastUpdated && (
               <span className="ml-2 text-sm text-gray-500">
@@ -229,15 +229,15 @@ export default function MonitoringDashboardSimple() {
         <div className="flex items-center space-x-2">
           <button
             className={`px-3 py-1 text-sm border rounded ${
-              autoRefresh ? 'bg-primary-50 border-primary-200' : 'border-gray-300'
+              autoRefresh ? 'bg-orange-900/50 border-orange-700' : 'border-gray-700'
             }`}
             onClick={() => setAutoRefresh(!autoRefresh)}
           >
             <RefreshCw className={`w-4 h-4 inline mr-2 ${autoRefresh ? 'animate-spin' : ''}`} />
             Auto-refresh
           </button>
-          <button 
-            className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
+          <button
+            className="px-3 py-1 text-sm border border-gray-700 rounded hover:bg-gray-700/50"
             onClick={fetchData}
           >
             <RefreshCw className="w-4 h-4 inline mr-2" />
@@ -248,7 +248,7 @@ export default function MonitoringDashboardSimple() {
 
       {/* Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border rounded-lg p-4 shadow-sm">
+        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4 shadow-sm backdrop-blur">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium">System Status</span>
             {getStatusIcon(data.overview.status)}
@@ -261,10 +261,10 @@ export default function MonitoringDashboardSimple() {
               {data.overview.activeAlertsCount}
             </span>
           </div>
-          <p className="text-xs text-gray-600 mt-1">Active alerts</p>
+          <p className="text-xs text-gray-400 mt-1">Active alerts</p>
         </div>
 
-        <div className="bg-white border rounded-lg p-4 shadow-sm">
+        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4 shadow-sm backdrop-blur">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium">Uptime</span>
             <Clock className="w-4 h-4" />
@@ -272,12 +272,12 @@ export default function MonitoringDashboardSimple() {
           <div className="text-2xl font-bold">
             {formatDuration(data.overview.uptime)}
           </div>
-          <p className="text-xs text-gray-600 mt-1">
+          <p className="text-xs text-gray-400 mt-1">
             Version {data.overview.version} • {data.overview.environment}
           </p>
         </div>
 
-        <div className="bg-white border rounded-lg p-4 shadow-sm">
+        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4 shadow-sm backdrop-blur">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium">Requests</span>
             <Activity className="w-4 h-4" />
@@ -285,12 +285,12 @@ export default function MonitoringDashboardSimple() {
           <div className="text-2xl font-bold">
             {formatNumber(data.metrics.http.requestsPerMinute)}/min
           </div>
-          <p className="text-xs text-gray-600 mt-1">
+          <p className="text-xs text-gray-400 mt-1">
             {data.metrics.http.errorRate.toFixed(1)}% error rate • {data.metrics.http.avgResponseTime}ms avg
           </p>
         </div>
 
-        <div className="bg-white border rounded-lg p-4 shadow-sm">
+        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4 shadow-sm backdrop-blur">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium">Active Companies</span>
             <Users className="w-4 h-4" />
@@ -298,7 +298,7 @@ export default function MonitoringDashboardSimple() {
           <div className="text-2xl font-bold">
             {data.metrics.business.activeCompanies}
           </div>
-          <p className="text-xs text-gray-600 mt-1">
+          <p className="text-xs text-gray-400 mt-1">
             {data.metrics.business.recoveryCases} recovery cases • {data.metrics.business.remindersSent} reminders
           </p>
         </div>
@@ -307,7 +307,7 @@ export default function MonitoringDashboardSimple() {
       {/* Metrics Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* HTTP Metrics */}
-        <div className="bg-white border rounded-lg p-6 shadow-sm">
+        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 shadow-sm backdrop-blur">
           <h3 className="text-lg font-semibold mb-4 flex items-center">
             <Activity className="w-5 h-5 mr-2" />
             HTTP Performance
@@ -315,25 +315,25 @@ export default function MonitoringDashboardSimple() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="text-lg font-semibold">{formatNumber(data.metrics.http.requestsTotal)}</div>
-              <p className="text-sm text-gray-600">Total Requests</p>
+              <p className="text-sm text-gray-400">Total Requests</p>
             </div>
             <div>
               <div className="text-lg font-semibold">{data.metrics.http.avgResponseTime}ms</div>
-              <p className="text-sm text-gray-600">Avg Response Time</p>
+              <p className="text-sm text-gray-400">Avg Response Time</p>
             </div>
             <div>
               <div className="text-lg font-semibold">{data.metrics.http.requestsPerMinute}</div>
-              <p className="text-sm text-gray-600">Requests/Minute</p>
+              <p className="text-sm text-gray-400">Requests/Minute</p>
             </div>
             <div>
               <div className="text-lg font-semibold">{data.metrics.http.errorRate.toFixed(1)}%</div>
-              <p className="text-sm text-gray-600">Error Rate</p>
+              <p className="text-sm text-gray-400">Error Rate</p>
             </div>
           </div>
         </div>
 
         {/* Webhook Metrics */}
-        <div className="bg-white border rounded-lg p-6 shadow-sm">
+        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 shadow-sm backdrop-blur">
           <h3 className="text-lg font-semibold mb-4 flex items-center">
             <Zap className="w-5 h-5 mr-2" />
             Webhook Processing
@@ -341,25 +341,25 @@ export default function MonitoringDashboardSimple() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="text-lg font-semibold">{formatNumber(data.metrics.webhooks.eventsProcessed)}</div>
-              <p className="text-sm text-gray-600">Events Processed</p>
+              <p className="text-sm text-gray-400">Events Processed</p>
             </div>
             <div>
               <div className="text-lg font-semibold">{data.metrics.webhooks.successRate.toFixed(1)}%</div>
-              <p className="text-sm text-gray-600">Success Rate</p>
+              <p className="text-sm text-gray-400">Success Rate</p>
             </div>
             <div>
               <div className="text-lg font-semibold">{data.metrics.webhooks.processingTime}ms</div>
-              <p className="text-sm text-gray-600">Processing Time</p>
+              <p className="text-sm text-gray-400">Processing Time</p>
             </div>
             <div>
               <div className="text-lg font-semibold">{data.metrics.webhooks.eventsPerHour}</div>
-              <p className="text-sm text-gray-600">Events/Hour</p>
+              <p className="text-sm text-gray-400">Events/Hour</p>
             </div>
           </div>
         </div>
 
         {/* Database Metrics */}
-        <div className="bg-white border rounded-lg p-6 shadow-sm">
+        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 shadow-sm backdrop-blur">
           <h3 className="text-lg font-semibold mb-4 flex items-center">
             <Database className="w-5 h-5 mr-2" />
             Database Performance
@@ -367,25 +367,25 @@ export default function MonitoringDashboardSimple() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="text-lg font-semibold">{data.metrics.database.activeConnections}</div>
-              <p className="text-sm text-gray-600">Active Connections</p>
+              <p className="text-sm text-gray-400">Active Connections</p>
             </div>
             <div>
               <div className="text-lg font-semibold">{data.metrics.database.avgQueryTime}ms</div>
-              <p className="text-sm text-gray-600">Avg Query Time</p>
+              <p className="text-sm text-gray-400">Avg Query Time</p>
             </div>
             <div>
               <div className="text-lg font-semibold">{data.metrics.database.slowQueries}</div>
-              <p className="text-sm text-gray-600">Slow Queries</p>
+              <p className="text-sm text-gray-400">Slow Queries</p>
             </div>
             <div>
               <div className="text-lg font-semibold">{data.metrics.database.connectionUtilization}%</div>
-              <p className="text-sm text-gray-600">Connection Utilization</p>
+              <p className="text-sm text-gray-400">Connection Utilization</p>
             </div>
           </div>
         </div>
 
         {/* Job Queue Metrics */}
-        <div className="bg-white border rounded-lg p-6 shadow-sm">
+        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 shadow-sm backdrop-blur">
           <h3 className="text-lg font-semibold mb-4 flex items-center">
             <Clock className="w-5 h-5 mr-2" />
             Job Queue
@@ -393,19 +393,19 @@ export default function MonitoringDashboardSimple() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="text-lg font-semibold">{data.metrics.queue.depth}</div>
-              <p className="text-sm text-gray-600">Queue Depth</p>
+              <p className="text-sm text-gray-400">Queue Depth</p>
             </div>
             <div>
               <div className="text-lg font-semibold">{data.metrics.queue.processingTime}ms</div>
-              <p className="text-sm text-gray-600">Processing Time</p>
+              <p className="text-sm text-gray-400">Processing Time</p>
             </div>
             <div>
               <div className="text-lg font-semibold">{data.metrics.queue.throughput}</div>
-              <p className="text-sm text-gray-600">Throughput/min</p>
+              <p className="text-sm text-gray-400">Throughput/min</p>
             </div>
             <div>
               <div className="text-lg font-semibold">{data.metrics.queue.failedJobs}</div>
-              <p className="text-sm text-gray-600">Failed Jobs</p>
+              <p className="text-sm text-gray-400">Failed Jobs</p>
             </div>
           </div>
         </div>
@@ -414,7 +414,7 @@ export default function MonitoringDashboardSimple() {
       {/* Alerts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Active Alerts */}
-        <div className="bg-white border rounded-lg p-6 shadow-sm">
+        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 shadow-sm backdrop-blur">
           <h3 className="text-lg font-semibold mb-4 flex items-center">
             <AlertCircle className="w-5 h-5 mr-2" />
             Active Alerts ({data.alerts.active.length})
@@ -427,7 +427,7 @@ export default function MonitoringDashboardSimple() {
           ) : (
             <div className="space-y-3">
               {data.alerts.active.map((alert) => (
-                <div key={alert.id} className="border rounded-lg p-3">
+                <div key={alert.id} className="border border-gray-700 rounded-lg p-3">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center space-x-2 mb-1">
@@ -436,7 +436,7 @@ export default function MonitoringDashboardSimple() {
                         </span>
                         <span className="text-sm font-medium">{alert.ruleName}</span>
                       </div>
-                      <p className="text-sm text-gray-600">{alert.message}</p>
+                      <p className="text-sm text-gray-400">{alert.message}</p>
                       <p className="text-xs text-gray-500 mt-1">
                         {alert.metricName}: {alert.currentValue} (threshold: {alert.threshold})
                       </p>
@@ -449,7 +449,7 @@ export default function MonitoringDashboardSimple() {
         </div>
 
         {/* Recent Alerts */}
-        <div className="bg-white border rounded-lg p-6 shadow-sm">
+        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 shadow-sm backdrop-blur">
           <h3 className="text-lg font-semibold mb-4 flex items-center">
             <Clock className="w-5 h-5 mr-2" />
             Recent Alerts ({data.alerts.recent.length})
@@ -461,7 +461,7 @@ export default function MonitoringDashboardSimple() {
           ) : (
             <div className="space-y-3 max-h-96 overflow-y-auto">
               {data.alerts.recent.map((alert) => (
-                <div key={alert.id} className="border rounded-lg p-3">
+                <div key={alert.id} className="border border-gray-700 rounded-lg p-3">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center space-x-2 mb-1">
@@ -470,12 +470,12 @@ export default function MonitoringDashboardSimple() {
                         </span>
                         <span className="text-sm font-medium">{alert.ruleName}</span>
                         {alert.resolved && (
-                          <span className="px-2 py-1 rounded text-xs font-medium border text-orange-600 border-orange-200">
+                          <span className="px-2 py-1 rounded text-xs font-medium border text-orange-400 border-orange-700">
                             Resolved
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-gray-600">{alert.message}</p>
+                      <p className="text-sm text-gray-400">{alert.message}</p>
                       <p className="text-xs text-gray-500 mt-1">
                         {new Date(alert.timestamp).toLocaleString()} • {alert.duration}m duration
                       </p>
@@ -489,7 +489,7 @@ export default function MonitoringDashboardSimple() {
       </div>
 
       {/* Health Status */}
-      <div className="bg-white border rounded-lg p-6 shadow-sm">
+      <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 shadow-sm backdrop-blur">
         <h3 className="text-lg font-semibold mb-4 flex items-center">
           <Activity className="w-5 h-5 mr-2" />
           System Health

@@ -1440,3 +1440,51 @@ export async function terminateMembership(caseId: string, companyId: string, act
     return false;
   }
 }
+
+// Reopen a closed recovery case to restart the recovery process
+export async function reopenRecoveryCase(caseId: string, companyId: string, actorType: string = 'user', actorId: string = 'anonymous'): Promise<boolean> {
+  try {
+    // Get case details first for audit logging
+    const cases = await sqlWithRLS.select<RecoveryCase>(
+      `SELECT id, membership_id, user_id FROM recovery_cases WHERE id = $1 AND company_id = $2 AND status = 'closed_no_recovery'`,
+      [caseId, companyId],
+      { companyId }
+    );
+
+    if (cases.length === 0) {
+      logger.warn('Case not found or not in closed state for reopen', { caseId, companyId });
+      return false;
+    }
+
+    const result = await sqlWithRLS.execute(
+      `UPDATE recovery_cases
+       SET status = 'open'
+       WHERE id = $1 AND company_id = $2 AND status = 'closed_no_recovery'`,
+      [caseId, companyId],
+      { companyId }
+    );
+
+    // Check if update was successful
+    if (typeof result === 'object' && result.rowCount > 0) {
+      logger.info('Recovery case reopened', { caseId, affectedRows: result.rowCount });
+
+      // Log reopen action
+      await logRecoveryAction(companyId, caseId, cases[0].membership_id, cases[0].user_id, 'case_reopened', undefined, {
+        manualAction: true,
+        actorType,
+        actorId
+      });
+
+      return true;
+    } else {
+      logger.warn('Case not found or not in closed state', { caseId, result });
+      return false;
+    }
+  } catch (error) {
+    logger.error('Failed to reopen recovery case', {
+      caseId,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return false;
+  }
+}

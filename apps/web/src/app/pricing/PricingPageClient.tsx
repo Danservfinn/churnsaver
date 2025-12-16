@@ -1,8 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
-import { ArrowLeft, Zap } from 'lucide-react';
+import { Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { PricingCard } from '@/components/pricing/PricingCard';
@@ -27,21 +26,6 @@ export function PricingPageClient({ checkoutUrls }: PricingPageClientProps) {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 text-foreground hover:text-primary transition-colors">
-            <ArrowLeft className="h-4 w-4" />
-            <span className="font-semibold">ChurnSaver</span>
-          </Link>
-          <Link href="/dashboard">
-            <Button variant="outline" size="sm">
-              Dashboard
-            </Button>
-          </Link>
-        </div>
-      </header>
-
       <main className="container mx-auto max-w-6xl px-4 py-16">
         {/* Hero */}
         <div className="text-center mb-12">

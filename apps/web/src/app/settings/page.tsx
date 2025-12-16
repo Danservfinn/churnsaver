@@ -8,7 +8,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { Settings as SettingsIcon, Bell, MessageSquare, Gift, Clock, RotateCcw, CheckCircle2, AlertCircle } from 'lucide-react';
-import Link from 'next/link';
 import { useWhop, useWhopCompany } from '@/lib/context/whop';
 import { Badge } from '@/components/ui/badge';
 import { logger } from '@/lib/logger';
@@ -338,21 +337,14 @@ export default function Settings() {
       <div className="container mx-auto px-4 py-8 max-w-3xl">
         {/* Header */}
         <header className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-semibold text-foreground flex items-center gap-2">
-                <SettingsIcon className="h-6 w-6 text-primary" />
-                Settings
-              </h1>
-              <p className="text-muted-foreground mt-1">
-                Configure your recovery strategy and communication preferences
-              </p>
-            </div>
-            <Link href="/dashboard">
-              <Button variant="outline" size="sm">
-                Back to Dashboard
-              </Button>
-            </Link>
+          <div className="mb-4">
+            <h1 className="text-2xl font-semibold text-foreground flex items-center gap-2">
+              <SettingsIcon className="h-6 w-6 text-primary" />
+              Configuration
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Configure your recovery strategy and communication preferences
+            </p>
           </div>
           {subscription && (
             <div className="flex items-center gap-3 flex-wrap text-sm text-muted-foreground">

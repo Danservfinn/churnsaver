@@ -4,14 +4,15 @@ import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { KpiTile } from '@/components/dashboard/KpiTile';
 import { CasesTable } from '@/components/dashboard/CasesTable';
+import { TimePeriodSelector } from '@/components/dashboard/TimePeriodSelector';
 import { useWhop, useWhopAuth, useWhopCompany } from '@/lib/context/whop';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
-import { Download, RefreshCw, Settings, TrendingUp, AlertCircle } from 'lucide-react';
-import Link from 'next/link';
+import { Download, RefreshCw, TrendingUp, AlertCircle, Filter } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 import { isQaDemoClient } from '@/lib/qaDemo';
 
@@ -75,6 +76,15 @@ interface CasesResponse {
   };
 }
 
+type StatusFilter = 'all' | 'open' | 'recovered' | 'closed_no_recovery';
+
+const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'open', label: 'Open' },
+  { value: 'recovered', label: 'Recovered' },
+  { value: 'closed_no_recovery', label: 'Lost' },
+];
+
 export default function DashboardCompanyPage({
   params,
 }: {
@@ -95,20 +105,18 @@ export default function DashboardCompanyPage({
   const [companyIdMismatch, setCompanyIdMismatch] = useState(false);
   const [kpiError, setKpiError] = useState<string | null>(null);
   const [casesError, setCasesError] = useState<string | null>(null);
+  const [windowDays, setWindowDays] = useState(30); // Default: This Billing Period
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('open');
   const isDemo = isQaDemoClient();
   const isDemoToken = isDemoTokenAccess();
 
   // Validate companyId from URL matches context (when context provides a real company ID)
-  // Note: Whop token may not include companyId, so contextCompanyId may be 'unknown'
-  // In that case, we trust the URL companyId and let the server validate access via RLS
   useEffect(() => {
-    const contextHasRealCompanyId = contextCompanyId &&
-      contextCompanyId !== 'unknown' &&
-      contextCompanyId !== 'anonymous';
+    const contextHasRealCompanyId =
+      contextCompanyId && contextCompanyId !== 'unknown' && contextCompanyId !== 'anonymous';
 
     if (contextHasRealCompanyId && urlCompanyId && contextCompanyId !== urlCompanyId) {
       setCompanyIdMismatch(true);
-      // Redirect to correct company dashboard
       router.replace(`/dashboard/${contextCompanyId}`);
     } else {
       setCompanyIdMismatch(false);
@@ -121,9 +129,12 @@ export default function DashboardCompanyPage({
       setIsLoadingKpis(true);
       setKpiError(null);
       const demoParam = getDemoTokenParam();
-      const response = await fetch(`/api/dashboard/kpis?window=14&companyId=${encodeURIComponent(urlCompanyId)}${demoParam}`, {
-        headers: getAuthHeaders({ companyId: urlCompanyId }),
-      });
+      const response = await fetch(
+        `/api/dashboard/kpis?window=${windowDays}&companyId=${encodeURIComponent(urlCompanyId)}${demoParam}`,
+        {
+          headers: getAuthHeaders({ companyId: urlCompanyId }),
+        }
+      );
       if (response.ok) {
         const data = await response.json();
         setKpis(data);
@@ -158,10 +169,13 @@ export default function DashboardCompanyPage({
       setIsLoadingCases(true);
       setCasesError(null);
       const demoParam = getDemoTokenParam();
-      // Default to showing only open cases - recovered cases show in KPIs
-      const response = await fetch(`/api/dashboard/cases?page=${page}&limit=10&status=open&companyId=${encodeURIComponent(urlCompanyId)}${demoParam}`, {
-        headers: getAuthHeaders({ companyId: urlCompanyId }),
-      });
+      const statusParam = statusFilter !== 'all' ? `&status=${statusFilter}` : '';
+      const response = await fetch(
+        `/api/dashboard/cases?page=${page}&limit=10${statusParam}&companyId=${encodeURIComponent(urlCompanyId)}${demoParam}`,
+        {
+          headers: getAuthHeaders({ companyId: urlCompanyId }),
+        }
+      );
       if (response.ok) {
         const data = await response.json();
         setCasesData(data);
@@ -190,19 +204,28 @@ export default function DashboardCompanyPage({
     }
   };
 
+  // Fetch data when URL companyId is available and no mismatch
   useEffect(() => {
-    // Fetch data when we have a URL companyId and no mismatch
-    // Note: contextCompanyId may be 'unknown' when Whop token doesn't include it
-    // In that case, we trust the URL companyId and the server validates access via RLS
     if (urlCompanyId && !companyIdMismatch) {
       fetchKpis();
+    }
+  }, [urlCompanyId, companyIdMismatch, windowDays]);
+
+  useEffect(() => {
+    if (urlCompanyId && !companyIdMismatch) {
+      setCurrentPage(1);
       fetchCases(1);
     }
-  }, [urlCompanyId, companyIdMismatch]);
+  }, [urlCompanyId, companyIdMismatch, statusFilter]);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
     fetchCases(page);
+  };
+
+  const handleCaseUpdated = () => {
+    fetchKpis();
+    fetchCases(currentPage);
   };
 
   const formatRevenue = (cents: number) => {
@@ -228,7 +251,6 @@ export default function DashboardCompanyPage({
     }
 
     const params = new URLSearchParams();
-    // Include companyId for proxy compatibility
     params.append('companyId', urlCompanyId);
     if (casesData?.filters.status) {
       params.append('status', casesData.filters.status);
@@ -239,13 +261,12 @@ export default function DashboardCompanyPage({
     if (casesData?.filters.endDate) {
       params.append('endDate', casesData.filters.endDate);
     }
-    
+
     const exportUrl = `/api/cases/export?${params.toString()}`;
     window.open(exportUrl, '_blank');
   };
 
   // Show loading state only while we're waiting for URL params
-  // Note: We don't block on contextCompanyId since Whop token may not include it
   if (!urlCompanyId) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -265,9 +286,7 @@ export default function DashboardCompanyPage({
           <CardHeader className="text-center">
             <div className="text-5xl mb-4">⚠️</div>
             <CardTitle>Company ID Mismatch</CardTitle>
-            <CardDescription>
-              Redirecting to the correct company dashboard...
-            </CardDescription>
+            <CardDescription>Redirecting to the correct company dashboard...</CardDescription>
           </CardHeader>
         </Card>
       </div>
@@ -275,7 +294,6 @@ export default function DashboardCompanyPage({
   }
 
   // Show loading state while authentication context is being fetched
-  // This prevents showing "Authentication Required" before we know the auth state
   if (isAuthLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -288,9 +306,11 @@ export default function DashboardCompanyPage({
   }
 
   // Show authentication required message (unless in dev/demo mode)
-  // Allow access with dev-company ID for local testing, or demo token access
-  const isDevMode = contextCompanyId === 'dev-company' || urlCompanyId === 'dev-company' || isDemo || isDemoToken;
-  // Note: isAuthenticated can be true even if companyId is unknown (Whop token verifies user but not company)
+  const isDevMode =
+    contextCompanyId === 'dev-company' ||
+    urlCompanyId === 'dev-company' ||
+    isDemo ||
+    isDemoToken;
   if (!isAuthenticated && !isDevMode) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -299,13 +319,12 @@ export default function DashboardCompanyPage({
             <div className="text-5xl mb-4">🔒</div>
             <CardTitle>Authentication Required</CardTitle>
             <CardDescription>
-              You need to be authenticated to access the dashboard. Please access this app through Whop.
+              You need to be authenticated to access the dashboard. Please access this app through
+              Whop.
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center">
-            <Button onClick={refreshContext}>
-              Retry Authentication
-            </Button>
+            <Button onClick={refreshContext}>Retry Authentication</Button>
           </CardContent>
         </Card>
       </div>
@@ -318,10 +337,12 @@ export default function DashboardCompanyPage({
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Demo data is shown. Actions like export use mock data; connect a real Whop session to see live metrics.
+            Demo data is shown. Actions like export use mock data; connect a real Whop session to
+            see live metrics.
           </AlertDescription>
         </Alert>
       )}
+
       {/* Welcome Header */}
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -334,15 +355,15 @@ export default function DashboardCompanyPage({
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Link href="/settings">
-            <Button variant="outline" size="sm" className="gap-2">
-              <Settings className="h-4 w-4" />
-              Settings
-            </Button>
-          </Link>
+          <TimePeriodSelector
+            value={windowDays}
+            onChange={setWindowDays}
+            disabled={isLoadingKpis}
+          />
           <Button
             onClick={handleExportCSV}
             size="sm"
+            variant="outline"
             className="gap-2"
             aria-label="Export cases to CSV"
             data-testid="export-csv-button"
@@ -356,15 +377,11 @@ export default function DashboardCompanyPage({
       {/* Company Info */}
       <div className="flex items-center gap-4 text-sm text-muted-foreground">
         <span className="font-medium">Company:</span>
-        <code className="px-2 py-1 bg-muted rounded text-xs font-mono">
-          {urlCompanyId}
-        </code>
+        <code className="px-2 py-1 bg-muted rounded text-xs font-mono">{urlCompanyId}</code>
         {userId && (
           <>
             <span className="font-medium">User:</span>
-            <code className="px-2 py-1 bg-muted rounded text-xs font-mono">
-              {userId.slice(-8)}
-            </code>
+            <code className="px-2 py-1 bg-muted rounded text-xs font-mono">{userId.slice(-8)}</code>
           </>
         )}
       </div>
@@ -411,7 +428,7 @@ export default function DashboardCompanyPage({
           <KpiTile
             title="Recovery Rate"
             value={`${kpis?.recoveryRate || 0}%`}
-            subtitle={`${kpis?.windowDays || 14}-day attribution window`}
+            subtitle={`${kpis?.windowDays || windowDays}-day window`}
             isLoading={isLoadingKpis}
             variant="info"
             data-testid="kpi-recovery-rate"
@@ -427,6 +444,25 @@ export default function DashboardCompanyPage({
           />
         </div>
       )}
+
+      {/* Status Filter Tabs */}
+      <div className="flex items-center gap-2 border-b border-border pb-2">
+        <Filter className="h-4 w-4 text-muted-foreground mr-2" />
+        {STATUS_FILTERS.map((filter) => (
+          <button
+            key={filter.value}
+            onClick={() => setStatusFilter(filter.value)}
+            className={cn(
+              'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+              statusFilter === filter.value
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+            )}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
 
       {/* Cases Error */}
       {casesError && (
@@ -451,26 +487,37 @@ export default function DashboardCompanyPage({
             </Card>
           ) : (casesData?.cases?.length ?? 0) === 0 ? (
             <Card className="p-6">
-              {kpis && kpis.recoveries > 0 ? (
+              {kpis && kpis.recoveries > 0 && statusFilter === 'open' ? (
                 <>
                   <CardTitle className="text-lg mb-2 flex items-center gap-2">
                     <span className="text-2xl">🎉</span> All caught up!
                   </CardTitle>
                   <CardDescription className="space-y-2">
                     <p>
-                      You&apos;ve successfully recovered <strong>{kpis.recoveries} {kpis.recoveries === 1 ? 'case' : 'cases'}</strong> worth{' '}
-                      <strong>{formatRevenue(kpis.recoveredRevenueCents)}</strong> in the last {kpis.windowDays} days.
+                      You&apos;ve successfully recovered{' '}
+                      <strong>
+                        {kpis.recoveries} {kpis.recoveries === 1 ? 'case' : 'cases'}
+                      </strong>{' '}
+                      worth <strong>{formatRevenue(kpis.recoveredRevenueCents)}</strong> in the
+                      last {kpis.windowDays} days.
                     </p>
                     <p className="text-muted-foreground">
-                      No active recovery cases right now. New cases will appear when payment failures occur.
+                      No active recovery cases right now. New cases will appear when payment
+                      failures occur.
                     </p>
                   </CardDescription>
                 </>
               ) : (
                 <>
-                  <CardTitle className="text-lg mb-2">No recovery cases yet</CardTitle>
+                  <CardTitle className="text-lg mb-2">
+                    {statusFilter === 'all'
+                      ? 'No recovery cases yet'
+                      : `No ${statusFilter === 'closed_no_recovery' ? 'lost' : statusFilter} cases`}
+                  </CardTitle>
                   <CardDescription>
-                    Cases will appear when payment failures occur. Connect to Whop and retry once traffic is flowing.
+                    {statusFilter === 'all'
+                      ? 'Cases will appear when payment failures occur. Connect to Whop and retry once traffic is flowing.'
+                      : `No cases match the "${statusFilter === 'closed_no_recovery' ? 'Lost' : statusFilter}" filter.`}
                   </CardDescription>
                 </>
               )}
@@ -484,6 +531,8 @@ export default function DashboardCompanyPage({
               limit={casesData?.limit || 10}
               totalPages={casesData?.totalPages || 1}
               onPageChange={handlePageChange}
+              onCaseUpdated={handleCaseUpdated}
+              companyId={urlCompanyId}
             />
           )}
         </>
@@ -501,7 +550,9 @@ export default function DashboardCompanyPage({
           className="gap-2"
           data-testid="refresh-data-button"
         >
-          <RefreshCw className={`h-4 w-4 ${(isLoadingKpis || isLoadingCases) ? 'animate-spin' : ''}`} />
+          <RefreshCw
+            className={`h-4 w-4 ${isLoadingKpis || isLoadingCases ? 'animate-spin' : ''}`}
+          />
           Refresh Data
         </Button>
       </div>

@@ -51,7 +51,7 @@ export function AppFooter() {
                   href="/settings"
                   className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Settings
+                  Configuration
                 </Link>
               </li>
             </ul>

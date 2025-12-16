@@ -1,6 +1,6 @@
 'use client';
 
-import { AppHeader } from './AppHeader';
+import { TopToolbar } from './TopToolbar';
 import { AppFooter } from './AppFooter';
 import { ToastProvider } from '@/components/ui/toast';
 
@@ -11,7 +11,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         <a href="#main-content" className="skip-link">
           Skip to main content
         </a>
-        <AppHeader />
+        <TopToolbar />
         <main id="main-content" className="flex-1 overflow-auto">
           {children}
         </main>

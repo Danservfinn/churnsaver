@@ -7,6 +7,8 @@ import { Bell, MessageSquare, Gift, TrendingUp, ArrowRight, Settings } from 'luc
 import Link from 'next/link';
 import { useWhop } from '@/lib/context/whop';
 import { RecoveryFlowAnimation } from '@/components/landing/RecoveryFlowAnimation';
+import { TopToolbar } from '@/components/layouts/TopToolbar';
+import { AppFooter } from '@/components/layouts/AppFooter';
 
 export default function HomePage() {
   const { companyId } = useWhop();
@@ -38,7 +40,8 @@ export default function HomePage() {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
+      <TopToolbar />
       {/* Hero Section */}
       <section className="py-20 px-4">
         <div className="container mx-auto max-w-5xl">
@@ -195,6 +198,7 @@ export default function HomePage() {
           </Card>
         </div>
       </section>
+      <AppFooter />
     </div>
   );
 }

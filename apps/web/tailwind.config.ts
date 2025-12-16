@@ -18,18 +18,18 @@ const config: Config = {
 					900: "#18181b",
 					950: "#09090b",
 				},
-				// Whop Orange accent
+				// Red-orange accent (shifted from orange)
 				accent: {
-					50: "#fff7ed",
-					100: "#ffedd5",
-					200: "#fed7aa",
-					300: "#fdba74",
-					400: "#fb923c",
-					500: "#f97316", // Primary orange
-					600: "#ea580c",
-					700: "#c2410c",
-					800: "#9a3412",
-					900: "#7c2d12",
+					50: "#fff4ed",
+					100: "#ffe4d4",
+					200: "#fec9a9",
+					300: "#fdab77",
+					400: "#fa8744",
+					500: "#ea580c", // Primary red-orange
+					600: "#cb4509",
+					700: "#a3350a",
+					800: "#832b0d",
+					900: "#6b260f",
 				},
 				// Semantic colors
 				success: {

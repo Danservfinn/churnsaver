@@ -18,14 +18,14 @@
   --card-foreground: #fafafa;
   --border: #27272a;
   --input: #27272a;
-  --ring: #f97316;
+  --ring: #ea580c;
   --muted: #27272a;
   --muted-foreground: #a1a1aa;
-  --primary: #f97316;
+  --primary: #ea580c;
   --primary-foreground: #ffffff;
   --secondary: #27272a;
   --secondary-foreground: #fafafa;
-  --accent: #f97316;
+  --accent: #ea580c;
   --accent-foreground: #ffffff;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
@@ -139,6 +139,6 @@ body {
 
 /* Selection styles */
 ::selection {
-  background-color: rgba(249, 115, 22, 0.2);
+  background-color: rgba(234, 88, 12, 0.2);
   color: var(--foreground);
 }

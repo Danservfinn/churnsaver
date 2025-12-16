@@ -57,34 +57,6 @@ const steps: Step[] = [
   },
 ];
 
-function NotificationPopup({ step, isVisible, position }: { step: Step; isVisible: boolean; position: 'left' | 'right' }) {
-  const Icon = step.icon;
-
-  return (
-    <div
-      className={cn(
-        'absolute w-64 bg-card border border-border rounded-xl p-3 shadow-2xl transition-all duration-500',
-        position === 'left' ? '-left-4 md:-left-20' : '-right-4 md:-right-20',
-        'top-1/2 -translate-y-1/2',
-        isVisible
-          ? 'opacity-100 scale-100'
-          : 'opacity-0 scale-95 pointer-events-none',
-        position === 'left' ? 'origin-right' : 'origin-left'
-      )}
-    >
-      <div className="flex gap-3">
-        <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center shrink-0', step.iconBg)}>
-          <Icon className="h-5 w-5 text-white" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h4 className="font-semibold text-sm text-foreground">{step.title}</h4>
-          <p className="text-xs text-muted-foreground">{step.description}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function RecoveryFlowAnimation() {
   const [activeStep, setActiveStep] = useState(0);
   const [isAnimating, setIsAnimating] = useState(true);
@@ -145,15 +117,6 @@ export function RecoveryFlowAnimation() {
                   className="flex flex-col items-center relative"
                   style={{ width: `${100 / steps.length}%` }}
                 >
-                  {/* Popup notification for current step */}
-                  {isCurrent && index > 0 && index < steps.length - 1 && (
-                    <NotificationPopup
-                      step={step}
-                      isVisible={isCurrent}
-                      position={index % 2 === 0 ? 'left' : 'right'}
-                    />
-                  )}
-
                   {/* Icon circle */}
                   <div
                     className={cn(

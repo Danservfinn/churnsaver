@@ -108,7 +108,7 @@ const TIMEZONE_OPTIONS = [
 export default function Settings() {
   const { addToast } = useToast();
   const { getAuthHeaders } = useWhop();
-  const { companyId } = useWhopCompany();
+  const { companyId, isLoading: isAuthLoading } = useWhopCompany();
   const [settings, setSettings] = useState<CreatorSettings | null>(null);
   const [enablePush, setEnablePush] = useState<boolean>(true);
   const [enableDm, setEnableDm] = useState<boolean>(true);
@@ -126,10 +126,13 @@ export default function Settings() {
     setValidationErrors(computeErrors());
   }, [enablePush, enableDm, incentiveDays, reminderOffsets]);
 
-  // Load settings on mount
+  // Load settings when auth context is ready
   useEffect(() => {
-    loadSettings();
-  }, []);
+    // Wait for auth context to finish loading and have a valid companyId
+    if (!isAuthLoading && companyId && companyId !== 'unknown') {
+      loadSettings();
+    }
+  }, [isAuthLoading, companyId]);
 
   const loadSettings = async () => {
     try {
@@ -289,7 +292,7 @@ export default function Settings() {
     }
   };
 
-  if (loading) {
+  if (loading || isAuthLoading) {
     return (
       <div className="min-h-screen bg-background">
         <div className="container mx-auto px-4 py-8 max-w-3xl">

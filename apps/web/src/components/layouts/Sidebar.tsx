@@ -60,12 +60,13 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
   return (
     <aside
       className={cn(
-        'flex flex-col h-full bg-card border-r border-border transition-all duration-200',
+        'flex flex-col h-full border-r border-gray-700 transition-all duration-200',
         collapsed ? 'w-16' : 'w-64'
       )}
+      style={{ background: 'rgba(31, 31, 35, 0.8)' }}
     >
       {/* Logo / Brand */}
-      <div className="flex items-center h-16 px-4 border-b border-border">
+      <div className="flex items-center h-16 px-4 border-b border-gray-700">
         <Link href="/" className="flex items-center gap-3">
           <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground font-bold text-sm">
             CS
@@ -107,7 +108,7 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
 
       {/* Toggle Button */}
       {onToggle && (
-        <div className="p-2 border-t border-border">
+        <div className="p-2 border-t border-gray-700">
           <button
             type="button"
             onClick={onToggle}

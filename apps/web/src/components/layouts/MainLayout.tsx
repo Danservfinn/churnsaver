@@ -7,7 +7,7 @@ import { ToastProvider } from '@/components/ui/toast';
 export function MainLayout({ children }: { children: React.ReactNode }) {
   return (
     <ToastProvider>
-      <div className="flex min-h-screen flex-col bg-background">
+      <div className="flex min-h-screen flex-col" style={{ background: 'transparent' }}>
         <a href="#main-content" className="skip-link">
           Skip to main content
         </a>

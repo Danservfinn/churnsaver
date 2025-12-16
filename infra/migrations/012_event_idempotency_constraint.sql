@@ -33,12 +33,12 @@ BEGIN
 END $$;
 
 -- Step 2: Create unique index for idempotency
-CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_events_company_whop_event_id
+CREATE UNIQUE INDEX IF NOT EXISTS idx_events_company_whop_event_id
 ON events (company_id, whop_event_id)
 WHERE whop_event_id IS NOT NULL;
 
 -- Step 3: Add index for event lookup performance
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_events_whop_event_id
+CREATE INDEX IF NOT EXISTS idx_events_whop_event_id
 ON events (whop_event_id)
 WHERE whop_event_id IS NOT NULL;
 

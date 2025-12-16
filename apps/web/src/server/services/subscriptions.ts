@@ -1,254 +1,304 @@
+/**
+ * Subscription management service
+ * Handles tier management, usage tracking, and limit enforcement
+ * Per churn-saver-monetization-spec-final.md
+ */
+
 import { PoolClient } from 'pg';
 import { sql } from '@/lib/db';
 import { logger } from '@/lib/logger';
+import {
+  TIER_LIMITS,
+  TierName,
+  BillingInterval,
+  SubscriptionStatus as TierSubscriptionStatus,
+  mapWhopProductToTier,
+} from '@/lib/tiers';
 
-export type SubscriptionTier = 'free' | 'starter' | 'growth' | 'scale';
+// Re-export types for external use
+export type { TierName, BillingInterval };
+export type SubscriptionTier = TierName;
 
 export interface CompanySubscription {
   company_id: string;
-  tier: SubscriptionTier;
+  tier: TierName;
+  status: TierSubscriptionStatus;
+  billing_interval: BillingInterval;
   whop_membership_id: string | null;
-  total_recoveries_used: number;
-  monthly_recovered_revenue_cents: number;
-  month_start_date: string;
+  whop_product_id: string | null;
+  recoveries_this_period: number;
+  period_reset_at: Date;
+  current_period_start: Date | null;
+  current_period_end: Date | null;
+  created_at: Date;
+  updated_at: Date;
 }
 
-export interface TierLimits {
-  tier: SubscriptionTier;
-  max_monthly_recovered_revenue_cents: number | null;
-  max_total_recoveries: number | null;
-  price_cents: number;
-  name: string;
+export interface SubscriptionStatusResponse {
+  tier: TierName;
+  status: TierSubscriptionStatus;
+  billingInterval: BillingInterval;
+  recoveriesUsed: number;
+  recoveriesLimit: number;
+  recoveriesRemaining: number;
+  canProcessRecovery: boolean;
+  periodResetsAt: Date;
+  features: {
+    customTemplates: boolean;
+    maxTemplatesPerChannel: number;
+    basicAnalytics: boolean;
+    csvExport: boolean;
+    prioritySupport: boolean;
+  };
 }
 
 export interface RecoveryAllowance {
   allowed: boolean;
-  reason?: string;
-  subscription: CompanySubscription;
-  limits: TierLimits;
+  reason?: 'LIMIT_REACHED' | 'SUBSCRIPTION_INACTIVE';
+  subscription: SubscriptionStatusResponse;
 }
 
-async function upsertDefaultSubscription(companyId: string): Promise<void> {
-  await sql.execute(
-    `INSERT INTO company_subscriptions (company_id, tier)
-     VALUES ($1, 'free')
-     ON CONFLICT (company_id) DO NOTHING`,
-    [companyId],
-    companyId
-  );
+// Legacy interface for backward compatibility during migration
+export interface TierLimits {
+  tier: TierName;
+  max_recoveries_per_month: number | null;
+  price_cents: number;
+  name: string;
+  has_analytics: boolean;
+  has_custom_templates: boolean;
+  has_csv_export: boolean;
 }
 
-async function ensureMonth(subscription: CompanySubscription): Promise<CompanySubscription> {
-  const start = new Date(subscription.month_start_date);
+/**
+ * Get the next month start date
+ */
+function getNextMonthStart(): Date {
   const now = new Date();
-  if (start.getUTCFullYear() === now.getUTCFullYear() && start.getUTCMonth() === now.getUTCMonth()) {
-    return subscription;
-  }
-
-  await sql.execute(
-    `UPDATE company_subscriptions
-     SET month_start_date = CURRENT_DATE,
-         monthly_recovered_revenue_cents = 0,
-         updated_at = NOW()
-     WHERE company_id = $1`,
-    [subscription.company_id],
-    subscription.company_id
-  );
-
-  return {
-    ...subscription,
-    month_start_date: new Date().toISOString(),
-    monthly_recovered_revenue_cents: 0,
-  };
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 }
 
-async function upsertDefaultSubscriptionWithClient(client: PoolClient, companyId: string): Promise<void> {
-  await client.query(
-    `INSERT INTO company_subscriptions (company_id, tier)
-     VALUES ($1, 'free')
+/**
+ * Ensure a subscription record exists for a company (creates free tier if not)
+ */
+async function ensureSubscriptionExists(companyId: string): Promise<void> {
+  const nextReset = getNextMonthStart();
+
+  await sql.execute(
+    `INSERT INTO company_subscriptions (
+       company_id, tier, status, billing_interval,
+       recoveries_this_period, period_reset_at,
+       current_period_start, current_period_end
+     ) VALUES ($1, 'free', 'active', 'monthly', 0, $2, $3, $2)
      ON CONFLICT (company_id) DO NOTHING`,
-    [companyId]
-  );
-}
-
-async function getCompanySubscriptionWithClient(
-  client: PoolClient,
-  companyId: string
-): Promise<CompanySubscription | null> {
-  await upsertDefaultSubscriptionWithClient(client, companyId);
-
-  const result = await client.query<CompanySubscription>(
-    `SELECT company_id, tier, whop_membership_id, total_recoveries_used, monthly_recovered_revenue_cents, month_start_date
-     FROM company_subscriptions
-     WHERE company_id = $1`,
-    [companyId]
-  );
-
-  const subscription = result.rows[0];
-  if (!subscription) return null;
-  return ensureMonthWithClient(client, subscription);
-}
-
-async function ensureMonthWithClient(
-  client: PoolClient,
-  subscription: CompanySubscription
-): Promise<CompanySubscription> {
-  const start = new Date(subscription.month_start_date);
-  const now = new Date();
-  if (start.getUTCFullYear() === now.getUTCFullYear() && start.getUTCMonth() === now.getUTCMonth()) {
-    return subscription;
-  }
-
-  await client.query(
-    `UPDATE company_subscriptions
-     SET month_start_date = CURRENT_DATE,
-         monthly_recovered_revenue_cents = 0,
-         updated_at = NOW()
-     WHERE company_id = $1`,
-    [subscription.company_id]
-  );
-
-  return {
-    ...subscription,
-    month_start_date: new Date().toISOString(),
-    monthly_recovered_revenue_cents: 0,
-  };
-}
-
-export async function getCompanySubscription(companyId: string): Promise<CompanySubscription | null> {
-  await upsertDefaultSubscription(companyId);
-
-  const result = await sql.select<CompanySubscription>(
-    `SELECT company_id, tier, whop_membership_id, total_recoveries_used, monthly_recovered_revenue_cents, month_start_date
-     FROM company_subscriptions
-     WHERE company_id = $1`,
-    [companyId],
-    companyId
-  );
-
-  if (!result[0]) return null;
-  return ensureMonth(result[0]);
-}
-
-export async function getTierLimits(tier: SubscriptionTier): Promise<TierLimits> {
-  const result = await sql.select<TierLimits>(
-    `SELECT tier, max_monthly_recovered_revenue_cents, max_total_recoveries, price_cents, name
-     FROM tier_limits
-     WHERE tier = $1`,
-    [tier]
-  );
-
-  if (!result[0]) {
-    throw new Error(`Tier limits missing for tier ${tier}`);
-  }
-
-  return result[0];
-}
-
-export async function checkRecoveryAllowed(
-  companyId: string,
-  amountCents: number
-): Promise<RecoveryAllowance> {
-  const subscription = await getCompanySubscription(companyId);
-  if (!subscription) {
-    throw new Error('Unable to load subscription');
-  }
-
-  const limits = await getTierLimits(subscription.tier);
-  const subWithFreshMonth = await ensureMonth(subscription);
-
-  // Lifetime limit for free tier
-  if (limits.max_total_recoveries !== null) {
-    if (subWithFreshMonth.total_recoveries_used >= limits.max_total_recoveries) {
-      return {
-        allowed: false,
-        reason: 'free_limit_reached',
-        subscription: subWithFreshMonth,
-        limits,
-      };
-    }
-  }
-
-  // Monthly recovered revenue limit
-  if (limits.max_monthly_recovered_revenue_cents !== null) {
-    const projected = subWithFreshMonth.monthly_recovered_revenue_cents + amountCents;
-    if (projected > limits.max_monthly_recovered_revenue_cents) {
-      return {
-        allowed: false,
-        reason: 'monthly_limit_reached',
-        subscription: subWithFreshMonth,
-        limits,
-      };
-    }
-  }
-
-  return {
-    allowed: true,
-    subscription: subWithFreshMonth,
-    limits,
-  };
-}
-
-export async function recordRecovery(
-  companyId: string,
-  amountCents: number
-): Promise<void> {
-  const subscription = await getCompanySubscription(companyId);
-  if (!subscription) {
-    throw new Error('Unable to load subscription');
-  }
-
-  const subWithFreshMonth = await ensureMonth(subscription);
-
-  await sql.execute(
-    `UPDATE company_subscriptions
-     SET total_recoveries_used = total_recoveries_used + 1,
-         monthly_recovered_revenue_cents = monthly_recovered_revenue_cents + $2,
-         updated_at = NOW()
-     WHERE company_id = $1`,
-    [companyId, amountCents],
-    companyId
-  );
-
-  logger.info('Recorded recovery usage for company', {
-    companyId,
-    previousTotal: subWithFreshMonth.total_recoveries_used,
-    amountCents,
-  });
-}
-
-export async function resetMonthlyUsage(companyId: string): Promise<void> {
-  await sql.execute(
-    `UPDATE company_subscriptions
-     SET month_start_date = CURRENT_DATE,
-         monthly_recovered_revenue_cents = 0,
-         updated_at = NOW()
-     WHERE company_id = $1`,
-    [companyId],
+    [companyId, nextReset.toISOString(), new Date().toISOString()],
     companyId
   );
 }
 
 /**
- * Record a recovery inside an existing transaction using the provided client.
- * This keeps subscription usage updates atomic with case updates.
+ * Check and reset period usage if needed
  */
-export async function recordRecoveryWithClient(
+async function checkAndResetPeriod(
+  subscription: CompanySubscription
+): Promise<CompanySubscription> {
+  const now = new Date();
+  const resetAt = new Date(subscription.period_reset_at);
+
+  if (now >= resetAt) {
+    const nextReset = getNextMonthStart();
+
+    await sql.execute(
+      `UPDATE company_subscriptions
+       SET recoveries_this_period = 0,
+           period_reset_at = $2,
+           current_period_start = $3,
+           current_period_end = $2,
+           updated_at = now()
+       WHERE company_id = $1`,
+      [subscription.company_id, nextReset.toISOString(), now.toISOString()],
+      subscription.company_id
+    );
+
+    logger.info('Period usage reset', {
+      companyId: subscription.company_id,
+      previousCount: subscription.recoveries_this_period,
+      nextReset,
+    });
+
+    return {
+      ...subscription,
+      recoveries_this_period: 0,
+      period_reset_at: nextReset,
+      current_period_start: now,
+      current_period_end: nextReset,
+    };
+  }
+
+  return subscription;
+}
+
+/**
+ * Build subscription status response from raw subscription
+ */
+function buildStatusResponse(subscription: CompanySubscription): SubscriptionStatusResponse {
+  const limits = TIER_LIMITS[subscription.tier];
+  const remaining =
+    limits.recoveriesPerMonth === Infinity
+      ? Infinity
+      : Math.max(0, limits.recoveriesPerMonth - subscription.recoveries_this_period);
+
+  const canProcess =
+    subscription.status === 'active' &&
+    (limits.recoveriesPerMonth === Infinity ||
+      subscription.recoveries_this_period < limits.recoveriesPerMonth);
+
+  return {
+    tier: subscription.tier,
+    status: subscription.status,
+    billingInterval: subscription.billing_interval,
+    recoveriesUsed: subscription.recoveries_this_period,
+    recoveriesLimit: limits.recoveriesPerMonth,
+    recoveriesRemaining: remaining,
+    canProcessRecovery: canProcess,
+    periodResetsAt: subscription.period_reset_at,
+    features: {
+      customTemplates: limits.customTemplates,
+      maxTemplatesPerChannel: limits.maxTemplatesPerChannel,
+      basicAnalytics: limits.basicAnalytics,
+      csvExport: limits.csvExport,
+      prioritySupport: limits.prioritySupport,
+    },
+  };
+}
+
+/**
+ * Get subscription status for a company
+ */
+export async function getSubscriptionStatus(
+  companyId: string
+): Promise<SubscriptionStatusResponse> {
+  await ensureSubscriptionExists(companyId);
+
+  const rows = await sql.select<CompanySubscription>(
+    `SELECT company_id, tier, status, billing_interval, whop_membership_id,
+            recoveries_this_period, period_reset_at,
+            current_period_start, current_period_end,
+            created_at, updated_at
+     FROM company_subscriptions
+     WHERE company_id = $1`,
+    [companyId],
+    companyId
+  );
+
+  if (!rows.length) {
+    // This shouldn't happen after ensureSubscriptionExists, but handle defensively
+    const nextReset = getNextMonthStart();
+    return buildStatusResponse({
+      company_id: companyId,
+      tier: 'free',
+      status: 'active',
+      billing_interval: 'monthly',
+      whop_membership_id: null,
+      whop_product_id: null,
+      recoveries_this_period: 0,
+      period_reset_at: nextReset,
+      current_period_start: new Date(),
+      current_period_end: nextReset,
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+  }
+
+  const subscription = await checkAndResetPeriod(rows[0]);
+  return buildStatusResponse(subscription);
+}
+
+/**
+ * Get raw subscription record (for internal use)
+ */
+export async function getCompanySubscription(
+  companyId: string
+): Promise<CompanySubscription | null> {
+  await ensureSubscriptionExists(companyId);
+
+  const rows = await sql.select<CompanySubscription>(
+    `SELECT company_id, tier, status, billing_interval, whop_membership_id,
+            recoveries_this_period, period_reset_at,
+            current_period_start, current_period_end,
+            created_at, updated_at
+     FROM company_subscriptions
+     WHERE company_id = $1`,
+    [companyId],
+    companyId
+  );
+
+  if (!rows.length) return null;
+
+  return checkAndResetPeriod(rows[0]);
+}
+
+/**
+ * Increment recovery count - returns false if limit reached (HARD BLOCK)
+ * Must be called BEFORE creating a recovery case
+ */
+export async function incrementRecoveryCount(companyId: string): Promise<boolean> {
+  const status = await getSubscriptionStatus(companyId);
+
+  if (!status.canProcessRecovery) {
+    logger.warn('Recovery blocked - limit reached or subscription inactive', {
+      companyId,
+      tier: status.tier,
+      used: status.recoveriesUsed,
+      limit: status.recoveriesLimit,
+      status: status.status,
+    });
+    return false;
+  }
+
+  // Upsert to handle companies without subscription record
+  await sql.execute(
+    `INSERT INTO company_subscriptions (company_id, recoveries_this_period, updated_at)
+     VALUES ($1, 1, now())
+     ON CONFLICT (company_id) DO UPDATE SET
+       recoveries_this_period = company_subscriptions.recoveries_this_period + 1,
+       updated_at = now()`,
+    [companyId],
+    companyId
+  );
+
+  logger.info('Recovery count incremented', {
+    companyId,
+    newCount: status.recoveriesUsed + 1,
+    limit: status.recoveriesLimit,
+  });
+
+  return true;
+}
+
+/**
+ * Increment recovery count within a transaction
+ * Used for atomic updates when creating recovery cases
+ */
+export async function incrementRecoveryCountWithClient(
   client: PoolClient,
-  companyId: string,
-  amountCents: number
+  companyId: string
 ): Promise<{ allowed: boolean; reason?: string }> {
   // Ensure subscription row exists
   await client.query(
-    `INSERT INTO company_subscriptions (company_id, tier)
-     VALUES ($1, 'free')
+    `INSERT INTO company_subscriptions (company_id, tier, status, recoveries_this_period, period_reset_at)
+     VALUES ($1, 'free', 'active', 0, date_trunc('month', now() + interval '1 month'))
      ON CONFLICT (company_id) DO NOTHING`,
     [companyId]
   );
 
   // Lock subscription row for update
-  const subResult = await client.query<CompanySubscription>(
-    `SELECT company_id, tier, month_start_date, total_recoveries_used, monthly_recovered_revenue_cents
+  const subResult = await client.query<{
+    tier: TierName;
+    status: TierSubscriptionStatus;
+    recoveries_this_period: number;
+    period_reset_at: Date;
+  }>(
+    `SELECT tier, status, recoveries_this_period, period_reset_at
      FROM company_subscriptions
      WHERE company_id = $1
      FOR UPDATE`,
@@ -260,67 +310,256 @@ export async function recordRecoveryWithClient(
     throw new Error('Unable to load subscription inside transaction');
   }
 
-  // Refresh month if needed
-  const start = new Date(subscription.month_start_date);
+  // Check period reset
   const now = new Date();
-  const sameMonth =
-    start.getUTCFullYear() === now.getUTCFullYear() &&
-    start.getUTCMonth() === now.getUTCMonth();
+  const resetAt = new Date(subscription.period_reset_at);
+  let currentCount = subscription.recoveries_this_period;
 
-  if (!sameMonth) {
+  if (now >= resetAt) {
+    // Reset the period
     await client.query(
       `UPDATE company_subscriptions
-       SET month_start_date = CURRENT_DATE,
-           monthly_recovered_revenue_cents = 0,
-           updated_at = NOW()
+       SET recoveries_this_period = 0,
+           period_reset_at = date_trunc('month', now() + interval '1 month'),
+           updated_at = now()
        WHERE company_id = $1`,
       [companyId]
     );
-    subscription.month_start_date = new Date().toISOString() as any;
-    subscription.monthly_recovered_revenue_cents = 0;
+    currentCount = 0;
   }
 
-  // Load tier limits inside the same transaction to avoid races
-  const tierResult = await client.query<TierLimits>(
-    `SELECT tier, max_monthly_recovered_revenue_cents, max_total_recoveries, price_cents, name
-     FROM tier_limits
-     WHERE tier = $1`,
-    [subscription.tier]
-  );
+  // Check limits
+  const limits = TIER_LIMITS[subscription.tier];
 
-  const limits = tierResult.rows[0];
-  if (!limits) {
-    throw new Error(`Tier limits missing for tier ${subscription.tier}`);
-  }
-
-  const projectedTotal = subscription.total_recoveries_used + 1;
-  const projectedMonthly = subscription.monthly_recovered_revenue_cents + amountCents;
-
-  if (limits.max_total_recoveries !== null && projectedTotal > limits.max_total_recoveries) {
-    return { allowed: false, reason: 'free_limit_reached' };
+  if (subscription.status !== 'active') {
+    return { allowed: false, reason: 'SUBSCRIPTION_INACTIVE' };
   }
 
   if (
-    limits.max_monthly_recovered_revenue_cents !== null &&
-    projectedMonthly > limits.max_monthly_recovered_revenue_cents
+    limits.recoveriesPerMonth !== Infinity &&
+    currentCount >= limits.recoveriesPerMonth
   ) {
-    return { allowed: false, reason: 'monthly_limit_reached' };
+    return { allowed: false, reason: 'LIMIT_REACHED' };
   }
 
+  // Increment counter
   await client.query(
     `UPDATE company_subscriptions
-     SET total_recoveries_used = total_recoveries_used + 1,
-         monthly_recovered_revenue_cents = monthly_recovered_revenue_cents + $2,
-         updated_at = NOW()
+     SET recoveries_this_period = recoveries_this_period + 1,
+         updated_at = now()
      WHERE company_id = $1`,
-    [companyId, amountCents]
+    [companyId]
   );
 
-  logger.info('Recorded recovery usage within transaction', {
+  logger.info('Recovery count incremented within transaction', {
     companyId,
-    amountCents
+    newCount: currentCount + 1,
+    limit: limits.recoveriesPerMonth,
   });
 
   return { allowed: true };
 }
 
+/**
+ * Create or update subscription from Whop webhook
+ */
+export async function upsertSubscription(
+  companyId: string,
+  whopMembershipId: string,
+  whopProductId: string,
+  status: TierSubscriptionStatus
+): Promise<void> {
+  const tierInfo = mapWhopProductToTier(whopProductId);
+  const tier = tierInfo?.tier ?? 'free';
+  const interval = tierInfo?.interval ?? 'monthly';
+
+  const nextReset = getNextMonthStart();
+
+  await sql.execute(
+    `INSERT INTO company_subscriptions (
+       company_id, whop_membership_id, whop_product_id,
+       tier, status, billing_interval,
+       recoveries_this_period, period_reset_at,
+       current_period_start, current_period_end,
+       updated_at
+     ) VALUES ($1, $2, $3, $4, $5, $6, 0, $7, now(), $7, now())
+     ON CONFLICT (company_id) DO UPDATE SET
+       whop_membership_id = EXCLUDED.whop_membership_id,
+       whop_product_id = EXCLUDED.whop_product_id,
+       tier = EXCLUDED.tier,
+       status = EXCLUDED.status,
+       billing_interval = EXCLUDED.billing_interval,
+       updated_at = now()`,
+    [companyId, whopMembershipId, whopProductId, tier, status, interval, nextReset.toISOString()],
+    companyId
+  );
+
+  logger.info('Subscription upserted', {
+    companyId,
+    tier,
+    status,
+    interval,
+    whopMembershipId,
+    whopProductId,
+  });
+}
+
+/**
+ * Update subscription status only (for payment events)
+ */
+export async function updateSubscriptionStatus(
+  companyId: string,
+  status: TierSubscriptionStatus
+): Promise<void> {
+  await sql.execute(
+    `UPDATE company_subscriptions
+     SET status = $2, updated_at = now()
+     WHERE company_id = $1`,
+    [companyId, status],
+    companyId
+  );
+
+  logger.info('Subscription status updated', { companyId, status });
+}
+
+/**
+ * Check if a recovery would be allowed (without incrementing)
+ */
+export async function checkRecoveryAllowed(companyId: string): Promise<RecoveryAllowance> {
+  const status = await getSubscriptionStatus(companyId);
+
+  if (status.status !== 'active') {
+    return {
+      allowed: false,
+      reason: 'SUBSCRIPTION_INACTIVE',
+      subscription: status,
+    };
+  }
+
+  if (!status.canProcessRecovery) {
+    return {
+      allowed: false,
+      reason: 'LIMIT_REACHED',
+      subscription: status,
+    };
+  }
+
+  return {
+    allowed: true,
+    subscription: status,
+  };
+}
+
+/**
+ * Get tier limits from database (legacy compatibility)
+ */
+export async function getTierLimits(tier: TierName): Promise<TierLimits> {
+  const rows = await sql.select<TierLimits>(
+    `SELECT tier, max_recoveries_per_month, price_cents, name,
+            has_analytics, has_custom_templates, has_csv_export
+     FROM tier_limits
+     WHERE tier = $1`,
+    [tier]
+  );
+
+  if (!rows.length) {
+    // Fallback to hardcoded values if DB doesn't have it
+    const limits = TIER_LIMITS[tier];
+    return {
+      tier,
+      max_recoveries_per_month:
+        limits.recoveriesPerMonth === Infinity ? null : limits.recoveriesPerMonth,
+      price_cents: 0, // Would need to get from TIER_PRICING
+      name: tier.charAt(0).toUpperCase() + tier.slice(1),
+      has_analytics: limits.basicAnalytics,
+      has_custom_templates: limits.customTemplates,
+      has_csv_export: limits.csvExport,
+    };
+  }
+
+  return rows[0];
+}
+
+/**
+ * Legacy: Record recovery usage (backward compatibility)
+ * @deprecated Use incrementRecoveryCount instead
+ */
+export async function recordRecovery(
+  companyId: string,
+  _amountCents: number
+): Promise<void> {
+  await incrementRecoveryCount(companyId);
+}
+
+/**
+ * Legacy: Record recovery within transaction (backward compatibility)
+ * @deprecated Use incrementRecoveryCountWithClient instead
+ */
+export async function recordRecoveryWithClient(
+  client: PoolClient,
+  companyId: string,
+  _amountCents: number
+): Promise<{ allowed: boolean; reason?: string }> {
+  return incrementRecoveryCountWithClient(client, companyId);
+}
+
+/**
+ * Reset monthly usage for a company (admin function)
+ */
+export async function resetMonthlyUsage(companyId: string): Promise<void> {
+  const nextReset = getNextMonthStart();
+
+  await sql.execute(
+    `UPDATE company_subscriptions
+     SET recoveries_this_period = 0,
+         period_reset_at = $2,
+         current_period_start = now(),
+         current_period_end = $2,
+         updated_at = now()
+     WHERE company_id = $1`,
+    [companyId, nextReset.toISOString()],
+    companyId
+  );
+
+  logger.info('Monthly usage reset', { companyId, nextReset });
+}
+
+/**
+ * Get all companies that need period reset (for cron job)
+ */
+export async function getCompaniesNeedingPeriodReset(): Promise<string[]> {
+  const rows = await sql.select<{ company_id: string }>(
+    `SELECT company_id
+     FROM company_subscriptions
+     WHERE period_reset_at <= now()`
+  );
+
+  return rows.map((r) => r.company_id);
+}
+
+/**
+ * Batch reset periods for multiple companies
+ */
+export async function batchResetPeriods(companyIds: string[]): Promise<number> {
+  if (companyIds.length === 0) return 0;
+
+  const nextReset = getNextMonthStart();
+
+  const result = await sql.execute(
+    `UPDATE company_subscriptions
+     SET recoveries_this_period = 0,
+         period_reset_at = $1,
+         current_period_start = now(),
+         current_period_end = $1,
+         updated_at = now()
+     WHERE company_id = ANY($2)`,
+    [nextReset.toISOString(), companyIds]
+  );
+
+  logger.info('Batch period reset completed', {
+    count: result.rowCount,
+    nextReset,
+  });
+
+  return result.rowCount;
+}

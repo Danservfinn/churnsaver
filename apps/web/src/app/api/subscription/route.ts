@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { requireAuthContext } from '@/lib/auth/requireAuth';
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from '@/server/middleware/rateLimit';
-import { getCompanySubscription, getTierLimits } from '@/server/services/subscriptions';
+import {
+  getCompanySubscription,
+  getTierLimits,
+  getSubscriptionStatus,
+} from '@/server/services/subscriptions';
 import { getQaDemoSubscription, isQaDemoBypassEnabled } from '@/lib/qaDemo';
 import { initDb } from '@/lib/db';
 
@@ -37,7 +41,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const subscription = await getCompanySubscription(companyId);
+    // Get both raw subscription and enhanced status
+    const [subscription, status] = await Promise.all([
+      getCompanySubscription(companyId),
+      getSubscriptionStatus(companyId),
+    ]);
+
     if (!subscription) {
       return NextResponse.json({ error: 'Subscription not found' }, { status: 404 });
     }
@@ -45,8 +54,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const limits = await getTierLimits(subscription.tier);
 
     return NextResponse.json({
+      // Legacy format (for backward compatibility)
       subscription,
       limits,
+      // New format with features and usage tracking
+      status,
     });
   } catch (error) {
     logger.error('Failed to fetch subscription', {

@@ -9,7 +9,11 @@ import { getMembershipManageUrlResult, terminateMembership as terminateMembershi
 import { getSettingsForCompany } from './settings';
 import { ReminderChannelSettings } from './reminders/notifier';
 import { ReminderNotifier } from './shared/reminderNotifier';
-import { recordRecoveryWithClient } from './subscriptions';
+import {
+  recordRecoveryWithClient,
+  incrementRecoveryCount,
+  getSubscriptionStatus,
+} from './subscriptions';
 import {
   errorHandler,
   ErrorCode,
@@ -127,6 +131,64 @@ export async function logRecoveryAction(
     // Log the error but don't fail the operation
   }
 }
+
+/**
+ * Log a skipped recovery due to tier limits
+ * Per churn-saver-monetization-spec-final.md
+ */
+export async function logSkippedRecovery(
+  companyId: string,
+  membershipId: string,
+  userId: string,
+  reason: 'LIMIT_REACHED' | 'SUBSCRIPTION_INACTIVE' | 'DUPLICATE',
+  tier: string,
+  recoveriesUsed: number,
+  recoveriesLimit: number | null,
+  eventId?: string,
+  eventPayload?: Record<string, unknown>
+): Promise<void> {
+  try {
+    await sqlWithRLS.execute(
+      `INSERT INTO skipped_recoveries (
+         company_id, membership_id, user_id,
+         reason, tier, recoveries_used, recoveries_limit,
+         event_id, event_payload
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        companyId,
+        membershipId,
+        userId,
+        reason,
+        tier,
+        recoveriesUsed,
+        recoveriesLimit,
+        eventId || null,
+        eventPayload ? JSON.stringify(eventPayload) : null,
+      ],
+      { companyId }
+    );
+
+    logger.warn('Recovery skipped - logged to skipped_recoveries', {
+      companyId,
+      membershipId,
+      userId,
+      reason,
+      tier,
+      recoveriesUsed,
+      recoveriesLimit,
+      eventId,
+    });
+  } catch (error) {
+    logger.error('Failed to log skipped recovery', {
+      companyId,
+      membershipId,
+      reason,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    // Log the error but don't fail the operation
+  }
+}
+
 /**
  * RecoveryCase interface
  *
@@ -439,13 +501,59 @@ export async function processPaymentFailedEvent(
     let recoveryCase: RecoveryCase | null;
 
     if (existingCase) {
-      // Merge with existing case
+      // Merge with existing case (no limit check needed - already counted)
       logger.info('Merging with existing recovery case', {
         existingCaseId: existingCase.id,
         membershipId: event.membershipId
       });
       recoveryCase = await updateRecoveryCase(existingCase, event);
     } else {
+      // NEW CASE: Check subscription limits BEFORE creating
+      // Per churn-saver-monetization-spec-final.md - HARD BLOCK when limit reached
+      const subscription = await getSubscriptionStatus(companyId);
+
+      if (!subscription.canProcessRecovery) {
+        // Log to skipped_recoveries table and return null
+        const reason = subscription.status !== 'active'
+          ? 'SUBSCRIPTION_INACTIVE'
+          : 'LIMIT_REACHED';
+
+        await logSkippedRecovery(
+          companyId,
+          event.membershipId,
+          event.userId,
+          reason,
+          subscription.tier,
+          subscription.recoveriesUsed,
+          subscription.recoveriesLimit === Infinity ? null : subscription.recoveriesLimit,
+          event.eventId,
+          { reason: event.reason, occurredAt: event.occurredAt }
+        );
+
+        logger.warn('Recovery case creation blocked by tier limits', {
+          companyId,
+          membershipId: event.membershipId,
+          tier: subscription.tier,
+          used: subscription.recoveriesUsed,
+          limit: subscription.recoveriesLimit,
+          status: subscription.status,
+          reason,
+        });
+
+        return null;
+      }
+
+      // Increment recovery counter BEFORE creating the case
+      const incremented = await incrementRecoveryCount(companyId);
+      if (!incremented) {
+        // Race condition - limit was reached between check and increment
+        logger.warn('Recovery increment failed (race condition), skipping case creation', {
+          companyId,
+          membershipId: event.membershipId,
+        });
+        return null;
+      }
+
       // Create new case
       logger.info('Creating new recovery case', {
         membershipId: event.membershipId,

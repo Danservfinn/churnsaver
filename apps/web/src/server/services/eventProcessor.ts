@@ -14,6 +14,10 @@ import {
   processMembershipInvalidEvent,
   MembershipInvalidEvent
 } from './cases';
+import {
+  isChurnSaverSubscriptionEvent,
+  handleChurnSaverSubscriptionEvent,
+} from '@/server/webhooks/subscriptionHandler';
 
 export interface ProcessedEvent {
   id: string;
@@ -315,6 +319,36 @@ export async function processWebhookEvent(
       type: normalizedType,
       membershipId: event.membership_id
     });
+
+    // Check if this is a ChurnSaver subscription event (for the app's own tiers)
+    // These events manage the company's subscription to ChurnSaver itself
+    const payload = typeof event.payload === 'string'
+      ? JSON.parse(event.payload)
+      : event.payload;
+    const productId = payload?.data?.product_id || payload?.data?.membership?.product_id;
+
+    if (isChurnSaverSubscriptionEvent(productId)) {
+      logger.info('Routing to ChurnSaver subscription handler', {
+        eventId: event.whop_event_id,
+        type: normalizedType,
+        productId,
+      });
+
+      const result = await handleChurnSaverSubscriptionEvent(
+        normalizedType,
+        event.whop_event_id,
+        payload?.data || {},
+        companyId
+      );
+
+      logger.info('ChurnSaver subscription event processed', {
+        eventId: event.whop_event_id,
+        processed: result.processed,
+        message: result.message,
+      });
+
+      return result.processed;
+    }
 
     // Process payment_failed events
     if (normalizedType === 'payment_failed') {

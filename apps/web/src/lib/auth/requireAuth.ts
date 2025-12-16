@@ -5,19 +5,22 @@ import { getQaDemoContext, isQaDemoBypassEnabled } from '@/lib/qaDemo';
 import { logger } from '@/lib/logger';
 
 // Demo token for screenshot/testing access to demo company data only
-// This allows production access to biz_demo_staging without Whop auth
+// This allows production access to demo companies without Whop auth
 const DEMO_ACCESS_TOKEN = process.env.DEMO_ACCESS_TOKEN || 'churnsaver_demo_2024';
-const DEMO_COMPANY_ID = 'biz_demo_staging';
+const DEMO_COMPANY_IDS = [
+  'biz_demo_staging',  // Has seeded data
+  'biz_demo_empty',    // Empty state for screenshots
+];
 
 function isDemoTokenAccess(request: NextRequest): { valid: boolean; companyId?: string } {
   const url = new URL(request.url);
   const token = url.searchParams.get('demo_token');
   const companyId = url.searchParams.get('companyId');
   
-  // Token must match and company must be the demo company
-  if (token === DEMO_ACCESS_TOKEN && companyId === DEMO_COMPANY_ID) {
-    logger.info('Demo token access granted', { companyId: DEMO_COMPANY_ID });
-    return { valid: true, companyId: DEMO_COMPANY_ID };
+  // Token must match and company must be an allowed demo company
+  if (token === DEMO_ACCESS_TOKEN && companyId && DEMO_COMPANY_IDS.includes(companyId)) {
+    logger.info('Demo token access granted', { companyId });
+    return { valid: true, companyId };
   }
   
   return { valid: false };

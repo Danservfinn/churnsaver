@@ -17,14 +17,14 @@ import { isQaDemoClient } from '@/lib/qaDemo';
 
 // Demo token access for screenshots/testing
 const DEMO_TOKEN = 'churnsaver_demo_2024';
-const DEMO_COMPANY_ID = 'biz_demo_staging';
+const DEMO_COMPANY_IDS = ['biz_demo_staging', 'biz_demo_empty'];
 
 function isDemoTokenAccess(): boolean {
   if (typeof window === 'undefined') return false;
   const params = new URLSearchParams(window.location.search);
   const token = params.get('demo_token');
   const companyId = window.location.pathname.split('/').pop();
-  return token === DEMO_TOKEN && companyId === DEMO_COMPANY_ID;
+  return token === DEMO_TOKEN && !!companyId && DEMO_COMPANY_IDS.includes(companyId);
 }
 
 function getDemoTokenParam(): string {

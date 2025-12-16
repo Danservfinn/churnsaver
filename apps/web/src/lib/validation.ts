@@ -26,7 +26,8 @@ export const KpiQuerySchema = z.object({
   window: z.string().regex(/^\d+$/).transform(val => parseInt(val, 10)).refine(val => val >= 1 && val <= 365, {
     message: "Window must be between 1 and 365 days"
   }).optional().default(14),
-  companyId: z.string().max(100).optional() // Whop company ID from URL path/query params
+  companyId: z.string().max(100).optional(), // Whop company ID from URL path/query params
+  demo_token: z.string().max(100).optional() // Demo access token for screenshots/testing
 }).strict();
 
 export type KpiQueryInput = z.infer<typeof KpiQuerySchema>;
@@ -42,7 +43,8 @@ export const CaseQuerySchema = z.object({
     message: "Limit must be between 1 and 100"
   }).optional().default(50),
   status: z.enum(['open', 'recovered']).optional(),
-  companyId: z.string().max(100).optional() // Whop company ID from URL path/query params
+  companyId: z.string().max(100).optional(), // Whop company ID from URL path/query params
+  demo_token: z.string().max(100).optional() // Demo access token for screenshots/testing
 }).strict();
 
 export type CaseQueryInput = z.infer<typeof CaseQuerySchema>;

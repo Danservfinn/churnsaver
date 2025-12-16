@@ -48,7 +48,7 @@ export function WhopAppLayout({ children }: Props) {
   return (
     <div
       data-whop-app
-      className={isIframe ? 'p-0 max-w-full' : 'p-4 sm:p-6 lg:p-8'}
+      className={isIframe ? 'p-4 sm:p-6 max-w-full' : 'p-4 sm:p-6 lg:p-8'}
       style={{
         minHeight: '100vh',
         background: '#09090b',

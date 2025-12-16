@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, LayoutDashboard, Settings, Menu, X } from 'lucide-react';
+import { Home, LayoutDashboard, Settings, Menu, X, CreditCard } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -16,6 +16,7 @@ export function AppHeader() {
   const navItems = [
     { href: '/', label: 'Home', icon: Home },
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { href: '/pricing', label: 'Pricing', icon: CreditCard },
     { href: '/settings', label: 'Settings', icon: Settings },
   ];
 

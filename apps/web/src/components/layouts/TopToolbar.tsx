@@ -38,7 +38,7 @@ export function TopToolbar() {
   }, [mobileMenuOpen]);
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border bg-card/80 backdrop-blur-sm">
+    <header className="sticky top-0 z-50 w-full border-b border-border bg-background">
       <div className="container mx-auto px-4">
         <div className="flex h-14 items-center justify-between">
           {/* Logo */}
@@ -105,7 +105,7 @@ export function TopToolbar() {
               id={menuId}
               ref={mobileMenuRef}
               aria-label="Main navigation"
-              className="absolute right-0 top-0 h-full w-72 max-w-[90%] border-l border-border bg-card shadow-xl py-6 px-4 space-y-3 focus:outline-none"
+              className="absolute right-0 top-0 h-full w-72 max-w-[90%] border-l border-border bg-background shadow-xl py-6 px-4 space-y-3 focus:outline-none"
               role="dialog"
               aria-modal="true"
             >

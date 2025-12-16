@@ -50,12 +50,25 @@
   --font-mono: var(--font-geist-mono);
 }
 
-html, body {
+* {
+  border-color: var(--border);
+}
+
+/* Force transparent background for Whop iframe - must come after all imports */
+html {
   background: transparent !important;
+  background-color: transparent !important;
+}
+
+body {
+  background: transparent !important;
+  background-color: transparent !important;
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
 
-* {
-  border-color: var(--border);
+/* Override any .bg-background class */
+.bg-background {
+  background: transparent !important;
+  background-color: transparent !important;
 }

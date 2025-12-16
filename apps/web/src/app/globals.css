@@ -1,16 +1,23 @@
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/preflight.css" layer(base);
 @import "tailwindcss/utilities.css" layer(utilities);
-@import "@whop/react/styles.css" layer(frosted_ui);
+@import "../styles/backgrounds.css" layer(utilities);
 @config '../../tailwind.config.ts';
 
+/*
+ * Churn Saver runs inside Whop's dark-themed iframe.
+ * We use dark backgrounds and dark theme colors by default
+ * to seamlessly integrate with Whop's UI.
+ */
+
 :root {
+  /* Dark theme as default - Whop iframe is always dark */
   --background: #09090b;
-  --foreground: #ededed;
-  --card: rgba(31, 31, 35, 0.5);
-  --card-foreground: #ededed;
-  --border: #3f3f46;
-  --input: #3f3f46;
+  --foreground: #fafafa;
+  --card: rgba(24, 24, 27, 0.8);
+  --card-foreground: #fafafa;
+  --border: #27272a;
+  --input: #27272a;
   --ring: #f97316;
   --muted: #27272a;
   --muted-foreground: #a1a1aa;
@@ -22,6 +29,9 @@
   --accent-foreground: #ffffff;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
+  --radius: 0.5rem;
+
+  /* Popover/dropdown backgrounds need to be opaque */
   --popover: #18181b;
   --popover-foreground: #fafafa;
 }
@@ -54,21 +64,81 @@
   border-color: var(--border);
 }
 
-/* Dark background for Whop iframe integration */
 html {
-  background: #09090b !important;
-  background-color: #09090b !important;
+  scroll-behavior: smooth;
+  background: #09090b;
 }
 
 body {
-  background: #09090b !important;
-  background-color: #09090b !important;
+  background: #09090b;
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Override any .bg-background class */
-.bg-background {
-  background: #09090b !important;
-  background-color: #09090b !important;
+.skip-link {
+  position: absolute;
+  top: -200px;
+  left: 12px;
+  padding: 0.65rem 1rem;
+  background: var(--card);
+  color: var(--foreground);
+  border: 3px solid var(--ring);
+  border-radius: 0.6rem;
+  font-weight: 600;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+  z-index: 60;
+  transition: top 150ms ease, box-shadow 150ms ease;
+}
+
+.skip-link:focus-visible {
+  top: 12px;
+  outline: none;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* Custom scrollbar - dark themed */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+/* Focus visible styles */
+*:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--ring) 30%, transparent);
+  border-radius: 6px;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Selection styles */
+::selection {
+  background-color: rgba(249, 115, 22, 0.2);
+  color: var(--foreground);
 }

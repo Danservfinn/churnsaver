@@ -1,7 +1,7 @@
 # ChurnSaver Architecture Documentation
 
-> **Version:** 1.0.0  
-> **Last Updated:** December 2024  
+> **Version:** 1.1.0
+> **Last Updated:** December 16, 2025
 > **Status:** Production-Ready Architecture
 
 ## Table of Contents
@@ -29,9 +29,11 @@ ChurnSaver is a **SaaS churn recovery platform** integrated with the Whop market
 
 - **Webhook Processing**: Real-time event ingestion from Whop
 - **Recovery Case Management**: Automated case creation and lifecycle management
+- **Case Actions**: Manual nudge, cancel, terminate, and re-open closed cases
 - **Reminder System**: Configurable multi-touch reminder sequences
 - **Incentive Engine**: Dynamic incentive offers for recovery
-- **Analytics Dashboard**: Recovery metrics and insights
+- **Analytics Dashboard**: Recovery metrics with configurable time periods (Daily/Weekly/Monthly/Quarterly/Annually/All Time)
+- **Tiered Monetization**: Free, Pro, and Max subscription tiers with feature gating
 - **Multi-Tenant**: Full data isolation per company/creator
 
 ### Architecture Principles
@@ -265,13 +267,26 @@ type WebhookEventType =
 - Track case lifecycle (open → recovered/closed)
 - Manage reminder scheduling
 - Calculate recovery metrics
+- Re-open closed cases for additional recovery attempts
 
 **Case Status Flow:**
 ```
 payment.failed → OPEN → [reminder cycle] → RECOVERED (payment.succeeded)
                    │                              or
                    └─────────────────────→ CLOSED_NO_RECOVERY (timeout)
+                                                   │
+                                                   ↓ (manual re-open)
+                                                 OPEN
 ```
+
+**Manual Case Actions:**
+| Action | From Status | To Status | Description |
+|--------|-------------|-----------|-------------|
+| Nudge | open | open | Send manual reminder |
+| Cancel | open | closed_no_recovery | Stop recovery attempts |
+| Cancel at Period End | open | open | Schedule cancellation |
+| Terminate | open | closed_no_recovery | Immediate membership termination |
+| Re-open | closed_no_recovery | open | Restart recovery attempts |
 
 ### 4. Reminder Processor (`/api/cron/reminders`)
 
@@ -317,6 +332,46 @@ reminder_offsets_days: [0, 2, 4]  // Day 0, 2, 4 after failure
 - Anomalous access patterns
 - Data exfiltration attempts
 - Webhook abuse
+
+### 7. UI Architecture
+
+**Navigation Structure:**
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              TOP TOOLBAR                                     │
+│  [Logo] ChurnSaver    [Home] [Dashboard] [Messages] [Pricing] [Configuration]│
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Route Configuration** (`src/lib/navigation.ts`):
+| Route | Path | Description |
+|-------|------|-------------|
+| Home | `/` | Landing page |
+| Dashboard | `/dashboard/[companyId]` | Main analytics & case management |
+| Messages | `/messages` | Template management |
+| Pricing | `/pricing` | Subscription tiers |
+| Configuration | `/settings` | Company settings |
+
+**Dashboard Features:**
+- **Time Period Selector**: Filter analytics by Daily (1), Weekly (7), Monthly (30), Quarterly (90), Annually (365), All Time (9999)
+- **Status Filter Tabs**: All, Open, Recovered, Lost
+- **Expandable Case Rows**: Activity timeline, case details, action buttons
+- **KPI Tiles**: Recovery rate, amount recovered, active cases, success metrics
+
+### 8. Tiered Monetization System
+
+**Subscription Tiers:**
+| Tier | Price | Features |
+|------|-------|----------|
+| **Free** | $0/month | Basic recovery, limited templates, community support |
+| **Pro** | $29/month | All channels, custom templates, analytics, priority support |
+| **Max** | $99/month | Enterprise features, API access, dedicated support |
+
+**Feature Gating:**
+- Template limits per tier
+- Channel access (Push, DM, Email)
+- Analytics depth
+- Custom branding options
 
 ---
 
@@ -1020,15 +1075,35 @@ churnsaver/
 │       │   │   ├── api/
 │       │   │   │   ├── webhooks/whop/route.ts
 │       │   │   │   ├── cron/
-│       │   │   │   ├── cases/
+│       │   │   │   │   ├── process-queue/route.ts
+│       │   │   │   │   ├── reminders/route.ts
+│       │   │   │   │   └── maintenance/route.ts
+│       │   │   │   ├── cases/[caseId]/
+│       │   │   │   │   ├── actions/route.ts      # Get activity timeline
+│       │   │   │   │   ├── cancel/route.ts
+│       │   │   │   │   ├── nudge/route.ts
+│       │   │   │   │   ├── reopen/route.ts       # Re-open closed cases
+│       │   │   │   │   └── terminate/route.ts
+│       │   │   │   ├── dashboard/
+│       │   │   │   │   ├── kpis/route.ts         # KPIs with window param
+│       │   │   │   │   └── cases/route.ts        # Cases with status filter
+│       │   │   │   ├── subscription/route.ts     # Tier management
 │       │   │   │   └── health/
 │       │   │   ├── dashboard/
-│       │   │   └── settings/
+│       │   │   │   ├── page.tsx                  # Dashboard redirect
+│       │   │   │   └── [companyId]/page.tsx      # Main dashboard (consolidated)
+│       │   │   ├── messages/                     # Message templates
+│       │   │   │   └── page.tsx
+│       │   │   ├── pricing/                      # Pricing/tiers
+│       │   │   │   └── page.tsx
+│       │   │   └── settings/                     # Configuration
+│       │   │       └── page.tsx
 │       │   ├── lib/
 │       │   │   ├── db-rls.ts
 │       │   │   ├── encryption.ts
 │       │   │   ├── errorHandler.ts
 │       │   │   ├── logger.ts
+│       │   │   ├── navigation.ts                 # Centralized nav config
 │       │   │   ├── rls-middleware.ts
 │       │   │   ├── security-monitoring.ts
 │       │   │   └── whop/
@@ -1037,7 +1112,7 @@ churnsaver/
 │       │   │       └── dataTransformers.ts
 │       │   ├── server/
 │       │   │   ├── services/
-│       │   │   │   ├── cases.ts
+│       │   │   │   ├── cases.ts                  # Includes reopenRecoveryCase
 │       │   │   │   ├── eventProcessor.ts
 │       │   │   │   ├── enhancedJobQueue.ts
 │       │   │   │   └── scheduler.ts
@@ -1046,6 +1121,17 @@ churnsaver/
 │       │   │   └── webhooks/
 │       │   │       └── whop.ts
 │       │   └── components/
+│       │       ├── dashboard/
+│       │       │   ├── CasesTable.tsx            # Expandable rows, actions
+│       │       │   ├── TimePeriodSelector.tsx    # Analytics window selector
+│       │       │   └── KPITiles.tsx
+│       │       ├── layouts/
+│       │       │   ├── TopToolbar.tsx            # Navigation bar
+│       │       │   ├── MainLayout.tsx
+│       │       │   └── AppFooter.tsx
+│       │       └── messages/
+│       │           ├── TemplateCard.tsx
+│       │           └── UpgradeModal.tsx
 │       ├── test/
 │       ├── docs/
 │       └── production/
@@ -1077,5 +1163,5 @@ churnsaver/
 
 ---
 
-*This document was generated on December 9, 2024 and reflects the architecture as of version 1.0.0.*
+*This document was last updated on December 16, 2025 and reflects the architecture as of version 1.1.0.*
 

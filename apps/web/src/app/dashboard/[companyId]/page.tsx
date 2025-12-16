@@ -158,7 +158,8 @@ export default function DashboardCompanyPage({
       setIsLoadingCases(true);
       setCasesError(null);
       const demoParam = getDemoTokenParam();
-      const response = await fetch(`/api/dashboard/cases?page=${page}&limit=10&companyId=${encodeURIComponent(urlCompanyId)}${demoParam}`, {
+      // Default to showing only open cases - recovered cases show in KPIs
+      const response = await fetch(`/api/dashboard/cases?page=${page}&limit=10&status=open&companyId=${encodeURIComponent(urlCompanyId)}${demoParam}`, {
         headers: getAuthHeaders({ companyId: urlCompanyId }),
       });
       if (response.ok) {
@@ -450,10 +451,29 @@ export default function DashboardCompanyPage({
             </Card>
           ) : (casesData?.cases?.length ?? 0) === 0 ? (
             <Card className="p-6">
-              <CardTitle className="text-lg mb-2">No recovery cases yet</CardTitle>
-              <CardDescription>
-                Cases will appear when payment failures occur. Connect to Whop and retry once traffic is flowing.
-              </CardDescription>
+              {kpis && kpis.recoveries > 0 ? (
+                <>
+                  <CardTitle className="text-lg mb-2 flex items-center gap-2">
+                    <span className="text-2xl">🎉</span> All caught up!
+                  </CardTitle>
+                  <CardDescription className="space-y-2">
+                    <p>
+                      You&apos;ve successfully recovered <strong>{kpis.recoveries} {kpis.recoveries === 1 ? 'case' : 'cases'}</strong> worth{' '}
+                      <strong>{formatRevenue(kpis.recoveredRevenueCents)}</strong> in the last {kpis.windowDays} days.
+                    </p>
+                    <p className="text-muted-foreground">
+                      No active recovery cases right now. New cases will appear when payment failures occur.
+                    </p>
+                  </CardDescription>
+                </>
+              ) : (
+                <>
+                  <CardTitle className="text-lg mb-2">No recovery cases yet</CardTitle>
+                  <CardDescription>
+                    Cases will appear when payment failures occur. Connect to Whop and retry once traffic is flowing.
+                  </CardDescription>
+                </>
+              )}
             </Card>
           ) : (
             <CasesTable

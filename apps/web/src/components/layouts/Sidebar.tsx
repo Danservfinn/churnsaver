@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
   Settings,
+  CreditCard,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -42,6 +43,11 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
       label: 'Dashboard',
       href: basePath,
       icon: LayoutDashboard,
+    },
+    {
+      label: 'Pricing',
+      href: '/pricing',
+      icon: CreditCard,
     },
     {
       label: 'Settings',

@@ -8,7 +8,7 @@ import {
   getSubscriptionStatus,
 } from '@/server/services/subscriptions';
 import { getQaDemoSubscription, isQaDemoBypassEnabled } from '@/lib/qaDemo';
-import { initDb } from '@/lib/db';
+import { initDbWithRLS } from '@/lib/db-rls';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(getQaDemoSubscription());
     }
 
-    await initDb();
+    await initDbWithRLS();
 
     const auth = await requireAuthContext(request);
     if (!auth.success || !auth.context) {

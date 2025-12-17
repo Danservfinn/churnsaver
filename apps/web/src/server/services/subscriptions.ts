@@ -5,7 +5,7 @@
  */
 
 import { PoolClient } from 'pg';
-import { sql } from '@/lib/db';
+import { sqlWithRLS as sql } from '@/lib/db-rls';
 import { logger } from '@/lib/logger';
 import {
   TIER_LIMITS,
@@ -91,7 +91,7 @@ async function ensureSubscriptionExists(companyId: string): Promise<void> {
      ) VALUES ($1, 'free', 'active', 'monthly', 0, $2, $3, $2)
      ON CONFLICT (company_id) DO NOTHING`,
     [companyId, nextReset.toISOString(), new Date().toISOString()],
-    companyId
+    { companyId, enforceCompanyContext: true }
   );
 }
 
@@ -116,7 +116,7 @@ async function checkAndResetPeriod(
            updated_at = now()
        WHERE company_id = $1`,
       [subscription.company_id, nextReset.toISOString(), now.toISOString()],
-      subscription.company_id
+      { companyId: subscription.company_id, enforceCompanyContext: true }
     );
 
     logger.info('Period usage reset', {
@@ -187,7 +187,7 @@ export async function getSubscriptionStatus(
      FROM company_subscriptions
      WHERE company_id = $1`,
     [companyId],
-    companyId
+    { companyId, enforceCompanyContext: true }
   );
 
   if (!rows.length) {
@@ -229,7 +229,7 @@ export async function getCompanySubscription(
      FROM company_subscriptions
      WHERE company_id = $1`,
     [companyId],
-    companyId
+    { companyId, enforceCompanyContext: true }
   );
 
   if (!rows.length) return null;
@@ -263,7 +263,7 @@ export async function incrementRecoveryCount(companyId: string): Promise<boolean
        recoveries_this_period = company_subscriptions.recoveries_this_period + 1,
        updated_at = now()`,
     [companyId],
-    companyId
+    { companyId, enforceCompanyContext: true }
   );
 
   logger.info('Recovery count incremented', {
@@ -391,7 +391,7 @@ export async function upsertSubscription(
        billing_interval = EXCLUDED.billing_interval,
        updated_at = now()`,
     [companyId, whopMembershipId, whopProductId, tier, status, interval, nextReset.toISOString()],
-    companyId
+    { companyId, enforceCompanyContext: true }
   );
 
   logger.info('Subscription upserted', {
@@ -416,7 +416,7 @@ export async function updateSubscriptionStatus(
      SET status = $2, updated_at = now()
      WHERE company_id = $1`,
     [companyId, status],
-    companyId
+    { companyId, enforceCompanyContext: true }
   );
 
   logger.info('Subscription status updated', { companyId, status });
@@ -459,7 +459,8 @@ export async function getTierLimits(tier: TierName): Promise<TierLimits> {
             has_analytics, has_custom_templates, has_csv_export
      FROM tier_limits
      WHERE tier = $1`,
-    [tier]
+    [tier],
+    { skipRLS: true, enforceCompanyContext: false }
   );
 
   if (!rows.length) {
@@ -518,7 +519,7 @@ export async function resetMonthlyUsage(companyId: string): Promise<void> {
          updated_at = now()
      WHERE company_id = $1`,
     [companyId, nextReset.toISOString()],
-    companyId
+    { companyId, enforceCompanyContext: true }
   );
 
   logger.info('Monthly usage reset', { companyId, nextReset });
@@ -531,7 +532,9 @@ export async function getCompaniesNeedingPeriodReset(): Promise<string[]> {
   const rows = await sql.select<{ company_id: string }>(
     `SELECT company_id
      FROM company_subscriptions
-     WHERE period_reset_at <= now()`
+     WHERE period_reset_at <= now()`,
+    [],
+    { skipRLS: true, enforceCompanyContext: false }
   );
 
   return rows.map((r) => r.company_id);
@@ -553,7 +556,8 @@ export async function batchResetPeriods(companyIds: string[]): Promise<number> {
          current_period_end = $1,
          updated_at = now()
      WHERE company_id = ANY($2)`,
-    [nextReset.toISOString(), companyIds]
+    [nextReset.toISOString(), companyIds],
+    { skipRLS: true, enforceCompanyContext: false }
   );
 
   logger.info('Batch period reset completed', {

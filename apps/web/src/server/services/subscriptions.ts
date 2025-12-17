@@ -83,6 +83,8 @@ function getNextMonthStart(): Date {
 async function ensureSubscriptionExists(companyId: string): Promise<void> {
   const nextReset = getNextMonthStart();
 
+  // Skip RLS for initial subscription creation - this is an upsert that
+  // ensures a record exists, similar to how company records are auto-created
   await sql.execute(
     `INSERT INTO company_subscriptions (
        company_id, tier, status, billing_interval,
@@ -91,7 +93,7 @@ async function ensureSubscriptionExists(companyId: string): Promise<void> {
      ) VALUES ($1, 'free', 'active', 'monthly', 0, $2, $3, $2)
      ON CONFLICT (company_id) DO NOTHING`,
     [companyId, nextReset.toISOString(), new Date().toISOString()],
-    { companyId, enforceCompanyContext: true }
+    { skipRLS: true, enforceCompanyContext: false }
   );
 }
 

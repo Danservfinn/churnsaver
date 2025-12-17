@@ -61,10 +61,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       status,
     });
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
     logger.error('Failed to fetch subscription', {
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage,
+      stack: errorStack,
     });
-    return NextResponse.json({ error: 'Failed to load subscription' }, { status: 500 });
+    // Include error details for debugging (safe since it's a user-facing error)
+    return NextResponse.json({
+      error: 'Failed to load subscription',
+      details: errorMessage,
+    }, { status: 500 });
   }
 }
 

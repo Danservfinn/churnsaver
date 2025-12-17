@@ -78,9 +78,35 @@ function getNextMonthStart(): Date {
 }
 
 /**
+ * Ensure company exists in companies table before subscription operations
+ * Required because company_subscriptions has FK to companies
+ */
+async function ensureCompanyExists(companyId: string): Promise<void> {
+  const rows = await sql.select<{ id: string }>(
+    'SELECT id FROM companies WHERE id = $1',
+    [companyId],
+    { skipRLS: true, enforceCompanyContext: false }
+  );
+
+  if (rows.length === 0) {
+    logger.info('Auto-creating company record for subscription', { companyId });
+    await sql.execute(
+      `INSERT INTO companies (id, name, whop_company_id, created_at, updated_at)
+       VALUES ($1, $2, $1, NOW(), NOW())
+       ON CONFLICT (id) DO NOTHING`,
+      [companyId, `Whop Company ${companyId.slice(-8)}`],
+      { skipRLS: true, enforceCompanyContext: false }
+    );
+  }
+}
+
+/**
  * Ensure a subscription record exists for a company (creates free tier if not)
  */
 async function ensureSubscriptionExists(companyId: string): Promise<void> {
+  // First ensure the company exists (FK constraint)
+  await ensureCompanyExists(companyId);
+
   const nextReset = getNextMonthStart();
 
   // Skip RLS for initial subscription creation - this is an upsert that

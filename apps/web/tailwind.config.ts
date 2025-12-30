@@ -70,8 +70,9 @@ const config: Config = {
 				},
 			},
 			fontFamily: {
-				sans: ["var(--font-geist-sans)", "system-ui", "-apple-system", "sans-serif"],
-				mono: ["var(--font-geist-mono)", "ui-monospace", "monospace"],
+				sans: ["var(--font-inter)", "system-ui", "-apple-system", "sans-serif"],
+				heading: ["var(--font-space-grotesk)", "system-ui", "-apple-system", "sans-serif"],
+				mono: ["ui-monospace", "monospace"],
 			},
 			borderRadius: {
 				lg: "0.5rem",

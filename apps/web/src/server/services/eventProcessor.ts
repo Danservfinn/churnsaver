@@ -484,8 +484,10 @@ export async function processUnprocessedEvents(companyId: string): Promise<{
            'payment_failed', 'payment_succeeded',
            'membership_went_valid', 'membership_went_invalid',
            'membership_activated', 'membership_deactivated',
+           'membership_updated',
            'payment.failed', 'payment.succeeded',
-           'membership.went_valid', 'membership.went_invalid'
+           'membership.went_valid', 'membership.went_invalid',
+           'membership.updated'
          )
        ORDER BY received_at ASC`,
       [companyId],

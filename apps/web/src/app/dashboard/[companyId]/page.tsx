@@ -394,54 +394,84 @@ export default function DashboardCompanyPage({
         </Alert>
       )}
 
-      {/* KPI Tiles */}
+      {/* KPI Tiles - Grouped by category (Miller's Law - chunking) */}
       {isLoadingKpis ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map((key) => (
-            <Card key={key} className="p-4">
-              <Skeleton className="h-5 w-24 mb-3" />
-              <Skeleton className="h-10 w-20 mb-2" />
-              <Skeleton className="h-4 w-32" />
-            </Card>
-          ))}
+        <div className="space-y-4">
+          {/* Loading skeleton for grouped KPIs */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[1, 2].map((key) => (
+              <Card key={key} className="p-4">
+                <Skeleton className="h-5 w-24 mb-3" />
+                <Skeleton className="h-10 w-20 mb-2" />
+                <Skeleton className="h-4 w-32" />
+              </Card>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[3, 4].map((key) => (
+              <Card key={key} className="p-4">
+                <Skeleton className="h-5 w-24 mb-3" />
+                <Skeleton className="h-10 w-20 mb-2" />
+                <Skeleton className="h-4 w-32" />
+              </Card>
+            ))}
+          </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiTile
-            title="Active Cases"
-            value={kpis?.activeCases || 0}
-            subtitle="Currently being recovered"
-            isLoading={isLoadingKpis}
-            variant="warning"
-            data-testid="kpi-active-cases"
-          />
+        <div className="space-y-4">
+          {/* Cases Group - Current recovery activity */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Recovery Activity
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <KpiTile
+                title="Active Cases"
+                value={kpis?.activeCases || 0}
+                subtitle="Currently being recovered"
+                isLoading={isLoadingKpis}
+                variant="warning"
+                data-testid="kpi-active-cases"
+              />
+              <KpiTile
+                title="Recoveries"
+                value={kpis?.recoveries || 0}
+                subtitle="Successful recoveries"
+                isLoading={isLoadingKpis}
+                variant="success"
+                data-testid="kpi-recoveries"
+              />
+            </div>
+          </div>
 
-          <KpiTile
-            title="Recoveries"
-            value={kpis?.recoveries || 0}
-            subtitle="Successful recoveries"
-            isLoading={isLoadingKpis}
-            variant="success"
-            data-testid="kpi-recoveries"
-          />
-
-          <KpiTile
-            title="Recovery Rate"
-            value={`${kpis?.recoveryRate || 0}%`}
-            subtitle={`${kpis?.windowDays || windowDays}-day window`}
-            isLoading={isLoadingKpis}
-            variant="info"
-            data-testid="kpi-recovery-rate"
-          />
-
-          <KpiTile
-            title="Recovered Revenue"
-            value={kpis?.recoveredRevenueCents ? formatRevenue(kpis.recoveredRevenueCents) : '$0.00'}
-            subtitle="Revenue attributed to recoveries"
-            isLoading={isLoadingKpis}
-            variant="success"
-            data-testid="kpi-recovered-revenue"
-          />
+          {/* Performance Group - Results and metrics */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Performance
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <KpiTile
+                title="Recovery Rate"
+                value={`${kpis?.recoveryRate || 0}%`}
+                subtitle={`${kpis?.windowDays || windowDays}-day window`}
+                isLoading={isLoadingKpis}
+                variant="info"
+                data-testid="kpi-recovery-rate"
+              />
+              <KpiTile
+                title="Recovered Revenue"
+                value={kpis?.recoveredRevenueCents ? formatRevenue(kpis.recoveredRevenueCents) : '$0.00'}
+                subtitle="Revenue attributed to recoveries"
+                isLoading={isLoadingKpis}
+                variant="success"
+                data-testid="kpi-recovered-revenue"
+              />
+            </div>
+          </div>
         </div>
       )}
 

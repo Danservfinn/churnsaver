@@ -38,15 +38,15 @@ export function TopToolbar() {
   }, [mobileMenuOpen]);
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border bg-background">
+    <header className="sticky top-0 z-50 w-full border-b border-white/5 glass-strong">
       <div className="container mx-auto px-4">
-        <div className="flex h-14 items-center justify-between">
+        <div className="flex h-16 items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center space-x-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+          <Link href="/" className="flex items-center space-x-3 group">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20 group-hover:shadow-primary/30 transition-shadow">
               <span className="text-sm font-bold">CS</span>
             </div>
-            <span className="text-lg font-semibold text-foreground">
+            <span className="text-lg font-semibold text-foreground tracking-tight">
               ChurnSaver
             </span>
           </Link>

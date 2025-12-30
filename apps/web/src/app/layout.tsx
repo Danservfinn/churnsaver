@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Inter, Space_Grotesk } from 'next/font/google';
 import './globals.css';
 import { logger } from '@/lib/logger';
 import WhopClientWrapper from '@/components/layouts/WhopClientWrapper';
@@ -8,19 +8,22 @@ import { ToastProvider } from '@/components/ui/toast';
 import { AccessibilityUtils } from '@/lib/accessibility';
 import { accessibilityConfig, applyAccessibilityClasses } from '@/lib/accessibilityConfig';
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
+// Premium font pairing: Inter for body, Space Grotesk for headings
+const inter = Inter({
+  variable: '--font-inter',
   subsets: ['latin'],
+  display: 'swap',
 });
 
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
+const spaceGrotesk = Space_Grotesk({
+  variable: '--font-space-grotesk',
   subsets: ['latin'],
+  display: 'swap',
 });
 
 export const metadata: Metadata = {
-  title: 'Churn Saver',
-  description: 'Recover lost customers with smart nudges and incentives - Fully accessible WCAG 2.1 AA compliant application',
+  title: 'ChurnSaver | Automated Payment Recovery',
+  description: 'Recover failed subscription payments automatically with intelligent notifications, personalized outreach, and strategic incentives. Built for Whop businesses.',
 };
 
 export default function RootLayout({
@@ -51,18 +54,18 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={accessibilityConfig.enabled ? 'accessibility-enabled' : ''}
+      className={`${inter.variable} ${spaceGrotesk.variable} ${accessibilityConfig.enabled ? 'accessibility-enabled' : ''}`}
       style={{ background: '#09090b', backgroundColor: '#09090b' }}
     >
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         {accessibilityConfig.enabled && (
-          <meta name="description" content="Churn Saver - Payment recovery solution with full accessibility support and WCAG 2.1 AA compliance" />
+          <meta name="description" content="ChurnSaver - Payment recovery solution with full accessibility support and WCAG 2.1 AA compliance" />
         )}
       </head>
       <body
         className={`
-          ${geistSans.variable} ${geistMono.variable} antialiased
+          antialiased
           ${accessibilityConfig.colorContrast.enabled ? 'high-contrast' : ''}
           ${accessibilityConfig.reducedMotion.enabled ? 'reduced-motion' : ''}
         `}

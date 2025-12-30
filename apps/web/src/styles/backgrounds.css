@@ -1,24 +1,170 @@
 /**
- * Background utilities and decorative elements
- * Warm palette gradients, patterns, and animations
+ * Premium Background Utilities and Decorative Elements
+ * Sophisticated gradients, glassmorphism, and animations
  */
 
-/* Gradient backgrounds */
-.bg-hero-grad {
-  background: linear-gradient(135deg, var(--color-primary-500) 0%, var(--color-accent-500) 100%);
+/* =========================================
+   PREMIUM GRADIENT BACKGROUNDS
+   ========================================= */
+
+/* Hero gradient with multiple color stops */
+.bg-hero-gradient {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(234, 88, 12, 0.15) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 40% at 80% 50%, rgba(234, 88, 12, 0.08) 0%, transparent 40%),
+    radial-gradient(ellipse 50% 30% at 20% 80%, rgba(234, 88, 12, 0.05) 0%, transparent 30%);
 }
 
-.bg-amber-radial {
-  background: radial-gradient(circle at center, var(--color-secondary-200) 0%, transparent 70%);
+/* Mesh gradient for premium sections */
+.bg-mesh-gradient {
+  background:
+    radial-gradient(at 40% 20%, rgba(234, 88, 12, 0.12) 0%, transparent 50%),
+    radial-gradient(at 80% 0%, rgba(251, 146, 60, 0.08) 0%, transparent 40%),
+    radial-gradient(at 0% 50%, rgba(234, 88, 12, 0.06) 0%, transparent 50%),
+    radial-gradient(at 80% 100%, rgba(234, 88, 12, 0.1) 0%, transparent 40%),
+    radial-gradient(at 0% 100%, rgba(251, 146, 60, 0.05) 0%, transparent 30%);
 }
 
-/* Soft noise texture (CSS data-URI, < 4KB) */
-.bg-noise-soft {
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
-  background-size: 400px 400px;
+/* Subtle glow behind elements */
+.bg-glow {
+  background: radial-gradient(ellipse at center, rgba(234, 88, 12, 0.2) 0%, transparent 70%);
 }
+
+.bg-glow-sm {
+  background: radial-gradient(ellipse at center, rgba(234, 88, 12, 0.15) 0%, transparent 50%);
+}
+
+/* Dot pattern for premium feel */
+.bg-dot-pattern {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Grid pattern */
+.bg-grid-pattern {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 64px 64px;
+}
+
+/* =========================================
+   GLASSMORPHISM EFFECTS
+   ========================================= */
+
+.glass {
+  background: rgba(24, 24, 27, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-strong {
+  background: rgba(24, 24, 27, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-subtle {
+  background: rgba(24, 24, 27, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* =========================================
+   PREMIUM CARD STYLES
+   ========================================= */
+
+.card-premium {
+  background: linear-gradient(
+    135deg,
+    rgba(39, 39, 42, 0.9) 0%,
+    rgba(24, 24, 27, 0.95) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.3),
+    0 2px 4px -2px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.card-premium:hover {
+  border-color: rgba(234, 88, 12, 0.3);
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.4),
+    0 4px 6px -4px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(234, 88, 12, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Highlighted/Featured card */
+.card-featured {
+  background: linear-gradient(
+    135deg,
+    rgba(234, 88, 12, 0.15) 0%,
+    rgba(24, 24, 27, 0.95) 50%,
+    rgba(234, 88, 12, 0.1) 100%
+  );
+  border: 1px solid rgba(234, 88, 12, 0.3);
+  box-shadow:
+    0 0 40px -10px rgba(234, 88, 12, 0.3),
+    0 10px 15px -3px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* =========================================
+   GLOW EFFECTS
+   ========================================= */
+
+.glow-primary {
+  box-shadow:
+    0 0 20px rgba(234, 88, 12, 0.3),
+    0 0 40px rgba(234, 88, 12, 0.15),
+    0 0 60px rgba(234, 88, 12, 0.05);
+}
+
+.glow-primary-sm {
+  box-shadow: 0 0 15px rgba(234, 88, 12, 0.25);
+}
+
+.text-glow {
+  text-shadow: 0 0 20px rgba(234, 88, 12, 0.5);
+}
+
+/* =========================================
+   BORDER EFFECTS
+   ========================================= */
+
+.border-gradient {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--background), var(--background)) padding-box,
+    linear-gradient(135deg, rgba(234, 88, 12, 0.5), rgba(251, 146, 60, 0.3), rgba(234, 88, 12, 0.5)) border-box;
+}
+
+.border-glow {
+  border: 1px solid rgba(234, 88, 12, 0.3);
+  box-shadow:
+    0 0 0 1px rgba(234, 88, 12, 0.1),
+    inset 0 0 0 1px rgba(234, 88, 12, 0.05);
+}
+
+/* =========================================
+   ANIMATIONS
+   ========================================= */
 
 /* Floating animation */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
 @keyframes float-slow {
   0%, 100% {
     transform: translateY(0px) translateX(0px);
@@ -31,7 +177,43 @@
   }
 }
 
-/* Shimmer animation for skeletons */
+@keyframes float-delayed {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-15px);
+  }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+.animate-float-slow {
+  animation: float-slow 8s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float-delayed 5s ease-in-out infinite;
+  animation-delay: 1s;
+}
+
+/* Pulse glow animation */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(234, 88, 12, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(234, 88, 12, 0.5);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+/* Shimmer animation for loading states */
 @keyframes shimmer {
   0% {
     background-position: -1000px 0;
@@ -42,38 +224,154 @@
 }
 
 .animate-shimmer {
-  animation: shimmer 1.2s infinite linear;
+  animation: shimmer 2s infinite linear;
   background: linear-gradient(
-    to right,
+    90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.08) 50%,
     transparent 100%
   );
   background-size: 1000px 100%;
 }
 
-/* Respect reduced motion */
+/* Gradient shift animation */
+@keyframes gradient-shift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradient-shift 8s ease infinite;
+}
+
+/* Scale in animation */
+@keyframes scale-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-scale-in {
+  animation: scale-in 0.3s ease-out forwards;
+}
+
+/* Slide up animation */
+@keyframes slide-up {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.5s ease-out forwards;
+}
+
+/* Stagger children */
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 100ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 200ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 300ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 400ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 500ms; }
+
+/* =========================================
+   TEXTURE OVERLAYS
+   ========================================= */
+
+/* Soft noise texture */
+.bg-noise-soft {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+  background-size: 400px 400px;
+}
+
+/* Grain texture */
+.bg-grain {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.02'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+}
+
+/* =========================================
+   REDUCED MOTION
+   ========================================= */
+
 @media (prefers-reduced-motion: reduce) {
+  .animate-float,
   .animate-float-slow,
-  .animate-shimmer {
+  .animate-float-delayed,
+  .animate-pulse-glow,
+  .animate-shimmer,
+  .animate-gradient {
     animation: none;
   }
-  
+
+  .animate-scale-in,
+  .animate-slide-up {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
   [style*="animation"] {
     animation: none !important;
   }
 }
 
-/* Floating shapes animation */
-@keyframes float-slow {
-  0%, 100% {
-    transform: translate(-50%, -50%) translateY(0px) translateX(0px);
-  }
-  33% {
-    transform: translate(-50%, -50%) translateY(-20px) translateX(10px);
-  }
-  66% {
-    transform: translate(-50%, -50%) translateY(-10px) translateX(-10px);
-  }
+/* =========================================
+   UTILITY CLASSES
+   ========================================= */
+
+/* Gradient text */
+.text-gradient {
+  background: linear-gradient(135deg, #ea580c 0%, #fb923c 50%, #ea580c 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
+.text-gradient-subtle {
+  background: linear-gradient(135deg, #fafafa 0%, #a1a1aa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Shine effect on hover */
+.shine-on-hover {
+  position: relative;
+  overflow: hidden;
+}
+
+.shine-on-hover::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.1),
+    transparent
+  );
+  transition: left 0.5s ease;
+}
+
+.shine-on-hover:hover::after {
+  left: 100%;
+}

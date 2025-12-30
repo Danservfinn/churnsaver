@@ -56,8 +56,9 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter);
+  --font-heading: var(--font-space-grotesk);
+  --font-mono: ui-monospace, monospace;
 }
 
 * {
@@ -72,9 +73,15 @@ html {
 body {
   background: #09090b;
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Premium heading typography with Space Grotesk */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-space-grotesk), system-ui, -apple-system, sans-serif;
+  letter-spacing: -0.025em;
 }
 
 .skip-link {

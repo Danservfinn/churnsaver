@@ -72,12 +72,12 @@ export function DashboardClient({ companyId, userId, companyName, userName }: Da
     try {
       setIsLoadingKpis(true);
       setKpiError(null);
-      const response = await fetch('/api/dashboard/kpis?window=14');
+      const response = await fetch(`/api/dashboard/kpis?window=14&companyId=${encodeURIComponent(companyId)}`);
       if (response.ok) {
         const data = await response.json();
         setKpis(data);
       } else {
-        setKpiError(`Failed to load KPIs: ${response.status} ${response.statusText}`);
+        setKpiError(`Failed to load KPIs: ${response.status}`);
       }
     } catch (error) {
       setKpiError(error instanceof Error ? error.message : 'Failed to fetch KPIs');
@@ -91,12 +91,12 @@ export function DashboardClient({ companyId, userId, companyName, userName }: Da
     try {
       setIsLoadingCases(true);
       setCasesError(null);
-      const response = await fetch(`/api/dashboard/cases?page=${page}&limit=10`);
+      const response = await fetch(`/api/dashboard/cases?page=${page}&limit=10&companyId=${encodeURIComponent(companyId)}`);
       if (response.ok) {
         const data = await response.json();
-        setCasesData(data);
+        setCasesData(data.data || data);
       } else {
-        setCasesError(`Failed to load cases: ${response.status} ${response.statusText}`);
+        setCasesError(`Failed to load cases: ${response.status}`);
       }
     } catch (error) {
       setCasesError(error instanceof Error ? error.message : 'Failed to fetch cases');
@@ -108,7 +108,8 @@ export function DashboardClient({ companyId, userId, companyName, userName }: Da
   useEffect(() => {
     fetchKpis();
     fetchCases(1);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId]);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -121,6 +122,7 @@ export function DashboardClient({ companyId, userId, companyName, userName }: Da
 
   const handleExportCSV = () => {
     const params = new URLSearchParams();
+    params.append('companyId', companyId);
     if (casesData?.filters.status) {
       params.append('status', casesData.filters.status);
     }

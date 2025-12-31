@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { Home, LayoutDashboard, Settings, Menu, X, CreditCard } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { LogoMark } from '@/components/brand/LogoMark';
 
 export function AppHeader() {
   const pathname = usePathname();
@@ -41,13 +42,8 @@ export function AppHeader() {
       <div className="container mx-auto px-4">
         <div className="flex h-14 items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center space-x-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <span className="text-sm font-bold">CS</span>
-            </div>
-            <span className="text-lg font-semibold text-foreground">
-              ChurnSaver
-            </span>
+          <Link href="/" className="transition-opacity hover:opacity-90">
+            <LogoMark size="md" showIcon={true} />
           </Link>
 
           {/* Desktop Navigation */}

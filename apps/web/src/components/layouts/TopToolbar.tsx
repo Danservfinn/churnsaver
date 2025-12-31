@@ -7,6 +7,7 @@ import { Menu, X } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { NAV_ITEMS, getNavHref, isNavActive } from '@/lib/navigation';
+import { LogoMark } from '@/components/brand/LogoMark';
 
 export function TopToolbar() {
   const pathname = usePathname();
@@ -42,13 +43,8 @@ export function TopToolbar() {
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center space-x-3 group">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20 group-hover:shadow-primary/30 transition-shadow">
-              <span className="text-sm font-bold">CS</span>
-            </div>
-            <span className="text-lg font-semibold text-foreground tracking-tight">
-              ChurnSaver
-            </span>
+          <Link href="/" className="group transition-opacity hover:opacity-90">
+            <LogoMark size="md" showIcon={true} />
           </Link>
 
           {/* Desktop Navigation */}

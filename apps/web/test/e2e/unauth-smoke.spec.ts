@@ -29,9 +29,9 @@ test.describe('Unauthenticated Smoke Tests', () => {
       const heading = page.getByRole('heading', { name: /stop churn/i });
       await expect(heading).toBeVisible({ timeout: 5000 });
 
-      // Check for CTA buttons
-      const dashboardLink = page.getByRole('link', { name: /view dashboard/i });
-      await expect(dashboardLink).toBeVisible();
+      // Check for CTA buttons (there are multiple CTAs, check at least one exists)
+      const ctaButtons = page.getByRole('link', { name: /get started free/i });
+      await expect(ctaButtons.first()).toBeVisible();
     });
 
     test('should display feature cards', async ({ page }) => {

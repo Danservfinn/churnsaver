@@ -43,7 +43,7 @@ export function AppHeader() {
         <div className="flex h-14 items-center justify-between">
           {/* Logo */}
           <Link href="/" className="transition-opacity hover:opacity-90">
-            <LogoMark size="md" showIcon={true} />
+            <LogoMark size="md" showIcon={false} />
           </Link>
 
           {/* Desktop Navigation */}

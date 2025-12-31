@@ -53,7 +53,7 @@ export function LogoMark({ className, size = 'md', showIcon = true }: LogoMarkPr
 
       {/* Wordmark */}
       <span className="font-heading font-semibold tracking-tight select-none">
-        <span className="text-zinc-500">Churn</span>
+        <span className="text-zinc-400">Churn</span>
         <span className="bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600 bg-clip-text text-transparent font-bold">
           Saver
         </span>

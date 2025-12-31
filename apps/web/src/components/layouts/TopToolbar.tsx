@@ -44,7 +44,7 @@ export function TopToolbar() {
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <Link href="/" className="group transition-opacity hover:opacity-90">
-            <LogoMark size="md" showIcon={true} />
+            <LogoMark size="md" showIcon={false} />
           </Link>
 
           {/* Desktop Navigation */}

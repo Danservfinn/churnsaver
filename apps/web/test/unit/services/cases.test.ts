@@ -80,6 +80,15 @@ vi.mock('@/server/services/reminders/notifier', () => ({
 vi.mock('@/server/services/subscriptions', () => ({
   checkRecoveryAllowed: vi.fn().mockResolvedValue({ allowed: true }),
   recordRecoveryWithClient: vi.fn(),
+  getSubscriptionStatus: vi.fn().mockResolvedValue({
+    tier: 'pro',
+    status: 'active',
+    canProcessRecovery: true,
+    recoveriesUsed: 0,
+    recoveriesLimit: Infinity,
+    features: {},
+  }),
+  incrementRecoveryCount: vi.fn().mockResolvedValue(true),
 }));
 
 const sql = sqlWithRLS;

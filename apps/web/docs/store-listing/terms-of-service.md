@@ -80,7 +80,7 @@ You agree to indemnify and hold us harmless from any claims, damages, or expense
 
 ## Dispute Resolution
 
-- **Governing Law**: These Terms are governed by [Your Jurisdiction] law
+- **Governing Law**: These Terms are governed by the laws of the State of Delaware, United States
 - **Arbitration**: Disputes will be resolved through binding arbitration
 - **Class Action Waiver**: You waive the right to participate in class actions
 
@@ -100,7 +100,7 @@ These Terms, together with our Privacy Policy, constitute the entire agreement b
 
 For questions about these Terms, please contact us through:
 - **Whop App Dashboard**: Support section within the app
-- **Email**: [Your support email]
+- **Email**: support@churnsaver.com
 
 ## Acknowledgment
 

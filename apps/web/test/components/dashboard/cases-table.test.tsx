@@ -52,7 +52,7 @@ describe('CasesTable Component', () => {
       expect(screen.getByText('1 case')).toBeInTheDocument();
     });
 
-    it('should render all case columns', () => {
+    it('should render case status and info', () => {
       render(
         <CasesTable
           cases={[mockCase]}
@@ -62,13 +62,11 @@ describe('CasesTable Component', () => {
           totalPages={1}
         />
       );
-      expect(screen.getByText('Status')).toBeInTheDocument();
-      expect(screen.getByText('Membership')).toBeInTheDocument();
-      expect(screen.getByText('First Failure')).toBeInTheDocument();
-      expect(screen.getByText('Attempts')).toBeInTheDocument();
-      expect(screen.getByText('Recovered')).toBeInTheDocument();
-      expect(screen.getByText('Reason')).toBeInTheDocument();
-      expect(screen.getByText('Actions')).toBeInTheDocument();
+      // Component uses expandable row pattern with status badges
+      expect(screen.getByText('Open')).toBeInTheDocument();
+      expect(screen.getByText('attempts')).toBeInTheDocument();
+      // Membership and user IDs are truncated to last 8 chars
+      expect(screen.getByText(/ship-123.*user-456/)).toBeInTheDocument();
     });
   });
 
@@ -146,7 +144,7 @@ describe('CasesTable Component', () => {
   });
 
   describe('Actions', () => {
-    it('should show nudge button for open cases', () => {
+    it('should show nudge button for open cases when expanded', async () => {
       render(
         <CasesTable
           cases={[{ ...mockCase, status: 'open' }]}
@@ -156,10 +154,16 @@ describe('CasesTable Component', () => {
           totalPages={1}
         />
       );
-      expect(screen.getByLabelText(/send another reminder/i)).toBeInTheDocument();
+      // Click to expand the case row first
+      const expandButton = screen.getByText('Open').closest('button');
+      if (expandButton) fireEvent.click(expandButton);
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/send another reminder for this case/i)).toBeInTheDocument();
+      });
     });
 
-    it('should show cancel case button for open cases', () => {
+    it('should show close case button for open cases when expanded', async () => {
       render(
         <CasesTable
           cases={[{ ...mockCase, status: 'open' }]}
@@ -169,7 +173,13 @@ describe('CasesTable Component', () => {
           totalPages={1}
         />
       );
-      expect(screen.getByLabelText(/cancel this recovery case/i)).toBeInTheDocument();
+      // Click to expand the case row first
+      const expandButton = screen.getByText('Open').closest('button');
+      if (expandButton) fireEvent.click(expandButton);
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/close this recovery case/i)).toBeInTheDocument();
+      });
     });
 
     it('should call handleNudge when nudge button clicked', async () => {
@@ -190,7 +200,15 @@ describe('CasesTable Component', () => {
         />
       );
 
-      const nudgeButton = screen.getByLabelText(/send another reminder/i);
+      // Expand the case row first
+      const expandButton = screen.getByText('Open').closest('button');
+      if (expandButton) fireEvent.click(expandButton);
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/send another reminder for this case/i)).toBeInTheDocument();
+      });
+
+      const nudgeButton = screen.getByLabelText(/send another reminder for this case/i);
       fireEvent.click(nudgeButton);
 
       await waitFor(() => {
@@ -219,7 +237,15 @@ describe('CasesTable Component', () => {
         />
       );
 
-      const cancelButton = screen.getByLabelText(/cancel this recovery case/i);
+      // Expand the case row first
+      const expandButton = screen.getByText('Open').closest('button');
+      if (expandButton) fireEvent.click(expandButton);
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/close this recovery case/i)).toBeInTheDocument();
+      });
+
+      const cancelButton = screen.getByLabelText(/close this recovery case/i);
       fireEvent.click(cancelButton);
 
       await waitFor(() => {
@@ -250,7 +276,7 @@ describe('CasesTable Component', () => {
   });
 
   describe('Accessibility', () => {
-    it('should have proper table structure', () => {
+    it('should have proper card structure', () => {
       render(
         <CasesTable
           cases={[mockCase]}
@@ -260,10 +286,11 @@ describe('CasesTable Component', () => {
           totalPages={1}
         />
       );
-      expect(screen.getByRole('table')).toBeInTheDocument();
+      // Component uses Card layout instead of table
+      expect(screen.getByText('Recovery Cases')).toBeInTheDocument();
     });
 
-    it('should have accessible action buttons', () => {
+    it('should have accessible action buttons when expanded', async () => {
       render(
         <CasesTable
           cases={[{ ...mockCase, status: 'open' }]}
@@ -273,16 +300,22 @@ describe('CasesTable Component', () => {
           totalPages={1}
         />
       );
-      expect(screen.getByLabelText(/send another reminder/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/cancel this recovery case/i)).toBeInTheDocument();
+      // Expand the case row first
+      const expandButton = screen.getByText('Open').closest('button');
+      if (expandButton) fireEvent.click(expandButton);
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/send another reminder for this case/i)).toBeInTheDocument();
+        expect(screen.getByLabelText(/close this recovery case/i)).toBeInTheDocument();
+      });
     });
   });
 
   describe('Currency Formatting', () => {
-    it('should format recovered amount correctly', () => {
+    it('should format recovered amount correctly for recovered cases', () => {
       render(
         <CasesTable
-          cases={[{ ...mockCase, recovered_amount_cents: 5000 }]}
+          cases={[{ ...mockCase, status: 'recovered', recovered_amount_cents: 5000 }]}
           total={1}
           page={1}
           limit={10}
@@ -292,17 +325,19 @@ describe('CasesTable Component', () => {
       expect(screen.getByText('$50.00')).toBeInTheDocument();
     });
 
-    it('should show dash when no recovered amount', () => {
+    it('should not show recovered amount for open cases with zero recovery', () => {
       render(
         <CasesTable
-          cases={[{ ...mockCase, recovered_amount_cents: 0 }]}
+          cases={[{ ...mockCase, status: 'open', recovered_amount_cents: 0 }]}
           total={1}
           page={1}
           limit={10}
           totalPages={1}
         />
       );
-      expect(screen.getByText('-')).toBeInTheDocument();
+      // Amount is only shown for recovered cases with positive amounts
+      expect(screen.queryByText('$0.00')).not.toBeInTheDocument();
+      expect(screen.queryByText('recovered')).not.toBeInTheDocument();
     });
   });
 });

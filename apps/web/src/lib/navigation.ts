@@ -4,6 +4,7 @@ import {
   CreditCard,
   Settings,
   MessageSquare,
+  BarChart3,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -35,6 +36,11 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Messages',
     href: '/messages',
     icon: MessageSquare,
+  },
+  {
+    label: 'Analytics',
+    href: '/analytics',
+    icon: BarChart3,
   },
   {
     label: 'Pricing',

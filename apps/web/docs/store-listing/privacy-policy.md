@@ -73,7 +73,7 @@ We may update this Privacy Policy from time to time. We will notify you of any c
 
 If you have questions about this Privacy Policy, please contact us through:
 - **Whop App Dashboard**: Support section within the app
-- **Email**: [Your support email]
+- **Email**: support@churnsaver.com
 
 ## Compliance
 

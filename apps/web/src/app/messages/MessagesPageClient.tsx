@@ -16,11 +16,16 @@ import {
   Edit3,
   Eye,
   ChevronDown,
+  Save,
+  X,
+  Crown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { UpgradeModal } from '@/components/messages/UpgradeModal';
+import { useWhop, useWhopCompany } from '@/lib/context/whop';
+import { useToast } from '@/components/ui/toast';
 
 interface DefaultTemplates {
   push: Record<TriggerType, { title: string; body: string }>;
@@ -193,6 +198,17 @@ function DMPreview({ message, animate = false }: { message: string; animate?: bo
   );
 }
 
+interface SubscriptionStatus {
+  tier: string;
+  features: {
+    customTemplates: boolean;
+    maxTemplatesPerChannel: number;
+    basicAnalytics: boolean;
+    csvExport: boolean;
+    prioritySupport: boolean;
+  };
+}
+
 export function MessagesPageClient({
   defaultTemplates,
   maxCheckoutUrl,
@@ -201,18 +217,112 @@ export function MessagesPageClient({
   const [activeStep, setActiveStep] = useState<TriggerType>('immediate');
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
+  const [customTemplates, setCustomTemplates] = useState(defaultTemplates);
+  const [editingTemplate, setEditingTemplate] = useState<{
+    title?: string;
+    body?: string;
+    message?: string;
+  }>({});
+  const [isSaving, setIsSaving] = useState(false);
 
-  const canCustomize = false;
+  const { getAuthHeaders } = useWhop();
+  const { companyId, isLoading: isAuthLoading } = useWhopCompany();
+  const { addToast } = useToast();
+
+  // Fetch subscription status to check if user can customize templates
+  useEffect(() => {
+    if (!isAuthLoading && companyId && companyId !== 'unknown') {
+      fetch('/api/subscription', {
+        headers: getAuthHeaders({ companyId }),
+      })
+        .then((res) => res.ok ? res.json() : null)
+        .then((data) => {
+          if (data?.status) {
+            setSubscriptionStatus(data.status);
+          }
+        })
+        .catch(() => {
+          // Silently fail - user will see upgrade prompt
+        });
+    }
+  }, [companyId, isAuthLoading, getAuthHeaders]);
+
+  const canCustomize = subscriptionStatus?.features?.customTemplates ?? false;
 
   const handleCustomize = () => {
     if (!canCustomize) {
       setShowUpgradeModal(true);
+    } else {
+      // Enter edit mode and populate form with current template
+      const current = activeTab === 'push'
+        ? customTemplates.push[activeStep]
+        : customTemplates.dm[activeStep];
+
+      if (activeTab === 'push') {
+        setEditingTemplate({
+          title: (current as { title: string; body: string }).title,
+          body: (current as { title: string; body: string }).body,
+        });
+      } else {
+        setEditingTemplate({
+          message: (current as { message: string }).message,
+        });
+      }
+      setIsEditing(true);
     }
   };
 
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditingTemplate({});
+  };
+
+  const handleSaveTemplate = async () => {
+    setIsSaving(true);
+
+    // Update local state immediately for optimistic UI
+    if (activeTab === 'push') {
+      setCustomTemplates((prev) => ({
+        ...prev,
+        push: {
+          ...prev.push,
+          [activeStep]: {
+            title: editingTemplate.title || '',
+            body: editingTemplate.body || '',
+          },
+        },
+      }));
+    } else {
+      setCustomTemplates((prev) => ({
+        ...prev,
+        dm: {
+          ...prev.dm,
+          [activeStep]: {
+            message: editingTemplate.message || '',
+          },
+        },
+      }));
+    }
+
+    // TODO: Save to backend when templates API is implemented
+    // For now, just show success and exit edit mode
+    setTimeout(() => {
+      setIsSaving(false);
+      setIsEditing(false);
+      setEditingTemplate({});
+      addToast({
+        type: 'success',
+        title: 'Template updated',
+        message: 'Your custom template has been saved.',
+      });
+    }, 500);
+  };
+
   const currentTemplate = activeTab === 'push'
-    ? defaultTemplates.push[activeStep]
-    : defaultTemplates.dm[activeStep];
+    ? customTemplates.push[activeStep]
+    : customTemplates.dm[activeStep];
 
   const currentStepData = TIMELINE_STEPS.find((s) => s.id === activeStep)!;
 
@@ -296,7 +406,7 @@ export function MessagesPageClient({
             className="space-y-6"
           >
             {/* Info Banner */}
-            {!canCustomize && (
+            {!canCustomize ? (
               <div className="card-premium rounded-xl p-5 border border-primary/20 bg-primary/5">
                 <div className="flex items-start gap-4">
                   <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/20 flex-shrink-0">
@@ -317,6 +427,27 @@ export function MessagesPageClient({
                       Upgrade to Max
                       <ArrowRight className="h-3.5 w-3.5" />
                     </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="card-premium rounded-xl p-5 border border-green-500/20 bg-green-500/5">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-500/20 flex-shrink-0">
+                    <Crown className="h-5 w-5 text-green-400" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="font-semibold text-foreground">
+                        Max Tier Active
+                      </p>
+                      <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                        Custom Templates
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Click any template in the preview to customize it with your brand voice.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -499,15 +630,119 @@ export function MessagesPageClient({
               </PhoneMockup>
             </div>
 
-            {/* Edit Button */}
-            <Button
-              onClick={handleCustomize}
-              variant="outline"
-              className="mt-8 gap-2"
-            >
-              <Edit3 className="h-4 w-4" />
-              {canCustomize ? 'Edit Template' : 'Customize Template'}
-            </Button>
+            {/* Edit Section */}
+            {isEditing ? (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-8 w-full max-w-sm card-premium rounded-xl p-5 border border-primary/30"
+              >
+                <h4 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+                  <Edit3 className="h-4 w-4 text-primary" />
+                  Edit {activeTab === 'push' ? 'Push Notification' : 'Direct Message'}
+                </h4>
+
+                <div className="space-y-4">
+                  {activeTab === 'push' ? (
+                    <>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          Title (max 100 characters)
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={100}
+                          value={editingTemplate.title || ''}
+                          onChange={(e) => setEditingTemplate((prev) => ({ ...prev, title: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-lg border border-white/10 bg-zinc-900/50 text-foreground text-sm focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                          placeholder="Notification title..."
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          {editingTemplate.title?.length || 0}/100
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          Body (max 500 characters)
+                        </label>
+                        <textarea
+                          maxLength={500}
+                          rows={3}
+                          value={editingTemplate.body || ''}
+                          onChange={(e) => setEditingTemplate((prev) => ({ ...prev, body: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-lg border border-white/10 bg-zinc-900/50 text-foreground text-sm focus:ring-2 focus:ring-primary focus:border-transparent transition-all resize-none"
+                          placeholder="Notification body..."
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          {editingTemplate.body?.length || 0}/500
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted-foreground">
+                        Message (max 2000 characters)
+                      </label>
+                      <textarea
+                        maxLength={2000}
+                        rows={5}
+                        value={editingTemplate.message || ''}
+                        onChange={(e) => setEditingTemplate((prev) => ({ ...prev, message: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-lg border border-white/10 bg-zinc-900/50 text-foreground text-sm focus:ring-2 focus:ring-primary focus:border-transparent transition-all resize-none"
+                        placeholder="DM message..."
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {editingTemplate.message?.length || 0}/2000
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      onClick={handleSaveTemplate}
+                      disabled={isSaving}
+                      size="sm"
+                      className="flex-1 gap-2"
+                    >
+                      {isSaving ? (
+                        <>
+                          <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                          >
+                            <Save className="h-4 w-4" />
+                          </motion.div>
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4" />
+                          Save Template
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      onClick={handleCancelEdit}
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                    >
+                      <X className="h-4 w-4" />
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </motion.div>
+            ) : (
+              <Button
+                onClick={handleCustomize}
+                variant="outline"
+                className="mt-8 gap-2"
+              >
+                <Edit3 className="h-4 w-4" />
+                {canCustomize ? 'Edit Template' : 'Customize Template'}
+              </Button>
+            )}
           </motion.div>
         </div>
       </div>

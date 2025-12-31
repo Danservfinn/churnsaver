@@ -162,7 +162,7 @@ export function getQaDemoSubscription() {
         process.env.QA_DEMO_COMPANY_ID ||
         process.env.NEXT_PUBLIC_QA_DEMO_COMPANY_ID ||
         DEMO_COMPANY_FALLBACK,
-      tier: 'starter' as const,
+      tier: 'max' as const,
       total_recoveries_used: 28,
       monthly_recovered_revenue_cents: 183400,
       month_start_date: new Date(
@@ -172,11 +172,11 @@ export function getQaDemoSubscription() {
       ).toISOString(),
     },
     limits: {
-      tier: 'starter',
-      max_monthly_recovered_revenue_cents: 250000,
-      max_total_recoveries: 120,
-      price_cents: 4900,
-      name: 'Starter',
+      tier: 'max',
+      max_monthly_recovered_revenue_cents: null, // Unlimited
+      max_total_recoveries: null, // Unlimited
+      price_cents: 9900,
+      name: 'Max',
     },
   };
 }

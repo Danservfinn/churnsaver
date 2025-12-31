@@ -378,16 +378,21 @@ export default function HomePage() {
               <p className="text-sm text-muted-foreground mb-4">
                 Trusted by businesses on Whop
               </p>
-              <div className="flex items-center justify-center gap-2">
-                {[...Array(5)].map((_, i) => (
+              <div className="flex items-center justify-center gap-1">
+                {/* Avatar stack with gradient colors */}
+                {[
+                  'from-violet-500 to-purple-500',
+                  'from-blue-500 to-cyan-500',
+                  'from-emerald-500 to-teal-500',
+                  'from-orange-500 to-amber-500',
+                  'from-pink-500 to-rose-500',
+                ].map((gradient, i) => (
                   <div
                     key={i}
-                    className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground"
-                  >
-                    {String.fromCharCode(65 + i)}
-                  </div>
+                    className={`w-8 h-8 rounded-full bg-gradient-to-br ${gradient} ring-2 ring-background -ml-2 first:ml-0`}
+                  />
                 ))}
-                <span className="text-sm text-muted-foreground ml-2">+50 more</span>
+                <span className="text-sm text-muted-foreground ml-3">+50 more</span>
               </div>
             </div>
           </div>

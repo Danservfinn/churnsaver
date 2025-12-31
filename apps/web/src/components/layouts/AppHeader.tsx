@@ -17,7 +17,7 @@ export function AppHeader() {
     { href: '/', label: 'Home', icon: Home },
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/pricing', label: 'Pricing', icon: CreditCard },
-    { href: '/settings', label: 'Settings', icon: Settings },
+    { href: '/settings', label: 'Configuration', icon: Settings },
   ];
 
   useEffect(() => {

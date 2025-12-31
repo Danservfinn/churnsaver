@@ -428,6 +428,31 @@ export default function Settings() {
     { id: 3, label: 'Schedule', icon: Clock },
   ];
 
+  // Show authentication required message for unauthenticated users
+  if (!isAuthLoading && (!companyId || companyId === 'unknown')) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="card-premium rounded-2xl p-8 max-w-md text-center"
+        >
+          <div className="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center mx-auto mb-4">
+            <Crown className="h-8 w-8 text-amber-400" />
+          </div>
+          <h2 className="text-xl font-bold text-foreground mb-2">Authentication Required</h2>
+          <p className="text-muted-foreground mb-6">
+            You need to be authenticated to access settings. Please access this app through Whop.
+          </p>
+          <Button onClick={() => window.location.reload()} className="gap-2">
+            <RotateCcw className="h-4 w-4" />
+            Retry Authentication
+          </Button>
+        </motion.div>
+      </div>
+    );
+  }
+
   if (loading || isAuthLoading) {
     return (
       <div className="min-h-screen">

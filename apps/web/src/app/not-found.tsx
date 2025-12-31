@@ -1,13 +1,10 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Home, AlertCircle } from 'lucide-react';
-import { AppHeader } from '@/components/layouts/AppHeader';
 
 export default function NotFound() {
   return (
-    <>
-      <AppHeader />
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center px-4">
         <div className="text-center max-w-md">
           <div className="mb-6">
             <AlertCircle className="h-24 w-24 text-gray-400 dark:text-gray-500 mx-auto" />
@@ -34,7 +31,6 @@ export default function NotFound() {
           </div>
         </div>
       </div>
-    </>
   );
 }
 

@@ -1,8 +1,15 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "pnpm run build",
   "installCommand": "pnpm install",
   "outputDirectory": ".next",
   "framework": "nextjs",
+  "protectionBypass": [
+    {
+      "scope": "preview",
+      "secret": "churnsaver-e2e-bypass-2025"
+    }
+  ],
   "functions": {
     "src/app/api/cron/process-and-remind/route.ts": {
       "maxDuration": 30

@@ -4,6 +4,14 @@ import { defineConfig, devices } from '@playwright/test';
  * Playwright configuration for Churn Saver E2E tests
  * Track: D1 - E2E Infrastructure Setup
  */
+
+// Vercel Deployment Protection bypass secret
+// This allows E2E tests to access preview deployments
+const VERCEL_PROTECTION_BYPASS = process.env.VERCEL_PROTECTION_BYPASS || 'churnsaver-e2e-bypass-2025';
+
+// Check if we're testing against a Vercel deployment (not localhost)
+const isVercelDeployment = (process.env.E2E_BASE_URL || '').includes('vercel.app');
+
 export default defineConfig({
   testDir: './test/e2e',
   fullyParallel: true,
@@ -18,6 +26,12 @@ export default defineConfig({
     baseURL: process.env.E2E_BASE_URL || 'http://localhost:3000',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    // Add Vercel protection bypass header for preview deployments
+    ...(isVercelDeployment && {
+      extraHTTPHeaders: {
+        'x-vercel-protection-bypass': VERCEL_PROTECTION_BYPASS,
+      },
+    }),
   },
   projects: [
     {
@@ -37,10 +51,13 @@ export default defineConfig({
       use: { ...devices['Pixel 5'] },
     },
   ],
-  webServer: {
-    command: 'pnpm dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120000,
-  },
+  // Only start webServer for local testing (not when E2E_BASE_URL is set to remote)
+  ...(isVercelDeployment ? {} : {
+    webServer: {
+      command: 'pnpm dev',
+      url: 'http://localhost:3000',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120000,
+    },
+  }),
 });

@@ -4,12 +4,6 @@
   "installCommand": "pnpm install",
   "outputDirectory": ".next",
   "framework": "nextjs",
-  "protectionBypass": [
-    {
-      "scope": "preview",
-      "secret": "churnsaver-e2e-bypass-2025"
-    }
-  ],
   "crons": [
     {
       "path": "/api/cron/keepalive",

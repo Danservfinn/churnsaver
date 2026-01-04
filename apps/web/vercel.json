@@ -10,6 +10,12 @@
       "secret": "churnsaver-e2e-bypass-2025"
     }
   ],
+  "crons": [
+    {
+      "path": "/api/cron/keepalive",
+      "schedule": "0 8 * * *"
+    }
+  ],
   "functions": {
     "src/app/api/cron/process-and-remind/route.ts": {
       "maxDuration": 30

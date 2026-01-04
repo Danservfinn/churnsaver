@@ -1,6 +1,8 @@
 /**
  * Whop Checkout URL utilities
  * Generates checkout URLs for tier upgrades
+ *
+ * NOTE: Whop checkout URLs use PLAN IDs (plan_xxx), not product IDs (prod_xxx)
  */
 
 import { TierName, BillingInterval } from './tiers';
@@ -8,21 +10,24 @@ import { TierName, BillingInterval } from './tiers';
 /**
  * Get Whop checkout URL for a specific tier and billing interval
  * Server-side only - uses non-public env vars
+ *
+ * Environment variables should contain plan IDs (e.g., plan_nu3yWd2kUX1PV)
  */
 export function getWhopCheckoutUrl(tier: TierName, interval: BillingInterval): string | null {
   if (tier === 'free') return null; // Free tier doesn't need checkout
 
-  const productIds: Record<string, string | undefined> = {
-    pro_monthly: process.env.WHOP_PRODUCT_ID_PRO_MONTHLY,
-    pro_annual: process.env.WHOP_PRODUCT_ID_PRO_ANNUAL,
-    max_monthly: process.env.WHOP_PRODUCT_ID_MAX_MONTHLY,
-    max_annual: process.env.WHOP_PRODUCT_ID_MAX_ANNUAL,
+  // Plan IDs from Whop dashboard (Checkout links section)
+  const planIds: Record<string, string | undefined> = {
+    pro_monthly: process.env.WHOP_PLAN_ID_PRO_MONTHLY,
+    pro_annual: process.env.WHOP_PLAN_ID_PRO_ANNUAL,
+    max_monthly: process.env.WHOP_PLAN_ID_MAX_MONTHLY,
+    max_annual: process.env.WHOP_PLAN_ID_MAX_ANNUAL,
   };
 
-  const productId = productIds[`${tier}_${interval}`];
-  if (!productId) return null;
+  const planId = planIds[`${tier}_${interval}`];
+  if (!planId) return null;
 
-  return `https://whop.com/checkout/${productId}/`;
+  return `https://whop.com/checkout/${planId}/`;
 }
 
 /**

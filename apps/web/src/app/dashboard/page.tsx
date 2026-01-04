@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useWhop, useWhopAuth, useWhopCompany } from '@/lib/context/whop';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Lock } from 'lucide-react';
 
 /**
  * Root dashboard route that redirects to company-scoped dashboard
@@ -58,7 +59,9 @@ export default function Dashboard() {
       <div className="flex items-center justify-center min-h-[60vh]">
         <Card className="max-w-md mx-auto">
           <CardHeader className="text-center">
-            <div className="text-5xl mb-4">🔒</div>
+            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+              <Lock className="h-8 w-8 text-muted-foreground" />
+            </div>
             <CardTitle>Authentication Required</CardTitle>
             <CardDescription>
               You need to be authenticated to access the dashboard. Please access this app through Whop.

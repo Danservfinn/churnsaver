@@ -162,7 +162,7 @@ export function PricingPageClient({ checkoutUrls }: PricingPageClientProps) {
             </p>
           </div>
 
-          <Accordion type="single" collapsible className="space-y-4">
+          <Accordion type="single" collapsible defaultValue="item-0" className="space-y-4">
             {faqs.map((faq, index) => (
               <AccordionItem
                 key={index}
@@ -189,7 +189,7 @@ export function PricingPageClient({ checkoutUrls }: PricingPageClientProps) {
             <p className="text-muted-foreground mb-6">
               We&apos;re here to help. Reach out and we&apos;ll get back to you within 24 hours.
             </p>
-            <Button variant="outline" size="lg" asChild className="gap-2">
+            <Button size="lg" asChild className="gap-2">
               <a href="mailto:support@churnsaver.com">
                 Contact Support
               </a>

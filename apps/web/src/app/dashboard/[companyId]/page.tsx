@@ -204,19 +204,19 @@ export default function DashboardCompanyPage({
     }
   };
 
-  // Fetch data when URL companyId is available and no mismatch
+  // Fetch data when URL companyId is available, no mismatch, and authenticated (or demo mode)
   useEffect(() => {
-    if (urlCompanyId && !companyIdMismatch) {
+    if (urlCompanyId && !companyIdMismatch && (isAuthenticated || isDemoToken)) {
       fetchKpis();
     }
-  }, [urlCompanyId, companyIdMismatch, windowDays]);
+  }, [urlCompanyId, companyIdMismatch, windowDays, isAuthenticated, isDemoToken]);
 
   useEffect(() => {
-    if (urlCompanyId && !companyIdMismatch) {
+    if (urlCompanyId && !companyIdMismatch && (isAuthenticated || isDemoToken)) {
       setCurrentPage(1);
       fetchCases(1);
     }
-  }, [urlCompanyId, companyIdMismatch, statusFilter]);
+  }, [urlCompanyId, companyIdMismatch, statusFilter, isAuthenticated, isDemoToken]);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);

@@ -172,7 +172,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       result = await sendWhopDirectMessage({
         userId,
         message,
-        senderUserId
+        senderUserId,
+        companyId
       }, 2); // 2 retries for test
     }
 

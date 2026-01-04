@@ -26,6 +26,8 @@ import {
   Crown,
   Lock,
   User,
+  Send,
+  Loader2,
 } from 'lucide-react';
 import { useWhop, useWhopCompany } from '@/lib/context/whop';
 import { Badge } from '@/components/ui/badge';
@@ -258,6 +260,8 @@ export default function Settings() {
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [activeSection, setActiveSection] = useState(1);
+  const [testingPush, setTestingPush] = useState(false);
+  const [testingDm, setTestingDm] = useState(false);
 
   useEffect(() => {
     setValidationErrors(computeErrors());
@@ -419,6 +423,52 @@ export default function Settings() {
       setReminderTimezone(DEFAULT_SETTINGS.reminder_timezone);
       setSenderWhopUserId('');
       await saveSettings(DEFAULT_SETTINGS);
+    }
+  };
+
+  const handleTestNotification = async (channel: 'push' | 'dm') => {
+    const setTesting = channel === 'push' ? setTestingPush : setTestingDm;
+
+    try {
+      setTesting(true);
+
+      const response = await fetch('/api/settings/test-notification', {
+        method: 'POST',
+        headers: getAuthHeaders({ companyId: companyId || undefined }),
+        body: JSON.stringify({ channel }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        addToast({
+          type: 'success',
+          title: 'Test sent!',
+          message: `Check your Whop app for the test ${channel === 'push' ? 'notification' : 'message'}.`,
+        });
+      } else if (response.status === 429) {
+        addToast({
+          type: 'error',
+          title: 'Rate limited',
+          message: data.error || `Please wait before testing again.`,
+        });
+      } else {
+        addToast({
+          type: 'error',
+          title: 'Test failed',
+          message: data.error || `Failed to send test ${channel}.`,
+        });
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      addToast({
+        type: 'error',
+        title: 'Test failed',
+        message: errorMessage,
+      });
+      logger.error('Test notification error', { channel, error: errorMessage });
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -644,18 +694,38 @@ export default function Settings() {
                       onChange={setEnablePush}
                     />
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    {enablePush ? (
-                      <>
-                        <Check className="h-3 w-3 text-green-400" />
-                        <span className="text-green-400">Active</span>
-                      </>
-                    ) : (
-                      <>
-                        <X className="h-3 w-3 text-zinc-500" />
-                        <span>Disabled</span>
-                      </>
-                    )}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {enablePush ? (
+                        <>
+                          <Check className="h-3 w-3 text-green-400" />
+                          <span className="text-green-400">Active</span>
+                        </>
+                      ) : (
+                        <>
+                          <X className="h-3 w-3 text-zinc-500" />
+                          <span>Disabled</span>
+                        </>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={!enablePush || testingPush}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleTestNotification('push');
+                      }}
+                      className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                    >
+                      {testingPush ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Send className="h-3 w-3" />
+                      )}
+                      Test
+                    </Button>
                   </div>
                 </div>
 
@@ -686,18 +756,38 @@ export default function Settings() {
                       onChange={setEnableDm}
                     />
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    {enableDm ? (
-                      <>
-                        <Check className="h-3 w-3 text-green-400" />
-                        <span className="text-green-400">Active</span>
-                      </>
-                    ) : (
-                      <>
-                        <X className="h-3 w-3 text-zinc-500" />
-                        <span>Disabled</span>
-                      </>
-                    )}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {enableDm ? (
+                        <>
+                          <Check className="h-3 w-3 text-green-400" />
+                          <span className="text-green-400">Active</span>
+                        </>
+                      ) : (
+                        <>
+                          <X className="h-3 w-3 text-zinc-500" />
+                          <span>Disabled</span>
+                        </>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={!enableDm || testingDm}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleTestNotification('dm');
+                      }}
+                      className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                    >
+                      {testingDm ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Send className="h-3 w-3" />
+                      )}
+                      Test
+                    </Button>
                   </div>
                 </div>
               </div>

@@ -133,3 +133,12 @@ export const WebhookPayloadSchema = z.object({
 });
 
 export type WebhookPayloadInput = z.infer<typeof WebhookPayloadSchema>;
+
+// Test notification validation
+export const TestNotificationSchema = z.object({
+  channel: z.enum(['push', 'dm'], {
+    message: "Channel must be 'push' or 'dm'"
+  })
+});
+
+export type TestNotificationInput = z.infer<typeof TestNotificationSchema>;

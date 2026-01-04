@@ -5,6 +5,7 @@ import { logger } from '@/lib/logger';
 import { notificationDispatcher, DirectMessagePayload, NotificationResult } from './shared/notificationDispatcher';
 import { logRecoveryAction } from './cases';
 import { createRecoveryLink } from './recoveryLinks';
+import { getSettingsForCompany } from './settings';
 
 // Re-export types for backward compatibility
 export type { DirectMessagePayload, NotificationResult };
@@ -63,10 +64,25 @@ export async function sendRecoveryNudgeDM(
 
   const message = createRecoveryNudgeMessage(trackedUrl, attemptNumber);
 
+  // Fetch company settings to get senderUserId for merchant-branded messages
+  let senderUserId: string | null | undefined = undefined;
+  if (companyId) {
+    try {
+      const settings = await getSettingsForCompany(companyId);
+      senderUserId = settings.sender_whop_user_id;
+    } catch (error) {
+      logger.warn('Failed to fetch company settings for senderUserId', {
+        companyId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   const result = await sendDirectMessage({
     userId,
     membershipId,
     message,
+    senderUserId,
   });
 
   // Log successful nudge for audit trail

@@ -11,7 +11,8 @@ export const SettingsUpdateSchema = z.object({
   reminder_time: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, {
     message: "Time must be in HH:MM format (e.g., 10:00)"
   }).optional().default('10:00'),
-  reminder_timezone: z.string().max(50).optional().default('America/New_York')
+  reminder_timezone: z.string().max(50).optional().default('America/New_York'),
+  sender_whop_user_id: z.string().max(100).nullable().optional().default(null)
 }); // Allow new fields to be optional for backward compatibility
 
 // Additional validation for string fields (if any are added later)

@@ -13,6 +13,7 @@ export interface BaseNotificationPayload {
   membershipId?: string;
   caseId?: string;
   companyId?: string;
+  senderUserId?: string | null; // Optional - merchant's Whop user ID to send notification as
 }
 
 // Push-specific payload
@@ -175,6 +176,7 @@ class WhopPushProvider implements NotificationChannel<PushNotificationPayload> {
           companyId: payload.companyId,
           type: 'churn_recovery_nudge',
         },
+        senderUserId: payload.senderUserId,
       };
 
       const result = await sendWhopPushNotification(whopPayload, maxRetries);
@@ -248,6 +250,7 @@ class WhopDMProvider implements NotificationChannel<DirectMessagePayload> {
         userId: payload.userId,
         message: payload.message,
         membershipId: payload.membershipId,
+        senderUserId: payload.senderUserId,
       };
 
       const result = await sendWhopDirectMessage(whopPayload, maxRetries);

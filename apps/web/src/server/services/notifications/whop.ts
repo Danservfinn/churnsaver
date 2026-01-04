@@ -11,6 +11,7 @@ export interface PushNotificationPayload {
   body: string;
   data?: Record<string, any>; // Additional data for deep linking
   membershipId?: string; // For tracking/analytics
+  senderUserId?: string | null; // Optional - merchant's Whop user ID to send notification as
 }
 
 export interface PushResult {
@@ -23,6 +24,7 @@ export interface DirectMessagePayload {
   userId?: string; // Optional - will use default agent if not provided
   message: string;
   membershipId?: string; // For tracking/analytics
+  senderUserId?: string | null; // Optional - merchant's Whop user ID to send message as
 }
 
 export interface DMResult {
@@ -52,7 +54,7 @@ export async function sendWhopPushNotification(
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const apiPayload = {
+      const apiPayload: Record<string, unknown> = {
         user_id: targetUserId,
         title: payload.title,
         body: payload.body,
@@ -62,6 +64,11 @@ export async function sendWhopPushNotification(
           type: 'churn_recovery_nudge',
         },
       };
+
+      // Add senderUserId if provided (makes notification appear from merchant)
+      if (payload.senderUserId) {
+        apiPayload.sender_user_id = payload.senderUserId;
+      }
 
       const response = await whopApiRequest('/notifications/send_push_notification', {
         method: 'POST',
@@ -140,7 +147,7 @@ export async function sendWhopDirectMessage(
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const apiPayload = {
+      const apiPayload: Record<string, unknown> = {
         user_id: targetUserId,
         message: payload.message,
         metadata: {
@@ -148,6 +155,11 @@ export async function sendWhopDirectMessage(
           type: 'churn_recovery_nudge',
         },
       };
+
+      // Add senderUserId if provided (makes message appear from merchant)
+      if (payload.senderUserId) {
+        apiPayload.sender_user_id = payload.senderUserId;
+      }
 
       const response = await whopApiRequest('/messages/send_direct_message_to_user', {
         method: 'POST',

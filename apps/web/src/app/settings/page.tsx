@@ -25,6 +25,7 @@ import {
   X,
   Crown,
   Lock,
+  User,
 } from 'lucide-react';
 import { useWhop, useWhopCompany } from '@/lib/context/whop';
 import { Badge } from '@/components/ui/badge';
@@ -38,6 +39,7 @@ interface CreatorSettings {
   reminder_offsets_days: number[];
   reminder_time: string;
   reminder_timezone: string;
+  sender_whop_user_id: string | null;
   updated_at: string;
 }
 
@@ -66,6 +68,7 @@ const DEFAULT_SETTINGS: CreatorSettings = {
   reminder_offsets_days: [0, 2, 4],
   reminder_time: '10:00',
   reminder_timezone: 'America/New_York',
+  sender_whop_user_id: null,
   updated_at: new Date().toISOString(),
 };
 
@@ -247,6 +250,7 @@ export default function Settings() {
   const [reminderOffsets, setReminderOffsets] = useState<number[]>(DEFAULT_SETTINGS.reminder_offsets_days);
   const [reminderTime, setReminderTime] = useState<string>(DEFAULT_SETTINGS.reminder_time);
   const [reminderTimezone, setReminderTimezone] = useState<string>(DEFAULT_SETTINGS.reminder_timezone);
+  const [senderWhopUserId, setSenderWhopUserId] = useState<string>('');
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -294,6 +298,7 @@ export default function Settings() {
       setReminderOffsets(settingsData.reminder_offsets_days);
       setReminderTime(settingsData.reminder_time || DEFAULT_SETTINGS.reminder_time);
       setReminderTimezone(settingsData.reminder_timezone || DEFAULT_SETTINGS.reminder_timezone);
+      setSenderWhopUserId(settingsData.sender_whop_user_id || '');
 
       if (subscriptionRes.ok) {
         const subscriptionData = await subscriptionRes.json();
@@ -400,6 +405,7 @@ export default function Settings() {
       reminder_offsets_days: reminderOffsets,
       reminder_time: reminderTime,
       reminder_timezone: reminderTimezone,
+      sender_whop_user_id: senderWhopUserId || null,
     });
   };
 
@@ -411,6 +417,7 @@ export default function Settings() {
       setReminderOffsets(DEFAULT_SETTINGS.reminder_offsets_days);
       setReminderTime(DEFAULT_SETTINGS.reminder_time);
       setReminderTimezone(DEFAULT_SETTINGS.reminder_timezone);
+      setSenderWhopUserId('');
       await saveSettings(DEFAULT_SETTINGS);
     }
   };
@@ -427,6 +434,7 @@ export default function Settings() {
     { id: 1, label: 'Channels', icon: Bell },
     { id: 2, label: 'Incentives', icon: Gift },
     { id: 3, label: 'Schedule', icon: Clock },
+    { id: 4, label: 'Identity', icon: User },
   ];
 
   // Show authentication required message for unauthenticated users
@@ -886,11 +894,80 @@ export default function Settings() {
             </div>
           </motion.div>
 
-          {/* Action Buttons */}
+          {/* Section 4: Sender Identity */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
+            onClick={() => setActiveSection(4)}
+            className={cn(
+              'card-premium rounded-2xl overflow-hidden transition-all duration-300 cursor-pointer',
+              activeSection === 4 ? 'ring-2 ring-primary/50' : 'hover:ring-1 hover:ring-white/10'
+            )}
+          >
+            <div className="p-6 md:p-8">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-purple-600/10 flex items-center justify-center">
+                  <User className="h-6 w-6 text-purple-400" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+                    Sender Identity
+                    <Badge variant="secondary" className="text-xs bg-purple-500/20 text-purple-400 border-purple-500/30">
+                      Step 4
+                    </Badge>
+                    <Badge variant="outline" className="text-xs border-white/20 text-muted-foreground">
+                      Optional
+                    </Badge>
+                  </h2>
+                  <p className="text-sm text-muted-foreground">Configure who notifications appear to come from</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl border border-white/10 bg-zinc-900/50">
+                  <label className="text-sm font-medium text-foreground flex items-center gap-2 mb-3">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    Your Whop User ID
+                  </label>
+                  <input
+                    type="text"
+                    id="sender_whop_user_id"
+                    name="sender_whop_user_id"
+                    placeholder="user_xxxxxxxxxxxxx"
+                    value={senderWhopUserId}
+                    onChange={(e) => setSenderWhopUserId(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-white/10 bg-zinc-800/50 text-foreground placeholder:text-muted-foreground/50 focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                  />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    When set, notifications and DMs will appear to come from you instead of ChurnSaver.
+                    Leave empty to use the default ChurnSaver sender.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-xl bg-purple-500/5 border border-purple-500/20">
+                  <div className="flex items-start gap-3">
+                    <div className="p-1.5 rounded-lg bg-purple-500/20">
+                      <Sparkles className="h-4 w-4 text-purple-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground mb-1">Branded Messages</p>
+                      <p className="text-xs text-muted-foreground">
+                        Messages sent from your account appear more personal and can improve recovery rates.
+                        Find your User ID in your Whop profile settings.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Action Buttons */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
             className="flex flex-col sm:flex-row gap-4 pt-4"
           >
             <Button
@@ -949,7 +1026,7 @@ export default function Settings() {
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.35 }}
+              transition={{ delay: 0.4 }}
               className="text-center text-xs text-muted-foreground"
             >
               Last updated: {formatLastUpdated(settings.updated_at)}

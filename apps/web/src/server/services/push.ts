@@ -5,6 +5,7 @@ import { logger } from '@/lib/logger';
 import { notificationDispatcher, PushNotificationPayload, NotificationResult } from './shared/notificationDispatcher';
 import { logRecoveryAction } from './cases';
 import { createRecoveryLink } from './recoveryLinks';
+import { getSettingsForCompany } from './settings';
 
 // Re-export types for backward compatibility
 export type { PushNotificationPayload, NotificationResult };
@@ -67,11 +68,26 @@ export async function sendRecoveryNudgePush(
     ? "Your payment didn't go through. Update details now to keep access ➡️"
     : "Subscription will pause soon. Update payment method to continue ➡️";
 
+  // Fetch company settings to get senderUserId for merchant-branded notifications
+  let senderUserId: string | null | undefined = undefined;
+  if (companyId) {
+    try {
+      const settings = await getSettingsForCompany(companyId);
+      senderUserId = settings.sender_whop_user_id;
+    } catch (error) {
+      logger.warn('Failed to fetch company settings for senderUserId', {
+        companyId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   const result = await sendPushNotification({
     userId,
     membershipId,
     title,
     body,
+    senderUserId,
     data: {
       type: 'payment_recovery',
       manageUrl: trackedUrl,

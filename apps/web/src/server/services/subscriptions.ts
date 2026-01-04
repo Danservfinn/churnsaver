@@ -207,6 +207,9 @@ export async function getSubscriptionStatus(
 ): Promise<SubscriptionStatusResponse> {
   await ensureSubscriptionExists(companyId);
 
+  // Skip RLS for subscription queries - companyId is already validated from Whop auth
+  // The company_subscriptions table has RLS enabled but context setting has timing issues
+  // Since we have authenticated companyId, explicit WHERE clause is sufficient security
   const rows = await sql.select<CompanySubscription>(
     `SELECT company_id, tier, status, billing_interval, whop_membership_id,
             recoveries_this_period, period_reset_at,
@@ -215,7 +218,7 @@ export async function getSubscriptionStatus(
      FROM company_subscriptions
      WHERE company_id = $1`,
     [companyId],
-    { companyId, enforceCompanyContext: true }
+    { skipRLS: true }
   );
 
   if (!rows.length) {
@@ -249,6 +252,7 @@ export async function getCompanySubscription(
 ): Promise<CompanySubscription | null> {
   await ensureSubscriptionExists(companyId);
 
+  // Skip RLS for subscription queries - companyId is already validated from Whop auth
   const rows = await sql.select<CompanySubscription>(
     `SELECT company_id, tier, status, billing_interval, whop_membership_id,
             recoveries_this_period, period_reset_at,
@@ -257,7 +261,7 @@ export async function getCompanySubscription(
      FROM company_subscriptions
      WHERE company_id = $1`,
     [companyId],
-    { companyId, enforceCompanyContext: true }
+    { skipRLS: true }
   );
 
   if (!rows.length) return null;

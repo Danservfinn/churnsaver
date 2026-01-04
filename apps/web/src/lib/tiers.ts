@@ -14,8 +14,8 @@ export const TIER_LIMITS = {
   },
   pro: {
     recoveriesPerMonth: 100,
-    customTemplates: false,
-    maxTemplatesPerChannel: 0,
+    customTemplates: true,
+    maxTemplatesPerChannel: 5,
     basicAnalytics: true,
     csvExport: true,
     prioritySupport: false,

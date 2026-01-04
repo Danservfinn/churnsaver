@@ -439,7 +439,7 @@ export function MessagesPageClient({
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <p className="font-semibold text-foreground">
-                        Max Tier Active
+                        {subscriptionStatus?.tier ? `${subscriptionStatus.tier.charAt(0).toUpperCase() + subscriptionStatus.tier.slice(1)} Tier Active` : 'Custom Templates'}
                       </p>
                       <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
                         Custom Templates

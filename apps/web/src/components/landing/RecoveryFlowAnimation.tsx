@@ -82,6 +82,9 @@ const phaseNotifications: Record<Phase, NotificationCard> = {
 
 const phases: Phase[] = ['payment_failed', 'notification_sent', 'dm_sent', 'incentive_added', 'payment_updated', 'recovered'];
 
+// Base revenue amount to show realistic dashboard (not $0.00)
+const BASE_REVENUE = 847;
+
 export function RecoveryFlowAnimation() {
   const [currentPhaseIndex, setCurrentPhaseIndex] = useState(-1);
   const [isAnimating, setIsAnimating] = useState(true);
@@ -232,7 +235,7 @@ export function RecoveryFlowAnimation() {
                       </div>
                       <div className="flex items-baseline gap-2">
                         <span className="text-4xl font-bold text-foreground">
-                          ${recoveredAmount.toFixed(2)}
+                          ${(BASE_REVENUE + recoveredAmount).toFixed(2)}
                         </span>
                         {currentPhase === 'recovered' && (
                           <motion.span

@@ -1,17 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import {
   Bell,
   MessageSquare,
   Gift,
   TrendingUp,
   ArrowRight,
-  Settings,
   Zap,
   Shield,
   Clock,
@@ -28,7 +24,6 @@ import { RecoveryFlowAnimation } from '@/components/landing/RecoveryFlowAnimatio
 
 export default function HomePage() {
   const { companyId } = useWhop();
-  const [showSettings, setShowSettings] = useState(false);
   const dashboardHref =
     companyId && companyId !== 'unknown' ? `/dashboard/${companyId}` : '/dashboard';
 
@@ -148,9 +143,9 @@ export default function HomePage() {
               {trustPoints.map((point) => {
                 const Icon = point.icon;
                 return (
-                  <div key={point.text} className="flex items-center gap-2 text-muted-foreground">
-                    <Icon className="h-4 w-4 text-primary/70" />
-                    <span className="text-sm">{point.text}</span>
+                  <div key={point.text} className="flex items-center gap-2 text-foreground/80">
+                    <Icon className="h-5 w-5 text-primary" />
+                    <span className="text-base font-medium">{point.text}</span>
                   </div>
                 );
               })}
@@ -275,66 +270,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Settings Preview Section */}
-      {showSettings && (
-        <section className="relative py-16 px-4">
-          <div className="container mx-auto max-w-4xl">
-            <Card className="card-premium">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-xl mb-2 flex items-center gap-2">
-                      <Settings className="h-5 w-5 text-primary" />
-                      Quick Settings
-                    </CardTitle>
-                    <CardDescription>
-                      Configure your recovery strategy. Full settings available in the settings page.
-                    </CardDescription>
-                  </div>
-                  <Link href="/settings">
-                    <Button variant="outline" size="sm" className="gap-2">
-                      Full Settings
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  </Link>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="grid md:grid-cols-3 gap-6">
-                  <div className="space-y-2 p-4 rounded-lg bg-muted/30">
-                    <div className="flex items-center gap-2">
-                      <Bell className="h-5 w-5 text-primary" />
-                      <span className="font-medium">Push Notifications</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Enabled by default
-                    </p>
-                  </div>
-                  <div className="space-y-2 p-4 rounded-lg bg-muted/30">
-                    <div className="flex items-center gap-2">
-                      <Gift className="h-5 w-5 text-primary" />
-                      <span className="font-medium">Incentives</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      3 days free
-                    </p>
-                  </div>
-                  <div className="space-y-2 p-4 rounded-lg bg-muted/30">
-                    <div className="flex items-center gap-2">
-                      <MessageSquare className="h-5 w-5 text-primary" />
-                      <span className="font-medium">Direct Messages</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Enabled by default
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </section>
-      )}
-
       {/* Final CTA Section */}
       <section className="relative py-24 px-4">
         <div className="container mx-auto max-w-4xl">
@@ -362,15 +297,16 @@ export default function HomePage() {
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </Link>
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={() => setShowSettings(!showSettings)}
-                className="gap-2 px-8 h-12 text-base"
-              >
-                <Settings className="h-4 w-4" />
-                {showSettings ? 'Hide' : 'Preview'} Settings
-              </Button>
+              <Link href="/pricing">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="gap-2 px-8 h-12 text-base"
+                >
+                  View Pricing
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </Link>
             </div>
 
             {/* Social proof */}
@@ -379,18 +315,20 @@ export default function HomePage() {
                 Trusted by businesses on Whop
               </p>
               <div className="flex items-center justify-center gap-1">
-                {/* Avatar stack with gradient colors */}
+                {/* Avatar stack with gradient colors and initials */}
                 {[
-                  'from-violet-500 to-purple-500',
-                  'from-blue-500 to-cyan-500',
-                  'from-emerald-500 to-teal-500',
-                  'from-orange-500 to-amber-500',
-                  'from-pink-500 to-rose-500',
-                ].map((gradient, i) => (
+                  { gradient: 'from-violet-500 to-purple-500', initials: 'JD' },
+                  { gradient: 'from-blue-500 to-cyan-500', initials: 'MK' },
+                  { gradient: 'from-emerald-500 to-teal-500', initials: 'AS' },
+                  { gradient: 'from-orange-500 to-amber-500', initials: 'RC' },
+                  { gradient: 'from-pink-500 to-rose-500', initials: 'TL' },
+                ].map((avatar, i) => (
                   <div
                     key={i}
-                    className={`w-8 h-8 rounded-full bg-gradient-to-br ${gradient} ring-2 ring-background -ml-2 first:ml-0`}
-                  />
+                    className={`w-8 h-8 rounded-full bg-gradient-to-br ${avatar.gradient} ring-2 ring-background -ml-2 first:ml-0 flex items-center justify-center text-xs font-medium text-white`}
+                  >
+                    {avatar.initials}
+                  </div>
                 ))}
                 <span className="text-sm text-muted-foreground ml-3">+50 more</span>
               </div>

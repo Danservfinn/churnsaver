@@ -24,6 +24,7 @@ import {
   Check,
   X,
   Crown,
+  Lock,
 } from 'lucide-react';
 import { useWhop, useWhopCompany } from '@/lib/context/whop';
 import { Badge } from '@/components/ui/badge';
@@ -437,8 +438,8 @@ export default function Settings() {
           animate={{ opacity: 1, scale: 1 }}
           className="card-premium rounded-2xl p-8 max-w-md text-center"
         >
-          <div className="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center mx-auto mb-4">
-            <Crown className="h-8 w-8 text-amber-400" />
+          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+            <Lock className="h-8 w-8 text-muted-foreground" />
           </div>
           <h2 className="text-xl font-bold text-foreground mb-2">Authentication Required</h2>
           <p className="text-muted-foreground mb-6">

@@ -457,8 +457,10 @@ export const sqlWithRLS = {
         }
 
         // Set company context for RLS if we have one and not skipping RLS
+        // Note: is_local=false makes it a session-level setting that persists across statements
+        // This is required because we're not in an explicit transaction (BEGIN/COMMIT)
         if (effectiveCompanyId && !skipRLS) {
-          await pgClient.query('SELECT set_config($1, $2, true)', [
+          await pgClient.query('SELECT set_config($1, $2, false)', [
             'app.current_company_id',
             effectiveCompanyId
           ]);
@@ -593,8 +595,9 @@ export const sqlWithRLS = {
         }
 
         // Set company context for RLS
+        // Note: is_local=false makes it a session-level setting that persists across statements
         if (effectiveCompanyId) {
-          await pgClient.query('SELECT set_config($1, $2, true)', [
+          await pgClient.query('SELECT set_config($1, $2, false)', [
             'app.current_company_id',
             effectiveCompanyId
           ]);

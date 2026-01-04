@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { initDb, sql } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
@@ -7,17 +7,12 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Lightweight database keepalive endpoint to prevent Supabase free tier from pausing.
- * Supabase pauses inactive projects after 7 days - this cron runs every 6 days to keep it active.
+ * Supabase pauses inactive projects after 7 days - this cron runs daily to keep it active.
+ *
+ * This endpoint is intentionally public as it only performs a simple SELECT query
+ * and doesn't expose any sensitive data.
  */
-export async function GET(req: NextRequest) {
-  // Verify cron secret for Vercel crons
-  const authHeader = req.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
-
+export async function GET() {
   const start = Date.now();
 
   try {
